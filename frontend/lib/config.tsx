@@ -9,6 +9,7 @@ interface Config {
     allow_new_registrations: string;
     support_email: string;
     superadmin_theme?: string;
+    system_announcement?: string;
     workshops: Array<{ slug: string, name: string, logo_path?: string }>;
 }
 
