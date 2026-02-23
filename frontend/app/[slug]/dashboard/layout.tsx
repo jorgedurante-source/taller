@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import axios from 'axios';
 import { useSlug } from '@/lib/slug';
 import { superApi } from '@/lib/api';
 import { useConfig } from '@/lib/config';
@@ -38,6 +39,7 @@ export default function DashboardLayout({
     const { config, loading: configLoading } = useConfig();
     const [workshops, setWorkshops] = useState<Workshop[]>([]);
     const [showWorkshopSwitcher, setShowWorkshopSwitcher] = useState(false);
+    const [tenantConfig, setTenantConfig] = useState<any>(null);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -51,6 +53,14 @@ export default function DashboardLayout({
             superApi.get('/workshops').then(res => setWorkshops(res.data)).catch(() => { });
         }
     }, [user]);
+
+    useEffect(() => {
+        if (slug) {
+            axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/${slug}/config`)
+                .then(res => setTenantConfig(res.data))
+                .catch(() => { });
+        }
+    }, [slug]);
 
     if (loading || !user || configLoading) {
         return <div className="flex items-center justify-center min-h-screen">Cargando {config.product_name || '...'}</div>;
@@ -159,6 +169,28 @@ export default function DashboardLayout({
 
             {/* Main Content */}
             <main className="flex-grow md:ml-64 p-8">
+                {/* Dev Mode Banner */}
+                {tenantConfig?.environment === 'dev' && (
+                    <div className="mb-6 bg-gradient-to-r from-amber-500 to-orange-600 p-[1px] rounded-2xl shadow-lg shadow-amber-500/20 overflow-hidden">
+                        <div className="bg-white/95 backdrop-blur-md px-6 py-4 rounded-[15px] flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-amber-100 p-2.5 rounded-xl text-amber-600 animate-pulse">
+                                    <Settings size={20} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 leading-none">Entorno de Pruebas</p>
+                                    <h4 className="text-xl font-black text-slate-900 tracking-tighter italic uppercase">Modo Desarrollo Activo</h4>
+                                </div>
+                            </div>
+                            <div className="hidden md:block">
+                                <span className="bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest border border-amber-200">
+                                    Los datos son ficticios
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* Global Announcement */}
                 {config.system_announcement && (
                     <div className="mb-8 bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-4 text-amber-900 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">

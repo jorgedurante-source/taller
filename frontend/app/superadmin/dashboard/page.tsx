@@ -44,6 +44,7 @@ interface Workshop {
     total_clients: number;
     api_token?: string;
     logo_path?: string;
+    environment?: string;
 }
 
 interface Stats {
@@ -179,6 +180,28 @@ export default function SuperAdminDashboard() {
             setAdminPassword('');
         } catch (err) {
             alert('Error al actualizar contraseña');
+        }
+    };
+
+    const handleSeedData = async (slug: string) => {
+        if (!confirm('¿Insertar datos de prueba? Esto agregará clientes y órdenes ficticias.')) return;
+        try {
+            await superApi.post(`/workshops/${slug}/seed`);
+            alert('Datos sembrados correctamente');
+            fetchData();
+        } catch (err) {
+            alert('Error al sembrar datos');
+        }
+    };
+
+    const handleClearData = async (slug: string) => {
+        if (!confirm('¿LIMPIAR BASE DE DATOS? Se borrarán todas las órdenes, clientes y vehículos. El usuario admin se mantendrá.')) return;
+        try {
+            await superApi.post(`/workshops/${slug}/clear`);
+            alert('Base de datos limpia');
+            fetchData();
+        } catch (err) {
+            alert('Error al limpiar base de datos');
         }
     };
 
@@ -540,6 +563,47 @@ export default function SuperAdminDashboard() {
                                                 {showManageModal.status === 'active' ? 'Activo' : 'Desactivado'}
                                             </span>
                                             {showManageModal.status === 'active' ? <ToggleRight size={32} /> : <ToggleLeft size={32} />}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Environment Toggle */}
+                                <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100 flex items-center justify-between">
+                                    <div>
+                                        <h4 className="text-[11px] font-black text-indigo-900 uppercase tracking-widest leading-none">Modo de Entorno</h4>
+                                        <p className="text-[9px] text-indigo-400 font-bold mt-1 uppercase">Dev vs Prod Control</p>
+                                    </div>
+                                    <button
+                                        onClick={() => handleUpdateWorkshop(showManageModal.slug, { environment: showManageModal.environment === 'dev' ? 'prod' : 'dev' })}
+                                        className={`px-8 py-3 rounded-2xl font-black text-[10px] uppercase italic tracking-widest transition-all ${showManageModal.environment === 'dev'
+                                            ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
+                                            : 'bg-slate-900 text-white'
+                                            }`}
+                                    >
+                                        {showManageModal.environment === 'dev' ? 'Modo Desarrollo' : 'Modo Producción'}
+                                    </button>
+                                </div>
+
+                                {/* Data Management Section */}
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Datos de Prueba</label>
+                                        <button
+                                            onClick={() => handleSeedData(showManageModal.slug)}
+                                            className="w-full bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 p-5 rounded-3xl font-black text-sm transition-all flex items-center justify-center gap-2 border border-slate-100"
+                                        >
+                                            <Database size={18} />
+                                            Sembrar Datos
+                                        </button>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Mantenimiento</label>
+                                        <button
+                                            onClick={() => handleClearData(showManageModal.slug)}
+                                            className="w-full bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 p-5 rounded-3xl font-black text-sm transition-all flex items-center justify-center gap-2 border border-slate-100"
+                                        >
+                                            <RefreshCw size={18} />
+                                            Limpiar DB
                                         </button>
                                     </div>
                                 </div>

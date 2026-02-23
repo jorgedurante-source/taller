@@ -97,13 +97,42 @@ router.post('/workshops', superAuth, (req, res) => {
 // ─── PATCH /api/super/workshops/:slug ────────────────────────────────────────
 router.patch('/workshops/:slug', superAuth, (req, res) => {
     const { slug } = req.params;
-    const { name, status } = req.body;
+    const { name, status, environment } = req.body;
     try {
         if (name) superDb.prepare("UPDATE workshops SET name = ? WHERE slug = ?").run(name, slug);
         if (status) superDb.prepare("UPDATE workshops SET status = ? WHERE slug = ?").run(status, slug);
+        if (environment) superDb.prepare("UPDATE workshops SET environment = ? WHERE slug = ?").run(environment, slug);
         res.json({ message: 'Taller actualizado' });
     } catch (err) {
         res.status(500).send('Server error');
+    }
+});
+
+// ─── POST /api/super/workshops/:slug/seed ────────────────────────────────────
+router.post('/workshops/:slug/seed', superAuth, (req, res) => {
+    const { slug } = req.params;
+    try {
+        const db = getDb(slug);
+        const { seedWorkshop } = require('../utils/seeder');
+        seedWorkshop(db);
+        res.json({ message: 'Datos de prueba insertados' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al sembrar datos' });
+    }
+});
+
+// ─── POST /api/super/workshops/:slug/clear ───────────────────────────────────
+router.post('/workshops/:slug/clear', superAuth, (req, res) => {
+    const { slug } = req.params;
+    try {
+        const db = getDb(slug);
+        const { clearWorkshop } = require('../utils/seeder');
+        clearWorkshop(db);
+        res.json({ message: 'Base de datos del taller limpia' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al limpiar base de datos' });
     }
 });
 

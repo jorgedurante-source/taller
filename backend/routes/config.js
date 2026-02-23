@@ -23,8 +23,21 @@ const upload = multer({ storage });
 
 // @route   GET api/config
 router.get('/', (req, res) => {
-    const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
-    res.json(config);
+    try {
+        const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
+        // Also get environment from superDb
+        const superDb = require('../superDb');
+        const workshop = superDb.prepare('SELECT environment, status FROM workshops WHERE slug = ?').get(req.params.slug);
+
+        res.json({
+            ...config,
+            environment: workshop?.environment || 'prod',
+            status: workshop?.status || 'active'
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching config' });
+    }
 });
 
 // @route   PUT api/config

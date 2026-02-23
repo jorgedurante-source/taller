@@ -51,6 +51,7 @@ function addColumn(table, column, type) {
 addColumn('workshops', 'status', "TEXT DEFAULT 'active'");
 addColumn('workshops', 'api_token', 'TEXT');
 addColumn('workshops', 'logo_path', 'TEXT');
+addColumn('workshops', 'environment', "TEXT DEFAULT 'prod'");
 
 // Ensure unique index for token
 try {
