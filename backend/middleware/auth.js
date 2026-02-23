@@ -7,7 +7,7 @@ const auth = (req, res, next) => {
     }
 
     try {
-        const secret = process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
+        const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const decoded = jwt.verify(token, secret);
         req.user = decoded;
         next();

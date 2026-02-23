@@ -28,7 +28,7 @@ router.post('/login', async (req, res) => {
                 try { permissions = JSON.parse(user.permissions || '[]') || []; } catch (e) { }
                 const roleName = user.role_name || user.role || 'staff';
 
-                const secret = process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
+                const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
                 const token = jwt.sign(
                     { id: user.id, username: user.username, role: roleName, permissions },
                     secret,
@@ -57,7 +57,7 @@ router.post('/login', async (req, res) => {
         const isClientMatch = await bcrypt.compare(password, client.password);
         if (!isClientMatch) return res.status(400).json({ message: 'Invalid credentials' });
 
-        const secret = process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
+        const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const clientToken = jwt.sign(
             { id: client.id, username: client.email, role: 'client', permissions: [], clientId: client.id },
             secret,

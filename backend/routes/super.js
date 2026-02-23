@@ -26,7 +26,7 @@ function superAuth(req, res, next) {
     const token = req.header('Authorization')?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ message: 'No se encontró token de sesión' });
     try {
-        const secret = process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
+        const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const decoded = jwt.verify(token, secret);
         if (decoded.role !== 'superuser') return res.status(403).json({ message: 'Acceso restringido a superadministradores' });
         req.superUser = decoded;
@@ -47,7 +47,7 @@ router.post('/login', async (req, res) => {
         const match = await bcrypt.compare(password, user.password);
         if (!match) return res.status(400).json({ message: 'Invalid credentials' });
 
-        const secret = process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
+        const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const token = jwt.sign(
             { id: user.id, username: user.username, role: 'superuser' },
             secret,
