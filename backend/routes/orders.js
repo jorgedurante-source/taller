@@ -43,7 +43,8 @@ router.post('/', auth, async (req, res) => {
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
-        const orderResult = insertOrder.run(data.client_id, data.vehicle_id, data.description || '', req.user.id);
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
+        const orderResult = insertOrder.run(data.client_id, data.vehicle_id, data.description || '', actingUserId);
         const orderId = orderResult.lastInsertRowid;
 
         if (data.items && data.items.length > 0) {
@@ -66,8 +67,9 @@ router.post('/', auth, async (req, res) => {
         const orderId = transaction({ client_id, vehicle_id, description, items });
 
         // Log Initial History
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
-            .run(orderId, 'Pendiente', 'Orden de trabajo creada', req.user.id);
+            .run(orderId, 'Pendiente', 'Orden de trabajo creada', actingUserId);
 
         // --- Automation Logic ---
         const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'Pendiente'").get();
@@ -148,12 +150,13 @@ router.get('/:id', auth, (req, res) => {
 router.put('/:id/status', auth, async (req, res) => {
     const { status, notes } = req.body;
     try {
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('UPDATE orders SET status = ?, modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-            .run(status, req.user.id, req.params.id);
+            .run(status, actingUserId, req.params.id);
 
         // Log History
         req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
-            .run(req.params.id, status, notes || `Cambio de estado a ${status}`, req.user.id);
+            .run(req.params.id, status, notes || `Cambio de estado a ${status}`, actingUserId);
 
         // Auto-set payment to 'cobrado' when delivered
         if (status === 'Entregado') {
@@ -221,11 +224,12 @@ router.put('/:id/payment', auth, (req, res) => {
         return res.status(400).json({ message: 'Estado de cobro inválido' });
     }
     try {
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('UPDATE orders SET payment_status = ?, payment_amount = ?, modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-            .run(payment_status, payment_amount || 0, req.user.id, req.params.id);
+            .run(payment_status, payment_amount || 0, actingUserId, req.params.id);
 
         req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
-            .run(req.params.id, `Cobro: ${payment_status}`, `Monto cobrado: $${payment_amount || 0}`, req.user.id);
+            .run(req.params.id, `Cobro: ${payment_status}`, `Monto cobrado: $${payment_amount || 0}`, actingUserId);
 
         res.json({ message: 'Cobro actualizado' });
     } catch (err) {
@@ -252,11 +256,12 @@ router.post('/:id/budget', auth, (req, res) => {
         req.params.id, JSON.stringify(items), subtotal, tax, total
     );
 
+    const actingUserId = req.user.id === 0 ? null : req.user.id;
     req.db.prepare("UPDATE orders SET status = 'Presupuestado', modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-        .run(req.user.id, req.params.id);
+        .run(actingUserId, req.params.id);
 
     req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
-        .run(req.params.id, 'Presupuestado', `Presupuesto generado por un total de $${total}`, req.user.id);
+        .run(req.params.id, 'Presupuestado', `Presupuesto generado por un total de $${total}`, actingUserId);
 
     (async () => {
         try {
