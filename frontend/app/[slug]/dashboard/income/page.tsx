@@ -273,7 +273,7 @@ export default function IncomePage() {
                                             contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 50px -12px rgb(0 0 0 / 0.1)', padding: '15px' }}
                                             itemStyle={{ fontWeight: 900, color: '#0f172a' }}
                                             labelFormatter={(label) => `Día ${parseInt(label)}`}
-                                            formatter={(value: any, name: string) => [
+                                            formatter={(value: any, name: any) => [
                                                 showTotals ? `$${Number(value).toLocaleString('es-AR')}` : '***',
                                                 name === 'labor_income' ? 'Mano de Obra' : 'Ganancia Repuestos'
                                             ]}
@@ -305,7 +305,7 @@ export default function IncomePage() {
                                                 cy="50%"
                                                 outerRadius={100}
                                                 fill="#8884d8"
-                                                label={(entry) => entry.status}
+                                                label={(entry: any) => entry.status}
                                             >
                                                 {ordersByStatus.map((entry, index) => (
                                                     <PieCell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
