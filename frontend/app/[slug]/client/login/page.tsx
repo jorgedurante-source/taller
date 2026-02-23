@@ -64,7 +64,7 @@ export default function ClientLoginPage() {
                 <header className="flex flex-col gap-4">
                     {config?.logo_path ? (
                         <div className="w-24 h-24 bg-white rounded-3xl p-1 shadow-sm border border-[var(--border)] overflow-hidden">
-                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + config.logo_path} alt="Logo" className="w-full h-full object-cover rounded-2xl" />
+                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace(/\/api\/?$/, '') + config.logo_path} alt="Logo" className="w-full h-full object-cover rounded-2xl" />
                         </div>
                     ) : (
                         <div className="w-24 h-24 bg-[var(--accent)] text-white rounded-3xl p-1 shadow-sm border border-[var(--border)] flex items-center justify-center">

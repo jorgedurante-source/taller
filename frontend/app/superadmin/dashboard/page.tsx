@@ -371,7 +371,7 @@ export default function SuperAdminDashboard() {
                                 <div className="flex items-start gap-4 mb-6">
                                     <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-[1.5rem] flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all overflow-hidden shrink-0">
                                         {w.logo_path ? (
-                                            <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '') + w.logo_path} alt={w.name} className="w-full h-full object-cover" />
+                                            <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + w.logo_path} alt={w.name} className="w-full h-full object-cover" />
                                         ) : (
                                             <Car size={32} />
                                         )}
@@ -522,7 +522,7 @@ export default function SuperAdminDashboard() {
                                 <div className="relative group">
                                     <div className="w-24 h-24 bg-slate-50 border-2 border-slate-100 rounded-[2rem] flex items-center justify-center text-slate-400 overflow-hidden shrink-0 transition-all group-hover:scale-105 border-dashed border-indigo-200">
                                         {showManageModal.logo_path ? (
-                                            <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '') + showManageModal.logo_path} alt="" className="w-full h-full object-cover" />
+                                            <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + showManageModal.logo_path} alt="" className="w-full h-full object-cover" />
                                         ) : (
                                             <ImageIcon size={32} className="opacity-20" />
                                         )}

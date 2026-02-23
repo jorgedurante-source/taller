@@ -41,7 +41,7 @@ export default function LoginPage() {
                     <div className="flex justify-center mb-4">
                         {tenantConfig?.logo_path ? (
                             <div className="bg-white rounded-xl shadow-lg border border-slate-700 overflow-hidden w-16 h-16">
-                                <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + tenantConfig.logo_path} alt="Logo" className="w-full h-full object-cover" />
+                                <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace(/\/api\/?$/, '') + tenantConfig.logo_path} alt="Logo" className="w-full h-full object-cover" />
                             </div>
                         ) : (
                             <div className="bg-blue-600 p-3 rounded-xl shadow-lg">

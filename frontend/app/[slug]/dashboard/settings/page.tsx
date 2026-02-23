@@ -396,7 +396,7 @@ export default function SettingsPage() {
                                             {config.logo_path ? (
                                                 <div className="relative w-48 h-48 group mx-auto md:mx-0">
                                                     <label htmlFor="logo-upload" className="block w-full h-full rounded-3xl border-4 border-slate-100 overflow-hidden cursor-pointer shadow-sm hover:border-indigo-400 hover:shadow-xl transition-all">
-                                                        <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '') + config.logo_path} alt="Logo" className="w-full h-full object-contain bg-white" />
+                                                        <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + config.logo_path} alt="Logo" className="w-full h-full object-contain bg-white" />
                                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                                                             <ImageIcon className="text-white" size={32} />
                                                         </div>

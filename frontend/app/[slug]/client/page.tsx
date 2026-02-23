@@ -134,7 +134,7 @@ export default function ClientDashboardPage() {
                 <div className="flex items-center gap-4">
                     {config?.logo_path ? (
                         <div className="w-10 h-10 bg-white rounded-xl shadow-lg border border-[var(--border)] overflow-hidden">
-                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + config.logo_path} alt="Logo" className="w-full h-full object-cover" />
+                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace(/\/api\/?$/, '') + config.logo_path} alt="Logo" className="w-full h-full object-cover" />
                         </div>
                     ) : (
                         <div className="bg-[var(--accent)] p-2.5 rounded-xl text-white shadow-lg">
