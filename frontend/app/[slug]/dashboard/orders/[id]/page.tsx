@@ -1,0 +1,637 @@
+'use client';
+
+import React, { useEffect, useState, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import api from '@/lib/api';
+import {
+    ChevronLeft,
+    ClipboardList,
+    Clock,
+    User,
+    Car,
+    FileText,
+    Settings,
+    History,
+    Pencil,
+    Trash2,
+    CheckCircle2,
+    AlertCircle,
+    Download,
+    DollarSign,
+    Plus,
+    MessageSquare,
+    Mail,
+    CircleDollarSign,
+    CircleSlash,
+    ArrowRight,
+    X
+} from 'lucide-react';
+import Link from 'next/link';
+import { useAuth } from '@/lib/auth';
+import { useSlug } from '@/lib/slug';
+
+export default function OrderDetailsPage() {
+    const { slug } = useSlug();
+    const params = useParams();
+    const router = useRouter();
+    const { hasPermission } = useAuth();
+    const canSeeIncome = hasPermission('income');
+
+    const [order, setOrder] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+    const [newStatus, setNewStatus] = useState('');
+    const [statusNotes, setStatusNotes] = useState('');
+    const [updating, setUpdating] = useState(false);
+    const [showItemsModal, setShowItemsModal] = useState(false);
+    const [sendingEmail, setSendingEmail] = useState(false);
+    const [catalog, setCatalog] = useState<any[]>([]);
+    const [newItems, setNewItems] = useState([{ description: '', labor_price: '0', parts_price: '0', service_id: null }]);
+
+    // Payment state
+    const [paymentStatus, setPaymentStatus] = useState('sin_cobrar');
+    const [paymentAmount, setPaymentAmount] = useState<number>(0);
+    const [savingPayment, setSavingPayment] = useState(false);
+
+    const fetchOrder = useCallback(async () => {
+        try {
+            const res = await api.get(`/orders/${params.id}`);
+            setOrder(res.data);
+            setNewStatus(res.data.status);
+            setPaymentStatus(res.data.payment_status || 'sin_cobrar');
+            setPaymentAmount(res.data.payment_amount || 0);
+        } catch (err) {
+            console.error('Error fetching order', err);
+        } finally {
+            setLoading(false);
+        }
+    }, [params.id]);
+
+    const fetchCatalog = async () => {
+        try {
+            const res = await api.get('/services');
+            setCatalog(res.data);
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    useEffect(() => {
+        fetchOrder();
+        fetchCatalog();
+    }, [fetchOrder]);
+
+    const handleStatusUpdate = async () => {
+        setUpdating(true);
+        try {
+            await api.put(`/orders/${order.id}/status`, {
+                status: newStatus,
+                notes: statusNotes
+            });
+            setStatusNotes('');
+            fetchOrder();
+        } catch (err: any) {
+            alert('Error al actualizar estado: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setUpdating(false);
+        }
+    };
+
+    const handlePaymentUpdate = async () => {
+        setSavingPayment(true);
+        try {
+            await api.put(`/orders/${order.id}/payment`, {
+                payment_status: paymentStatus,
+                payment_amount: paymentAmount
+            });
+            fetchOrder();
+        } catch (err: any) {
+            alert('Error al actualizar cobro: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setSavingPayment(false);
+        }
+    };
+
+    const handleAddItems = async () => {
+        try {
+            await api.post(`/orders/${order.id}/items`, { items: newItems });
+            setShowItemsModal(false);
+            setNewItems([{ description: '', labor_price: '0', parts_price: '0', service_id: null }]);
+            fetchOrder();
+        } catch (err) {
+            alert('Error al agregar items');
+        }
+    };
+
+    const updateItem = (index: number, field: string, value: any) => {
+        const updated = [...newItems];
+        if (field === 'service_id') {
+            const service = catalog.find(s => s.id === parseInt(value));
+            updated[index] = {
+                ...updated[index],
+                service_id: value,
+                description: service?.name || '',
+                labor_price: service?.base_price?.toString() || '0'
+            };
+        } else {
+            (updated[index] as any)[field] = value;
+        }
+        setNewItems(updated);
+    };
+
+    const downloadPDF = async () => {
+        try {
+            const response = await api.get(`/reports/order-pdf/${order.id}`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Orden_${order.id}_${order.plate}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (err) {
+            alert('Error al generar PDF');
+        }
+    };
+
+    const sendEmailClient = async () => {
+        setSendingEmail(true);
+        try {
+            await api.post(`/orders/${order.id}/send-email`);
+            alert('Email enviado correctamente');
+        } catch (err) {
+            alert('Error al enviar email');
+        } finally {
+            setSendingEmail(false);
+        }
+    };
+
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Cargando detalles...</p>
+        </div>
+    );
+
+    if (!order) return <div className="p-20 text-center font-bold text-slate-400 uppercase tracking-widest">Orden no encontrada</div>;
+
+    const getStatusStyle = (status: string) => {
+        switch (status) {
+            case 'Pendiente': return 'bg-slate-100 text-slate-600 border-slate-200';
+            case 'Aprobado': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
+            case 'En proceso':
+            case 'En reparación': return 'bg-blue-50 text-blue-600 border-blue-100';
+            case 'Listo para entrega': return 'bg-indigo-50 text-indigo-600 border-indigo-100';
+            case 'Entregado': return 'bg-slate-900 text-white border-slate-800';
+            default: return 'bg-slate-50 text-slate-500 border-slate-100';
+        }
+    };
+
+    const totalOrder = order.items?.reduce((acc: number, item: any) => acc + (item.labor_price || 0) + (item.parts_price || 0), 0) || 0;
+
+    return (
+        <div className="space-y-8 pb-20 max-w-7xl mx-auto">
+            {/* Header & Actions */}
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                <div className="flex items-center gap-4">
+                    <Link href={`/${slug}/dashboard/orders`} className="bg-white p-3 rounded-2xl border border-slate-100 text-slate-400 hover:text-slate-900 shadow-sm transition-all group">
+                        <ChevronLeft size={20} />
+                    </Link>
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Orden #{order.id}</h2>
+                            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border ${getStatusStyle(order.status)}`}>
+                                {order.status}
+                            </span>
+                        </div>
+                        <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">
+                            Creada el {new Date(order.created_at).toLocaleDateString()} a las {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {order.created_by_name && <span className="text-indigo-600 ml-2">por {order.created_by_name}</span>}
+                        </p>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <button
+                        onClick={downloadPDF}
+                        className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-900 px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+                    >
+                        <Download size={18} /> Descargar PDF
+                    </button>
+                    <button
+                        onClick={sendEmailClient}
+                        disabled={sendingEmail}
+                        className="flex-1 md:flex-none bg-blue-600 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                        <Mail size={18} /> {sendingEmail ? 'Enviando...' : 'Enviar Email'}
+                    </button>
+                    <button className="flex-1 md:flex-none bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
+                        <MessageSquare size={18} /> Enviar WA
+                    </button>
+                </div>
+            </header>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Information Columns */}
+                <div className="lg:col-span-2 space-y-8">
+                    {/* Items Table */}
+                    <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
+                        <div className="p-8 border-b border-slate-50 flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-blue-50 text-blue-600 p-2 rounded-lg">
+                                    <ClipboardList size={20} />
+                                </div>
+                                <h3 className="font-black text-slate-900 uppercase tracking-tight">Detalle del Servicio</h3>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full">
+                                    {order.items?.length || 0} ITEMS
+                                </span>
+                                <button
+                                    onClick={() => setShowItemsModal(true)}
+                                    className="bg-blue-600 text-white p-2 rounded-xl hover:bg-slate-900 transition-all shadow-lg shadow-blue-100"
+                                >
+                                    <Plus size={18} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left">
+                                <thead className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                                    <tr>
+                                        <th className="px-8 py-4">Descripción</th>
+                                        <th className="px-8 py-4 text-right">Mano de Obra</th>
+                                        <th className="px-8 py-4 text-right">Repuestos</th>
+                                        <th className="px-8 py-4 text-right">Subtotal</th>
+                                        <th className="px-8 py-4 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {order.items.map((item: any) => (
+                                        <tr key={item.id} className="group hover:bg-slate-50 transition-colors">
+                                            <td className="px-8 py-6">
+                                                <p className="font-bold text-slate-800">{item.description}</p>
+                                            </td>
+                                            <td className="px-8 py-6 font-mono font-bold text-slate-500">${item.labor_price?.toLocaleString()}</td>
+                                            <td className="px-8 py-6 font-mono font-bold text-slate-500">${item.parts_price?.toLocaleString()}</td>
+                                            <td className="px-8 py-6 text-right text-slate-900 font-black">${((item.labor_price || 0) + (item.parts_price || 0)).toLocaleString()}</td>
+                                            <td className="px-8 py-6 text-right">
+                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                    <button
+                                                        onClick={async () => {
+                                                            const desc = prompt('Nueva descripción:', item.description);
+                                                            const labor = prompt('Nueva mano de obra:', item.labor_price);
+                                                            const parts = prompt('Nuevos repuestos:', item.parts_price);
+                                                            if (desc !== null) {
+                                                                await api.put(`/orders/items/${item.id}`, { description: desc, labor_price: labor, parts_price: parts });
+                                                                fetchOrder();
+                                                            }
+                                                        }}
+                                                        className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                                                    >
+                                                        <Pencil size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={async () => {
+                                                            if (confirm('¿Eliminar este item?')) {
+                                                                await api.delete(`/orders/items/${item.id}`);
+                                                                fetchOrder();
+                                                            }
+                                                        }}
+                                                        className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                                                    >
+                                                        <Trash2 size={18} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {order.items?.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} className="px-8 py-10 text-center text-slate-400 italic font-bold">Sin items cargados</td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                                <tfoot className="bg-slate-50/50 border-t border-slate-100">
+                                    <tr>
+                                        <td colSpan={3} className="px-8 py-6 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Estimado</td>
+                                        <td className="px-8 py-6 text-right text-xl font-black text-blue-600 tracking-tighter">${totalOrder.toLocaleString()}</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* Order History Timeline */}
+                    <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-8">
+                        <div className="flex items-center gap-3 mb-10">
+                            <div className="bg-indigo-50 text-indigo-600 p-2 rounded-lg">
+                                <History size={20} />
+                            </div>
+                            <h3 className="font-black text-slate-900 uppercase tracking-tight">Historial de la Orden</h3>
+                        </div>
+                        <div className="space-y-8 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
+                            {order.history?.map((h: any, idx: number) => (
+                                <div key={h.id} className="relative pl-10">
+                                    <div className={`absolute left-0 top-1 w-[24px] h-[24px] rounded-full border-4 border-white shadow-sm flex items-center justify-center z-10 ${idx === 0 ? 'bg-blue-600' : 'bg-slate-300'}`}>
+                                        {idx === 0 && <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse"></div>}
+                                    </div>
+                                    <div className="space-y-1">
+                                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                                            <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${getStatusStyle(h.status)}`}>
+                                                {h.status}
+                                            </span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">
+                                                {new Date(h.created_at).toLocaleDateString()} - {new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                            {h.user_name && (
+                                                <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest bg-indigo-50 px-2 py-0.5 rounded-md italic">
+                                                    @{h.user_name}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-sm font-bold text-slate-700">{h.notes}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Sidebar Details */}
+                <div className="space-y-8">
+                    {/* Status Management */}
+                    <div className="bg-slate-900 rounded-[40px] p-8 text-white shadow-2xl shadow-slate-200">
+                        <h3 className="font-black uppercase tracking-widest text-xs text-blue-400 mb-6 italic">Gestión de Proceso</h3>
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nuevo Estado</label>
+                                <select
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none"
+                                    value={newStatus}
+                                    onChange={(e) => setNewStatus(e.target.value)}
+                                >
+                                    <option value="Pendiente" className="text-slate-900">Pendiente</option>
+                                    <option value="En proceso" className="text-slate-900">En proceso</option>
+                                    <option value="Presupuestado" className="text-slate-900">Presupuestado</option>
+                                    <option value="Aprobado" className="text-slate-900">Aprobado</option>
+                                    <option value="En reparación" className="text-slate-900">En reparación</option>
+                                    <option value="Listo para entrega" className="text-slate-900">Listo para entrega</option>
+                                    <option value="Entregado" className="text-slate-900">Entregado</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notas del Cambio</label>
+                                <textarea
+                                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-blue-500/50 h-24 resize-none placeholder:text-white/20"
+                                    placeholder="Ej: Repuestos recibidos, iniciando desarme..."
+                                    value={statusNotes}
+                                    onChange={(e) => setStatusNotes(e.target.value)}
+                                />
+                            </div>
+                            <button
+                                onClick={handleStatusUpdate}
+                                disabled={updating || newStatus === order.status && !statusNotes}
+                                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20"
+                            >
+                                {updating ? 'Actualizando...' : 'Actualizar Estado'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Payment Panel - visible only to users with income permission */}
+                    {canSeeIncome && (
+                        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-8">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="bg-emerald-50 p-2.5 rounded-xl text-emerald-500">
+                                    <CircleDollarSign size={20} />
+                                </div>
+                                <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm">Cobro</h3>
+                            </div>
+
+                            {/* Current payment status badge */}
+                            <div className="mb-5">
+                                {order.payment_status === 'cobrado' && (
+                                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-4 py-2 rounded-xl">
+                                        <CheckCircle2 size={16} />
+                                        <span className="font-black text-xs uppercase tracking-widest">Cobrado completo</span>
+                                        <span className="ml-auto font-black">${Number(order.payment_amount || 0).toLocaleString('es-AR')}</span>
+                                    </div>
+                                )}
+                                {order.payment_status === 'parcial' && (
+                                    <div className="flex items-center gap-2 text-amber-600 bg-amber-50 px-4 py-2 rounded-xl">
+                                        <CircleDollarSign size={16} />
+                                        <span className="font-black text-xs uppercase tracking-widest">Cobro parcial</span>
+                                        <span className="ml-auto font-black">${Number(order.payment_amount || 0).toLocaleString('es-AR')}</span>
+                                    </div>
+                                )}
+                                {(!order.payment_status || order.payment_status === 'sin_cobrar') && (
+                                    <div className="flex items-center gap-2 text-red-500 bg-red-50 px-4 py-2 rounded-xl">
+                                        <CircleSlash size={16} />
+                                        <span className="font-black text-xs uppercase tracking-widest">Sin cobrar</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estado de cobro</label>
+                                    <select
+                                        className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                                        value={paymentStatus}
+                                        onChange={(e) => {
+                                            setPaymentStatus(e.target.value);
+                                            if (e.target.value === 'cobrado') setPaymentAmount(totalOrder);
+                                            if (e.target.value === 'sin_cobrar') setPaymentAmount(0);
+                                        }}
+                                    >
+                                        <option value="cobrado">✅ Cobrado completo</option>
+                                        <option value="parcial">💛 Cobro parcial</option>
+                                        <option value="sin_cobrar">❌ Sin cobrar</option>
+                                    </select>
+                                </div>
+
+                                {paymentStatus !== 'sin_cobrar' && (
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                                            Monto cobrado <span className="text-slate-300">(total: ${totalOrder.toLocaleString('es-AR')})</span>
+                                        </label>
+                                        <input
+                                            type="number"
+                                            className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-400"
+                                            value={paymentAmount}
+                                            onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                                        />
+                                    </div>
+                                )}
+
+                                <button
+                                    onClick={handlePaymentUpdate}
+                                    disabled={savingPayment}
+                                    className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black py-3 rounded-xl text-xs uppercase tracking-widest transition-all"
+                                >
+                                    {savingPayment ? 'Guardando...' : 'Guardar Cobro'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Customer Info */}
+                    <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-8 space-y-8">
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-slate-50 p-2.5 rounded-xl text-slate-400">
+                                    <User size={18} />
+                                </div>
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Datos del Cliente</h4>
+                            </div>
+                            <div>
+                                <h5 className="text-lg font-black text-slate-900 uppercase italic tracking-tight">{order.client_name}</h5>
+                                <p className="text-blue-600 font-bold text-sm">{order.client_phone}</p>
+                                <p className="text-slate-500 text-xs font-bold">{order.client_email}</p>
+                            </div>
+                        </section>
+
+                        <div className="h-px bg-slate-50"></div>
+
+                        <section className="space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="bg-slate-50 p-2.5 rounded-xl text-slate-400">
+                                    <Car size={18} />
+                                </div>
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vehículo</h4>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                {order.image_path ? (
+                                    <div className="w-16 h-16 rounded-2xl overflow-hidden border border-slate-100 flex-shrink-0">
+                                        <img src={`http://localhost:5000${order.image_path}`} alt="" className="w-full h-full object-cover" />
+                                    </div>
+                                ) : (
+                                    <div className="w-16 h-16 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300 flex-shrink-0 border border-slate-100 italic font-black text-[10px]">
+                                        SIN FOTO
+                                    </div>
+                                )}
+                                <div>
+                                    <h5 className="text-lg font-black text-slate-900 uppercase italic tracking-tight leading-tight">{order.brand} {order.model}</h5>
+                                    <Link
+                                        href={`/${slug}/dashboard/vehicles/${order.vehicle_id}`}
+                                        className="text-blue-600 font-black font-mono tracking-widest text-sm bg-blue-50 hover:bg-blue-600 hover:text-white px-3 py-1 rounded-lg inline-block mt-1 transition-all"
+                                    >
+                                        {order.plate}
+                                    </Link>
+                                    <p className="text-slate-500 text-[10px] font-black mt-2 uppercase tracking-widest">Año: {order.year || '---'}</p>
+                                </div>
+                            </div>
+
+                            <Link
+                                href={`/${slug}/dashboard/vehicles/${order.vehicle_id}`}
+                                className="flex items-center gap-2 text-[10px] font-black text-slate-400 hover:text-blue-600 uppercase tracking-widest transition-colors mt-2"
+                            >
+                                Ver historial completo <ArrowRight size={12} />
+                            </Link>
+                        </section>
+                    </div>
+
+                    {/* Quick Stats Panel */}
+                    <div className="bg-blue-600 rounded-[40px] p-8 text-white">
+                        <div className="flex justify-between items-start">
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-black text-blue-200 uppercase tracking-widest">Presupuesto Final</p>
+                                <h4 className="text-3xl font-black italic tracking-tighter">${totalOrder.toLocaleString()}</h4>
+                            </div>
+                            <div className="bg-white/20 p-3 rounded-2xl">
+                                <DollarSign size={24} />
+                            </div>
+                        </div>
+                        <p className="text-[10px] font-black text-blue-200/60 uppercase tracking-widest mt-6">Sujeto a cambios del taller</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* Modal Add Items */}
+            {showItemsModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[40px] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-10">
+                        <div className="flex justify-between items-center mb-10">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Agregar Items</h3>
+                                <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Ampliación de Orden #{order.id}</p>
+                            </div>
+                            <button onClick={() => setShowItemsModal(false)} className="text-slate-400 hover:text-slate-900">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-8">
+                            {newItems.map((item, index) => (
+                                <div key={index} className="bg-slate-50 p-6 rounded-3xl space-y-4 relative">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Servicio Catálogo</label>
+                                            <select
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
+                                                onChange={(e) => updateItem(index, 'service_id', e.target.value)}
+                                            >
+                                                <option value="">-- Personalizado --</option>
+                                                {catalog.map(s => <option key={s.id} value={s.id}>{s.name} - ${s.base_price}</option>)}
+                                            </select>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Descripción</label>
+                                            <input
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
+                                                value={item.description}
+                                                onChange={(e) => updateItem(index, 'description', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Mano de Obra</label>
+                                            <input
+                                                type="number"
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
+                                                value={item.labor_price}
+                                                onChange={(e) => updateItem(index, 'labor_price', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Repuestos</label>
+                                            <input
+                                                type="number"
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
+                                                value={item.parts_price}
+                                                onChange={(e) => updateItem(index, 'parts_price', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    {newItems.length > 1 && (
+                                        <button
+                                            onClick={() => setNewItems(newItems.filter((_, i) => i !== index))}
+                                            className="absolute -top-3 -right-3 bg-red-100 text-red-500 p-2 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+
+                            <button
+                                onClick={() => setNewItems([...newItems, { description: '', labor_price: '0', parts_price: '0', service_id: null }])}
+                                className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-[10px] uppercase tracking-widest hover:border-blue-400 hover:text-blue-600 transition-all"
+                            >
+                                + Agregar otro Item
+                            </button>
+
+                            <button
+                                onClick={handleAddItems}
+                                className="w-full bg-slate-900 text-white font-black py-5 rounded-[24px] shadow-2xl transition-all uppercase tracking-[0.2em] text-xs hover:bg-blue-600"
+                            >
+                                Confirmar y Ampliar Orden
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+

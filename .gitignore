@@ -1,0 +1,43 @@
+# Dependencies
+**/node_modules/
+**/.pnp
+.pnp.*
+
+# Next.js build
+**/frontend/.next/
+**/frontend/out/
+
+# Production builds
+**/build/
+**/dist/
+
+# Databases and Tenant data (Multi-tenant specific)
+backend/super.db*
+backend/tenants/
+backend/database.sqlite
+backend/nodemon.log
+
+# Environment secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+backend/.env
+frontend/.env*
+
+# OS misc
+.DS_Store
+Thumbs.db
+*.pem
+
+# IDEs
+.vscode/
+.idea/
+
+# Testing
+**/coverage/
+*.test.js
+test_*.js
+debug_*.js
+check_*.js

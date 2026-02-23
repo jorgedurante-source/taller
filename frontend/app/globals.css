@@ -1,0 +1,243 @@
+@import "tailwindcss";
+
+/* ─── Base (default theme: Pearl) ─── */
+:root {
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #0f172a;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a;
+  --text-muted: #64748b;
+  --text-sidebar: #94a3b8;
+  --accent: #2563eb;
+  --accent-light: #eff6ff;
+  --border: #e2e8f0;
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / .08);
+  color-scheme: light;
+}
+
+/* ─── Obsidian (dark) ─── */
+[data-theme="obsidian"] {
+  --bg-base: #0d0d0d;
+  --bg-surface: #1a1a1a;
+  --bg-sidebar: #111111;
+  --bg-card: #1f1f1f;
+  --text-primary: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-sidebar: #94a3b8;
+  --accent: #3b82f6;
+  --accent-light: #1e3a5f;
+  --border: #2d2d2d;
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / .4);
+  color-scheme: dark;
+}
+
+/* ─── Ocean (dark teal) ─── */
+[data-theme="ocean"] {
+  --bg-base: #0a1628;
+  --bg-surface: #0f2040;
+  --bg-sidebar: #071020;
+  --bg-card: #122448;
+  --text-primary: #e2f0ff;
+  --text-muted: #7fb3d3;
+  --text-sidebar: #7fb3d3;
+  --accent: #06b6d4;
+  --accent-light: #083344;
+  --border: #1e3a5f;
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / .5);
+  color-scheme: dark;
+}
+
+/* ─── Sunset (warm amber) ─── */
+[data-theme="sunset"] {
+  --bg-base: #fffbf5;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #1c0f00;
+  --bg-card: #ffffff;
+  --text-primary: #1c0f00;
+  --text-muted: #78522e;
+  --text-sidebar: #c8985c;
+  --accent: #ea580c;
+  --accent-light: #fff7ed;
+  --border: #fde8d0;
+  --shadow: 0 1px 3px 0 rgb(180 80 0 / .1);
+  color-scheme: light;
+}
+
+/* ─── Forest (deep green) ─── */
+[data-theme="forest"] {
+  --bg-base: #061a0e;
+  --bg-surface: #0d2b18;
+  --bg-sidebar: #04110a;
+  --bg-card: #102e1b;
+  --text-primary: #d1fae5;
+  --text-muted: #6ee7b7;
+  --text-sidebar: #6ee7b7;
+  --accent: #10b981;
+  --accent-light: #064e3b;
+  --border: #134e2c;
+  --shadow: 0 1px 3px 0 rgb(0 0 0 / .5);
+  color-scheme: dark;
+}
+
+/* ─── Lavender (soft purple) ─── */
+[data-theme="lavender"] {
+  --bg-base: #f5f3ff;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #1e1b4b;
+  --bg-card: #ffffff;
+  --text-primary: #1e1b4b;
+  --text-muted: #6d28d9;
+  --text-sidebar: #a5b4fc;
+  --accent: #7c3aed;
+  --accent-light: #ede9fe;
+  --border: #e9d5ff;
+  --shadow: 0 1px 3px 0 rgb(109 40 217 / .1);
+  color-scheme: light;
+}
+
+/* ─── Slate Pro (corporate light) ─── */
+[data-theme="slate"] {
+  --bg-base: #f1f5f9;
+  --bg-surface: #ffffff;
+  --bg-sidebar: #1e293b;
+  --bg-card: #ffffff;
+  --text-primary: #1e293b;
+  --text-muted: #64748b;
+  --text-sidebar: #94a3b8;
+  --accent: #0ea5e9;
+  --accent-light: #f0f9ff;
+  --border: #cbd5e1;
+  --shadow: 0 1px 2px 0 rgb(0 0 0 / .05);
+  color-scheme: light;
+}
+
+/* ─── Apply theme variables to elements ─── */
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Form elements always readable */
+input,
+textarea,
+select {
+  color: var(--text-primary) !important;
+  background-color: var(--bg-surface);
+  border-color: var(--border);
+  color-scheme: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+option {
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+}
+
+/* Smooth card/surface transitions */
+.bg-white {
+  background-color: var(--bg-surface) !important;
+  border-color: var(--border) !important;
+}
+
+.bg-slate-50,
+.bg-slate-50\/50 {
+  background-color: color-mix(in srgb, var(--bg-base) 60%, var(--bg-surface)) !important;
+}
+
+/* Sidebar theming */
+.sidebar-themed {
+  background-color: var(--bg-sidebar) !important;
+  color: var(--text-sidebar) !important;
+}
+
+/* Text overrides for themed dark modes */
+[data-theme="obsidian"] .text-slate-900,
+[data-theme="ocean"] .text-slate-900,
+[data-theme="forest"] .text-slate-900 {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="obsidian"] .text-slate-700,
+[data-theme="ocean"] .text-slate-700,
+[data-theme="forest"] .text-slate-700 {
+  color: color-mix(in srgb, var(--text-primary) 85%, var(--text-muted)) !important;
+}
+
+[data-theme="obsidian"] .text-slate-500,
+[data-theme="obsidian"] .text-slate-400,
+[data-theme="ocean"] .text-slate-500,
+[data-theme="ocean"] .text-slate-400,
+[data-theme="forest"] .text-slate-500,
+[data-theme="forest"] .text-slate-400 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="obsidian"] .border-slate-100,
+[data-theme="ocean"] .border-slate-100,
+[data-theme="forest"] .border-slate-100 {
+  border-color: var(--border) !important;
+}
+
+[data-theme="obsidian"] .bg-slate-900,
+[data-theme="ocean"] .bg-slate-900,
+[data-theme="forest"] .bg-slate-900 {
+  background-color: color-mix(in srgb, var(--bg-sidebar) 80%, var(--accent-light)) !important;
+}
+/* --- Broader text overrides for dark themes --- */
+[data-theme="obsidian"] .text-slate-800,
+[data-theme="ocean"] .text-slate-800,
+[data-theme="forest"] .text-slate-800 {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="obsidian"] .text-slate-600,
+[data-theme="ocean"] .text-slate-600,
+[data-theme="forest"] .text-slate-600 {
+  color: color-mix(in srgb, var(--text-primary) 75%, var(--text-muted)) !important;
+}
+
+[data-theme="obsidian"] .text-slate-300,
+[data-theme="ocean"] .text-slate-300,
+[data-theme="forest"] .text-slate-300 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="obsidian"] .divide-slate-100 > * + *,
+[data-theme="ocean"] .divide-slate-100 > * + *,
+[data-theme="forest"] .divide-slate-100 > * + * {
+  border-color: var(--border) !important;
+}
+
+[data-theme="obsidian"] .flex.min-h-screen,
+[data-theme="ocean"] .flex.min-h-screen,
+[data-theme="forest"] .flex.min-h-screen {
+  background-color: var(--bg-base) !important;
+}
+
+[data-theme="obsidian"] main,
+[data-theme="ocean"] main,
+[data-theme="forest"] main {
+  background-color: var(--bg-base) !important;
+  color: var(--text-primary) !important;
+}
+
+[data-theme="sunset"] .text-slate-500,
+[data-theme="sunset"] .text-slate-400,
+[data-theme="lavender"] .text-slate-500,
+[data-theme="lavender"] .text-slate-400 {
+  color: var(--text-muted) !important;
+}
+
+[data-theme="sunset"] .border-slate-100,
+[data-theme="lavender"] .border-slate-100 {
+  border-color: var(--border) !important;
+}
