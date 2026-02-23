@@ -500,7 +500,7 @@ export default function SettingsPage() {
                             {config.logo_path && (
                                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-4">
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vista Previa Logo</p>
-                                    <img src={config.logo_path.startsWith('http') ? config.logo_path : `http://localhost:5000${config.logo_path}`} alt="Workshop Logo" className="max-h-24 object-contain" />
+                                    <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + config.logo_path} alt="Workshop Logo" className="max-h-32 object-contain" />
                                 </div>
                             )}
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
