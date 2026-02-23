@@ -14,7 +14,7 @@ function seedWorkshop(db) {
     const insertVehicle = db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, year, km) VALUES (?, ?, ?, ?, ?, ?)');
     const insertOrder = db.prepare('INSERT INTO orders (client_id, vehicle_id, description, status, payment_status, payment_amount, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
     const insertItem = db.prepare('INSERT INTO order_items (order_id, description, labor_price, parts_price, subtotal) VALUES (?, ?, ?, ?, ?)');
-    const insertService = db.prepare('INSERT INTO service_catalog (name, description, base_price, category) VALUES (?, ?, ?, ?)');
+    const insertService = db.prepare('INSERT INTO service_catalog (name, base_price) VALUES (?, ?)');
 
     const transaction = db.transaction(() => {
         const clientIds = [];
@@ -59,9 +59,7 @@ function seedWorkshop(db) {
         for (const sName of serviceNames) {
             insertService.run(
                 sName,
-                `Servicio de ${sName.toLowerCase()} profesional`,
-                Math.floor(5000 + Math.random() * 25000),
-                'Mecánica'
+                Math.floor(5000 + Math.random() * 25000)
             );
         }
 
