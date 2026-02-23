@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcrypt');
 
-const TENANTS_DIR = path.resolve(__dirname, 'tenants');
+const TENANTS_DIR = path.join(process.env.DATA_DIR || __dirname, 'tenants');
 
 // Cache of DB instances per slug
 const dbCache = {};
