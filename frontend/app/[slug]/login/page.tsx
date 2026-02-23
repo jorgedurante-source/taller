@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
-import { LogIn, Wrench } from 'lucide-react';
+import { LogIn, Wrench, Car } from 'lucide-react';
 import { useConfig } from '@/lib/config';
 
 export default function LoginPage() {
@@ -12,7 +12,12 @@ export default function LoginPage() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const { login } = useAuth();
-    const { config } = useConfig();
+    const { config: globalConfig } = useConfig();
+    const [tenantConfig, setTenantConfig] = useState<any>(null);
+
+    React.useEffect(() => {
+        api.get('/config').then(res => setTenantConfig(res.data)).catch(() => { });
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -34,11 +39,17 @@ export default function LoginPage() {
             <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
                 <div className="bg-slate-900 p-8 text-center text-white">
                     <div className="flex justify-center mb-4">
-                        <div className="bg-blue-600 p-3 rounded-xl shadow-lg">
-                            <Wrench size={32} />
-                        </div>
+                        {tenantConfig?.logo_path ? (
+                            <div className="bg-white rounded-xl shadow-lg border border-slate-700 overflow-hidden w-16 h-16">
+                                <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + tenantConfig.logo_path} alt="Logo" className="w-full h-full object-cover" />
+                            </div>
+                        ) : (
+                            <div className="bg-blue-600 p-3 rounded-xl shadow-lg">
+                                <Car size={32} />
+                            </div>
+                        )}
                     </div>
-                    <h1 className="text-2xl font-bold">{config.product_name}</h1>
+                    <h1 className="text-2xl font-bold">{tenantConfig?.workshop_name || globalConfig.product_name}</h1>
                     <p className="text-slate-400 mt-1">Gestión de Taller Mecánico</p>
                 </div>
 
@@ -89,7 +100,7 @@ export default function LoginPage() {
 
                 <div className="p-6 bg-slate-50 border-t border-slate-100 text-center">
                     <p className="text-xs text-slate-400">
-                        {config.product_name} v1.0.0
+                        {globalConfig.product_name} v1.0.0
                     </p>
                 </div>
             </div>

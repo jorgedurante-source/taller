@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
 import { LogIn, Car, Wrench, UserPlus, MapPin, Clock, Instagram } from 'lucide-react';
+import { useConfig } from '@/lib/config';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 
@@ -13,6 +14,7 @@ export default function ClientLoginPage() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [config, setConfig] = useState<any>(null);
+    const { config: globalConfig } = useConfig();
     const { clientLogin, clientUser, loading: authLoading } = useAuth();
     const router = useRouter();
     const params = useParams();
@@ -59,9 +61,20 @@ export default function ClientLoginPage() {
         <div className="flex flex-col lg:flex-row items-center justify-center min-h-[calc(100vh-160px)] p-4 bg-[var(--bg-base)] gap-8">
             {/* Workshop Info Card */}
             <div className="w-full max-w-md rounded-[40px] shadow-sm border border-[var(--border)] p-10 space-y-8 hidden lg:block bg-[var(--bg-surface)]">
-                <header>
-                    <h2 className="text-3xl font-black text-[var(--accent)] leading-tight italic uppercase tracking-tighter">Bienvenido a {config?.workshop_name || 'MechHub'}</h2>
-                    <p className="text-[var(--text-muted)] font-bold text-xs uppercase tracking-widest mt-2 italic">Excelencia en Servicio Automotriz</p>
+                <header className="flex flex-col gap-4">
+                    {config?.logo_path ? (
+                        <div className="w-24 h-24 bg-white rounded-3xl p-1 shadow-sm border border-[var(--border)] overflow-hidden">
+                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + config.logo_path} alt="Logo" className="w-full h-full object-cover rounded-2xl" />
+                        </div>
+                    ) : (
+                        <div className="w-24 h-24 bg-[var(--accent)] text-white rounded-3xl p-1 shadow-sm border border-[var(--border)] flex items-center justify-center">
+                            <Car size={40} />
+                        </div>
+                    )}
+                    <div>
+                        <h2 className="text-3xl font-black text-[var(--accent)] leading-tight italic uppercase tracking-tighter">Bienvenido a {config?.workshop_name || 'MechHub'}</h2>
+                        <p className="text-[var(--text-muted)] font-bold text-xs uppercase tracking-widest mt-2 italic">Excelencia en Servicio Automotriz</p>
+                    </div>
                 </header>
 
                 <div className="space-y-6">
@@ -175,14 +188,16 @@ export default function ClientLoginPage() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <Link
-                            href={`/${slug}/register`}
-                            className="flex flex-col items-center justify-center p-4 rounded-2xl border border-[var(--border)] hover:border-[var(--accent)] transition-all group"
-                        >
-                            <UserPlus size={24} className="text-[var(--text-muted)] group-hover:text-[var(--accent)] mb-2 transition-colors" />
-                            <span className="text-[10px] font-black text-[var(--text-muted)] group-hover:text-[var(--accent)] uppercase">Crear Cuenta</span>
-                        </Link>
+                    <div className={globalConfig?.allow_new_registrations !== 'false' ? "grid grid-cols-2 gap-4" : "grid grid-cols-1"}>
+                        {globalConfig?.allow_new_registrations !== 'false' && (
+                            <Link
+                                href={`/${slug}/register`}
+                                className="flex flex-col items-center justify-center p-4 rounded-2xl border border-[var(--border)] hover:border-[var(--accent)] transition-all group"
+                            >
+                                <UserPlus size={24} className="text-[var(--text-muted)] group-hover:text-[var(--accent)] mb-2 transition-colors" />
+                                <span className="text-[10px] font-black text-[var(--text-muted)] group-hover:text-[var(--accent)] uppercase">Crear Cuenta</span>
+                            </Link>
+                        )}
 
                         <Link
                             href={`/${slug}/login`}

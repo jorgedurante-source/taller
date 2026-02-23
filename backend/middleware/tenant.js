@@ -17,7 +17,11 @@ function tenantMiddleware(req, res, next) {
 
     try {
         const superDb = require('../superDb');
-        const workshop = superDb.prepare("SELECT status FROM workshops WHERE slug = ?").get(slug);
+        const workshop = superDb.prepare("SELECT status, api_token FROM workshops WHERE slug = ?").get(slug);
+
+        if (workshop) {
+            req.tenantSecret = workshop.api_token;
+        }
 
         if (workshop && workshop.status === 'inactive') {
             return res.status(403).json({
@@ -25,6 +29,15 @@ function tenantMiddleware(req, res, next) {
                 status: 'inactive',
                 details: 'El acceso a este taller ha sido suspendido por el administrador.'
             });
+        }
+
+        // Global Settings & Maintenance Mode Check
+        const settings = superDb.prepare("SELECT * FROM global_settings").all();
+        req.globalSettings = {};
+        settings.forEach(s => req.globalSettings[s.key] = s.value);
+
+        if (req.globalSettings.maintenance_mode === 'true') {
+            req.maintenanceMode = true;
         }
 
         req.db = getDb(slug);

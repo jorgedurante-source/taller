@@ -4,7 +4,9 @@ import React, { useEffect, createContext, useContext, useState } from 'react';
 import { useParams } from 'next/navigation';
 import axios from 'axios';
 import { useConfig } from './config';
+import { useAuth } from './auth';
 import InactiveSite from '@/components/layout/InactiveSite';
+import MaintenanceMode from '@/components/layout/MaintenanceMode';
 
 export const THEMES = [
     {
@@ -79,10 +81,12 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
     const [inactiveData, setInactiveData] = useState<{ active: boolean; details?: string }>({ active: false });
 
     const { config } = useConfig();
+    const { user } = useAuth();
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
 
     useEffect(() => {
         const loadTheme = async () => {
-            const isSuperAdmin = window.location.pathname.startsWith('/superadmin');
+            const isSuperAdmin = pathname.startsWith('/superadmin');
 
             if (isSuperAdmin) {
                 const stored = localStorage.getItem('mechub-super-theme');
@@ -123,7 +127,13 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
         };
 
         loadTheme();
-    }, [slug, config.superadmin_theme]);
+    }, [slug, config.superadmin_theme, pathname]);
+
+    // Global Maintenance Mode Guard
+    const isSuperAdminPath = pathname.startsWith('/superadmin');
+    if (config.maintenance_mode === 'true' && !user?.isSuperuser && !isSuperAdminPath) {
+        return <MaintenanceMode supportEmail={config.support_email} productName={config.product_name} />;
+    }
 
     if (inactiveData.active) {
         return <InactiveSite slug={slug} details={inactiveData.details} />;

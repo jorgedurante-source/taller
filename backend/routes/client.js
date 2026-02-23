@@ -47,6 +47,14 @@ router.get('/me', auth, (req, res) => {
 router.post('/register', async (req, res) => {
     const { first_name, last_name, email, password, phone } = req.body;
 
+    // Check if registration is allowed
+    if (req.globalSettings?.allow_new_registrations === 'false') {
+        return res.status(403).json({
+            message: 'Registraciones suspendidas temporalmente',
+            details: 'El sistema no está aceptando nuevos registros en este momento.'
+        });
+    }
+
     try {
         const userExists = req.db.prepare('SELECT * FROM users WHERE username = ?').get(email);
         if (userExists) return res.status(400).json({ message: 'El email ya está registrado' });

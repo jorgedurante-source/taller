@@ -130,9 +130,15 @@ export default function ClientDashboardPage() {
             {/* Navbar Premium */}
             <nav className="bg-[var(--bg-surface)] backdrop-blur-md border-b border-[var(--border)] px-6 py-4 flex justify-between items-center sticky top-0 z-50">
                 <div className="flex items-center gap-4">
-                    <div className="bg-[var(--accent)] p-2.5 rounded-xl text-white shadow-lg">
-                        <Car size={20} />
-                    </div>
+                    {config?.logo_path ? (
+                        <div className="w-10 h-10 bg-white rounded-xl shadow-lg border border-[var(--border)] overflow-hidden">
+                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + config.logo_path} alt="Logo" className="w-full h-full object-cover" />
+                        </div>
+                    ) : (
+                        <div className="bg-[var(--accent)] p-2.5 rounded-xl text-white shadow-lg">
+                            <Car size={20} />
+                        </div>
+                    )}
                     <span className="font-black text-2xl tracking-tighter text-[var(--text-primary)] uppercase italic">{config?.workshop_name || 'MechHub'} <span style={{ color: 'var(--accent)' }}>Portal</span></span>
                 </div>
                 <div className="flex items-center gap-6">

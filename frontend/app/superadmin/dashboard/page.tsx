@@ -31,7 +31,8 @@ import {
     ToggleRight,
     Copy,
     Check,
-    Key
+    Key,
+    Car
 } from 'lucide-react';
 
 interface Workshop {
@@ -372,7 +373,7 @@ export default function SuperAdminDashboard() {
                                         {w.logo_path ? (
                                             <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '') + w.logo_path} alt={w.name} className="w-full h-full object-cover" />
                                         ) : (
-                                            <span className="font-black text-2xl italic uppercase">{w.name.substring(0, 2)}</span>
+                                            <Car size={32} />
                                         )}
                                     </div>
                                     <div className="pt-1">

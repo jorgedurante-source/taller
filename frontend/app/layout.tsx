@@ -25,14 +25,14 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ConfigProvider>
-          <ThemeProvider>
-            <AuthProvider>
+          <AuthProvider>
+            <ThemeProvider>
               <main className="flex-grow">
                 {children}
               </main>
               <Footer />
-            </AuthProvider>
-          </ThemeProvider>
+            </ThemeProvider>
+          </AuthProvider>
         </ConfigProvider>
       </body>
     </html>

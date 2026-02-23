@@ -7,7 +7,7 @@ const auth = (req, res, next) => {
     }
 
     try {
-        const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
+        const secret = req.tenantSecret || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const decoded = jwt.verify(token, secret);
 
         // --- Security Isolation Fix ---
@@ -18,6 +18,16 @@ const auth = (req, res, next) => {
         }
 
         req.user = decoded;
+
+        // --- Maintenance Mode Enforcement ---
+        if (req.maintenanceMode && !req.user.isSuperuser) {
+            return res.status(503).json({
+                message: 'Sistema en mantenimiento',
+                status: 'maintenance',
+                details: 'El sistema se encuentra en mantenimiento programado. Por favor, intenta de nuevo más tarde.'
+            });
+        }
+
         next();
     } catch (err) {
         res.status(401).json({ message: 'Token is not valid' });

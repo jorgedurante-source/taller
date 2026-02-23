@@ -37,6 +37,17 @@ superApi.interceptors.request.use((config) => {
     return config;
 });
 
+superApi.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (typeof window !== 'undefined' && error.response?.status === 401 && !window.location.pathname.includes('/login')) {
+            localStorage.removeItem('super_token');
+            window.location.href = '/superadmin/login';
+        }
+        return Promise.reject(error);
+    }
+);
+
 /**
  * Default API instance — reads slug from localStorage.
  * Used by pages that are already inside a [slug] context.
@@ -58,6 +69,19 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (typeof window !== 'undefined' && error.response?.status === 401 && !window.location.pathname.includes('/login')) {
+            const slug = localStorage.getItem('current_slug') || 'kabul';
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = `/${slug}/login`;
+        }
+        return Promise.reject(error);
+    }
+);
+
 /**
  * Client API instance — separate from admin.
  * Uses `client_token`.
@@ -78,5 +102,18 @@ clientApi.interceptors.request.use((config) => {
 
     return config;
 });
+
+clientApi.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (typeof window !== 'undefined' && error.response?.status === 401 && !window.location.pathname.includes('/login')) {
+            const slug = localStorage.getItem('current_slug') || 'kabul';
+            localStorage.removeItem('client_token');
+            localStorage.removeItem('client_user');
+            window.location.href = `/${slug}/client/login`;
+        }
+        return Promise.reject(error);
+    }
+);
 
 export default api;

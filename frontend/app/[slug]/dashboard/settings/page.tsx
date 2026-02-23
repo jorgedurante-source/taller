@@ -23,16 +23,22 @@ import {
     User as UserIcon,
     Shield,
     Palette,
-    Image as ImageIcon
+    Image as ImageIcon,
+    Copy,
+    Check,
+    Link2
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { THEMES, applyTheme, getStoredTheme } from '@/lib/theme';
+import { useSlug } from '@/lib/slug';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('global');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [currentTheme, setCurrentTheme] = useState('default');
+    const { slug } = useSlug();
+    const [copiedPortal, setCopiedPortal] = useState(false);
 
     // Load stored theme on mount
     React.useEffect(() => {
@@ -344,14 +350,42 @@ export default function SettingsPage() {
                         <div className="lg:col-span-2 space-y-8">
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
                                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                                    <Globe className="text-blue-500" size={24} />
+                                    Portal de Clientes
+                                </h3>
+                                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between gap-4">
+                                    <div className="flex-grow overflow-hidden">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Enlace Público (Compartir con Clientes)</p>
+                                        <div className="flex items-center gap-2 text-slate-700 font-mono text-sm truncate">
+                                            <Link2 size={16} className="text-slate-400 shrink-0" />
+                                            <span className="truncate">{typeof window !== 'undefined' ? `${window.location.origin}/${slug}/client/login` : `/${slug}/client/login`}</span>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            if (typeof window !== 'undefined') {
+                                                navigator.clipboard.writeText(`${window.location.origin}/${slug}/client/login`);
+                                                setCopiedPortal(true);
+                                                setTimeout(() => setCopiedPortal(false), 2000);
+                                            }
+                                        }}
+                                        className={`shrink-0 p-3 rounded-xl transition-all font-black text-xs flex items-center gap-2 ${copiedPortal ? 'bg-emerald-50 text-emerald-600' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 shadow-sm'}`}
+                                    >
+                                        {copiedPortal ? <><Check size={16} /> Copiado</> : <><Copy size={16} /> Copiar Enlace</>}
+                                    </button>
+                                </div>
+                            </section>
+
+                            <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
+                                <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                     <SettingsIcon className="text-blue-500" size={24} />
                                     Identidad del Taller
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <ConfigInput label="Nombre del Taller" value={config.workshop_name} onChange={(v) => setConfig((prev: any) => ({ ...prev, workshop_name: v }))} />
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Logo del Taller</label>
-                                        <div className="flex gap-2">
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Logo del Taller (Hacé clic para cambiar)</label>
+                                        <div className="flex flex-col gap-4">
                                             <input
                                                 type="file"
                                                 accept="image/*"
@@ -359,20 +393,31 @@ export default function SettingsPage() {
                                                 className="hidden"
                                                 id="logo-upload"
                                             />
-                                            <label
-                                                htmlFor="logo-upload"
-                                                className="flex-grow bg-slate-50 border-2 border-slate-100 p-3 rounded-xl font-bold text-sm cursor-pointer hover:border-blue-400 transition-all text-slate-500 flex items-center gap-2"
-                                            >
-                                                <ImageIcon size={18} />
-                                                Subir Imagen
-                                            </label>
-                                            {config.logo_path && (
-                                                <button
-                                                    onClick={() => setConfig((prev: any) => ({ ...prev, logo_path: '' }))}
-                                                    className="bg-red-50 text-red-500 p-3 rounded-xl hover:bg-red-100 transition-all font-black text-xs"
+                                            {config.logo_path ? (
+                                                <div className="relative w-32 h-32 group">
+                                                    <label htmlFor="logo-upload" className="block w-full h-full rounded-2xl border-2 border-slate-200 overflow-hidden cursor-pointer shadow-sm hover:border-blue-400 hover:shadow-lg transition-all">
+                                                        <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + config.logo_path} alt="Logo" className="w-full h-full object-cover" />
+                                                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <ImageIcon className="text-white" size={24} />
+                                                        </div>
+                                                    </label>
+                                                    <button
+                                                        onClick={() => setConfig((prev: any) => ({ ...prev, logo_path: '' }))}
+                                                        className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-full shadow-lg hover:bg-red-600 transition-all hover:scale-110"
+                                                        title="Quitar Logo"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <label
+                                                    htmlFor="logo-upload"
+                                                    className="w-full h-32 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all text-slate-400 hover:text-blue-500"
                                                 >
-                                                    QUITAR
-                                                </button>
+                                                    <ImageIcon size={32} className="mb-2" />
+                                                    <span className="font-bold text-sm">Subir Logo Oficial</span>
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">Recomendado: 512x512px</span>
+                                                </label>
                                             )}
                                         </div>
                                     </div>

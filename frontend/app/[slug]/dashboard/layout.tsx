@@ -88,9 +88,14 @@ export default function DashboardLayout({
             <aside className="sidebar-themed w-64 hidden md:flex flex-col fixed inset-y-0">
                 <div className="p-6 text-white flex flex-col gap-1">
                     <div className="flex items-center gap-3">
-                        <div className="p-2">
-                        </div>
-                        <span className="font-black text-xl italic uppercase tracking-tighter">{config.product_name}</span>
+                        {tenantConfig?.logo_path ? (
+                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + tenantConfig.logo_path} alt="Logo" className="w-14 h-14 object-cover rounded-xl bg-white" />
+                        ) : (
+                            <div className="p-3 bg-white/10 rounded-xl">
+                                <Car size={32} />
+                            </div>
+                        )}
+                        <span className="font-black text-xl italic uppercase tracking-tighter line-clamp-2 leading-tight">{tenantConfig?.workshop_name || config.product_name}</span>
                     </div>
 
                     {/* Workshop Selector for Superadmins */}

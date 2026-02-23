@@ -10,8 +10,7 @@ const fs = require('fs');
 
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const { slug } = req.params;
-        const dir = path.resolve(__dirname, `../tenants/${slug}/uploads/site`);
+        const dir = path.resolve(__dirname, `../temp_uploads`);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         cb(null, dir);
     },
@@ -163,11 +162,18 @@ router.post('/workshops/:slug/logo', superAuth, upload.single('logo'), (req, res
     const { slug } = req.params;
     if (!req.file) return res.status(400).json({ message: 'Logo file required' });
     try {
+        const targetDir = path.resolve(__dirname, `../tenants/${slug}/uploads/site`);
+        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+
+        const targetPath = path.resolve(targetDir, req.file.filename);
+        fs.renameSync(req.file.path, targetPath);
+
         const logoPath = `/uploads/${slug}/site/${req.file.filename}`;
         superDb.prepare("UPDATE workshops SET logo_path = ? WHERE slug = ?").run(logoPath, slug);
         res.json({ logo_path: logoPath });
     } catch (err) {
-        res.status(500).send('Server error');
+        console.error('[super] Error uploading logo:', err);
+        res.status(500).json({ message: 'Error server: ' + err.message });
     }
 });
 
@@ -240,7 +246,9 @@ router.post('/impersonate/:slug', superAuth, (req, res) => {
     let permissions = [];
     try { permissions = JSON.parse(adminRole?.permissions || '[]'); } catch (e) { }
 
-    const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
+    const workshop = superDb.prepare("SELECT api_token FROM workshops WHERE slug = ?").get(slug);
+    const secret = workshop?.api_token || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
+
     const token = jwt.sign(
         { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions, slug, isSuperuser: true },
         secret,
