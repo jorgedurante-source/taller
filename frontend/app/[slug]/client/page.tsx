@@ -16,7 +16,9 @@ import {
     Plus,
     Search,
     Download,
-    FileText
+    FileText,
+    MessageCircle,
+    Phone
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 
@@ -141,7 +143,22 @@ export default function ClientDashboardPage() {
                     )}
                     <span className="font-black text-2xl tracking-tighter text-[var(--text-primary)] uppercase italic">{config?.workshop_name || 'MechHub'} <span style={{ color: 'var(--accent)' }}>Portal</span></span>
                 </div>
-                <div className="flex items-center gap-6">
+                <div className="flex items-center gap-4 md:gap-6">
+                    {/* Contact Menu */}
+                    {(config?.whatsapp || config?.phone) && (
+                        <div className="hidden sm:flex items-center gap-3 pr-4 border-r border-slate-200">
+                            {config?.whatsapp && (
+                                <a href={`https://wa.me/${config.whatsapp}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-full transition-colors font-bold text-xs" title="Contactar por WhatsApp">
+                                    <MessageCircle size={14} /> WhatsApp
+                                </a>
+                            )}
+                            {config?.phone && (
+                                <a href={`tel:${config.phone}`} className="flex items-center gap-2 text-slate-600 hover:text-slate-800 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-full transition-colors font-bold text-xs" title="Llamar">
+                                    <Phone size={14} /> Taller
+                                </a>
+                            )}
+                        </div>
+                    )}
                     <div className="hidden md:block text-right">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente Conectado</p>
                         <p className="text-sm font-bold text-slate-900">{data?.client?.first_name} {data?.client?.last_name}</p>

@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
-import { LogIn, Car, Wrench, UserPlus, MapPin, Clock, Instagram } from 'lucide-react';
+import { LogIn, Car, Wrench, UserPlus, MapPin, Clock, Instagram, Phone, MessageCircle } from 'lucide-react';
 import { useConfig } from '@/lib/config';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
@@ -107,6 +107,35 @@ export default function ClientLoginPage() {
                             </div>
                         </div>
                     </div>
+
+                    {(config?.phone || config?.whatsapp) && (
+                        <div className="flex gap-4">
+                            <div className="p-3 rounded-2xl shrink-0 h-fit" style={{ backgroundColor: 'var(--accent)', color: 'white' }}>
+                                <Phone size={24} />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Contacto Directo</p>
+                                <div className="space-y-1">
+                                    {config?.whatsapp && (
+                                        <div className="flex items-center gap-2">
+                                            <MessageCircle size={14} className="text-emerald-500" />
+                                            <a href={`https://wa.me/${config.whatsapp}`} target="_blank" rel="noopener noreferrer" className="text-sm font-bold text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors">
+                                                +{config.whatsapp}
+                                            </a>
+                                        </div>
+                                    )}
+                                    {config?.phone && (
+                                        <div className="flex items-center gap-2">
+                                            <Phone size={14} className="text-[var(--text-muted)]" />
+                                            <a href={`tel:${config.phone}`} className="text-sm font-bold text-[var(--text-primary)] hover:text-[var(--accent)] transition-colors">
+                                                {config.phone}
+                                            </a>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 <div className="pt-8 border-t border-[var(--border)] flex items-center gap-4 text-[var(--text-muted)]">
