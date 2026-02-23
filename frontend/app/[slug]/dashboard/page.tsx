@@ -115,7 +115,12 @@ export default function DashboardPage() {
                 {hasPermission('income') && (
                     <StatCard
                         title="Ingresos (Mes)"
-                        value={showTotals ? formatCurrency(data?.incomeByMonth[0]?.total || 0) : '***'}
+                        value={showTotals ? (() => {
+                            const month = data?.incomeByMonth[0];
+                            const labor = month?.labor_income || 0;
+                            const profit = (month?.parts_price || 0) * ((data?.parts_profit_percentage || 0) / 100);
+                            return formatCurrency(labor + profit);
+                        })() : '***'}
                         icon={<TrendingUp className="text-emerald-500" />}
                         accent="#10b981"
                     />
@@ -143,7 +148,10 @@ export default function DashboardPage() {
                         </h3>
                         <div className="h-[300px]">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={data?.incomeByMonth.slice().reverse()}>
+                                <BarChart data={data?.incomeByMonth.slice().reverse().map((m: any) => ({
+                                    ...m,
+                                    total_calculated: (m.labor_income || 0) + ((m.parts_price || 0) * ((data?.parts_profit_percentage || 0) / 100))
+                                }))}>
                                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
                                     <XAxis dataKey="month" axisLine={false} tickLine={false} tick={tickStyle} />
                                     <YAxis axisLine={false} tickLine={false} tick={tickStyle} />
@@ -155,10 +163,11 @@ export default function DashboardPage() {
                                             backgroundColor: 'var(--bg-surface)',
                                             color: 'var(--text-primary)'
                                         }}
+                                        formatter={(val: any) => formatCurrency(val)}
                                         labelStyle={{ color: 'var(--text-primary)' }}
                                         itemStyle={{ color: 'var(--text-muted)' }}
                                     />
-                                    <Bar dataKey="total" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="total_calculated" name="Ingresos" fill="var(--accent)" radius={[4, 4, 0, 0]} />
                                 </BarChart>
                             </ResponsiveContainer>
                         </div>

@@ -42,35 +42,59 @@ router.get('/dashboard', auth, (req, res) => {
     try {
         const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
         const includeParts = config.income_include_parts ?? 1;
-        const partsPercentage = (config.parts_profit_percentage ?? 100) / 100.0;
+        const partsPercentageValue = config.parts_profit_percentage ?? 100;
+        const partsPercentage = partsPercentageValue / 100.0;
 
-        // 1. Monthly Income - based on actual payment_amount, using updated_at (delivery/payment date)
+        // 1. Monthly Income Breakdown - based on items for paid/partial orders
         const incomeByMonth = req.db.prepare(`
           SELECT 
             strftime('%Y-%m', o.updated_at) as month,
-            SUM(o.payment_amount) as total
+            SUM(oi.labor_price) as labor_income,
+            SUM(oi.parts_price) as parts_price
           FROM orders o
+          JOIN order_items oi ON o.id = oi.order_id
           WHERE o.payment_status IN ('cobrado', 'parcial')
           GROUP BY month
           ORDER BY month DESC
           LIMIT 12
         `).all();
 
+        // 1.1 Historical Totals
+        const historicalStats = req.db.prepare(`
+          SELECT 
+            SUM(oi.labor_price) as labor_total,
+            SUM(oi.parts_price) as parts_total
+          FROM orders o
+          JOIN order_items oi ON o.id = oi.order_id
+          WHERE o.payment_status IN ('cobrado', 'parcial')
+        `).get();
+
+        // 1.2 Monthly Totals (Current Month)
+        const monthlyStats = req.db.prepare(`
+          SELECT 
+            SUM(oi.labor_price) as labor_total,
+            SUM(oi.parts_price) as parts_total
+          FROM orders o
+          JOIN order_items oi ON o.id = oi.order_id
+          WHERE o.payment_status IN ('cobrado', 'parcial')
+          AND strftime('%Y-%m', o.updated_at) = strftime('%Y-%m', 'now')
+        `).get();
+
         // If no income data, provide at least the current month
         if (incomeByMonth.length === 0) {
             const now = new Date();
             const localMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-            incomeByMonth.push({ month: localMonth, total: 0 });
+            incomeByMonth.push({ month: localMonth, labor_income: 0, parts_price: 0 });
         }
 
         // 2. Orders by Status
+        // ... (rest of the code remains similar but we return new fields)
         const ordersByStatus = req.db.prepare(`
           SELECT status, COUNT(*) as count
           FROM orders
           GROUP BY status
         `).all();
 
-        // Extra: Calculate total $ value of "Listo para entrega" (not yet paid - uses items sum)
         const readyToDeliverTotal = req.db.prepare(`
             SELECT SUM(oi.labor_price + (CASE WHEN ? = 1 THEN oi.parts_price * ? ELSE 0 END)) as total
             FROM orders o
@@ -78,7 +102,6 @@ router.get('/dashboard', auth, (req, res) => {
             WHERE o.status = 'Listo para entrega'
         `).get(includeParts, partsPercentage).total || 0;
 
-        // 3. Most Common Services
         const commonServices = req.db.prepare(`
           SELECT description, COUNT(*) as count
           FROM orders
@@ -87,7 +110,6 @@ router.get('/dashboard', auth, (req, res) => {
           LIMIT 5
         `).all();
 
-        // 4. Vehicles by Month
         const vehiclesByMonth = req.db.prepare(`
           SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as count
           FROM vehicles
@@ -96,7 +118,6 @@ router.get('/dashboard', auth, (req, res) => {
           LIMIT 12
         `).all();
 
-        // 5. New Clients this month
         const newClientsThisMonth = req.db.prepare(`
           SELECT COUNT(*) as count 
           FROM clients 
@@ -105,6 +126,9 @@ router.get('/dashboard', auth, (req, res) => {
 
         res.json({
             incomeByMonth,
+            historicalStats,
+            monthlyStats,
+            parts_profit_percentage: partsPercentageValue,
             ordersByStatus,
             commonServices,
             vehiclesByMonth,
@@ -127,17 +151,22 @@ router.get('/income-daily', auth, hasPermission('income'), (req, res) => {
     const currentMonth = month || localMonth;
 
     try {
-        // Use payment_amount directly - no config/items join needed
+        const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
+        const partsPercentage = (config.parts_profit_percentage ?? 100) / 100.0;
+
+        // Separate income into labor and parts profit
         const dailyIncome = req.db.prepare(`
             SELECT 
                 strftime('%d', o.updated_at) as day,
-                SUM(o.payment_amount) as total
+                SUM(oi.labor_price) as labor_income,
+                SUM(oi.parts_price * ?) as parts_profit
             FROM orders o
+            JOIN order_items oi ON o.id = oi.order_id
             WHERE o.payment_status IN ('cobrado', 'parcial')
             AND strftime('%Y-%m', o.updated_at) = ?
             GROUP BY day
             ORDER BY day ASC
-        `).all(currentMonth);
+        `).all(partsPercentage, currentMonth);
 
         res.json(dailyIncome);
     } catch (err) {
@@ -145,5 +174,39 @@ router.get('/income-daily', auth, hasPermission('income'), (req, res) => {
         res.status(500).send('Server error');
     }
 });
+
+// @route   GET api/reports/orders-status
+router.get('/orders-status', auth, (req, res) => {
+    try {
+        const ordersByStatus = req.db.prepare(`
+            SELECT status, COUNT(*) as count
+            FROM orders
+            GROUP BY status
+        `).all();
+        res.json(ordersByStatus);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// @route   GET api/reports/top-customers
+router.get('/top-customers', auth, (req, res) => {
+    try {
+        const topCustomers = req.db.prepare(`
+            SELECT c.first_name || ' ' || c.last_name AS name, SUM(o.payment_amount) as total
+            FROM orders o
+            JOIN clients c ON o.client_id = c.id
+            GROUP BY c.id
+            ORDER BY total DESC
+            LIMIT 5
+        `).all();
+        res.json(topCustomers);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
 
 module.exports = router;
