@@ -89,7 +89,7 @@ export default function DashboardLayout({
                 <div className="p-6 text-white flex flex-col gap-1">
                     <div className="flex items-center gap-3">
                         {tenantConfig?.logo_path ? (
-                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + tenantConfig.logo_path} alt="Logo" className="w-14 h-14 object-cover rounded-xl bg-white" />
+                            <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '') + tenantConfig.logo_path} alt="Logo" className="w-16 h-16 xl:w-20 xl:h-20 object-cover rounded-xl bg-white" />
                         ) : (
                             <div className="p-3 bg-white/10 rounded-xl">
                                 <Car size={32} />

@@ -394,11 +394,11 @@ export default function SettingsPage() {
                                                 id="logo-upload"
                                             />
                                             {config.logo_path ? (
-                                                <div className="relative w-32 h-32 group">
-                                                    <label htmlFor="logo-upload" className="block w-full h-full rounded-2xl border-2 border-slate-200 overflow-hidden cursor-pointer shadow-sm hover:border-blue-400 hover:shadow-lg transition-all">
-                                                        <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}`.replace('/api', '') + config.logo_path} alt="Logo" className="w-full h-full object-cover" />
+                                                <div className="relative w-48 h-48 group mx-auto md:mx-0">
+                                                    <label htmlFor="logo-upload" className="block w-full h-full rounded-3xl border-4 border-slate-100 overflow-hidden cursor-pointer shadow-sm hover:border-indigo-400 hover:shadow-xl transition-all">
+                                                        <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace('/api', '') + config.logo_path} alt="Logo" className="w-full h-full object-contain bg-white" />
                                                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <ImageIcon className="text-white" size={24} />
+                                                            <ImageIcon className="text-white" size={32} />
                                                         </div>
                                                     </label>
                                                     <button
@@ -412,9 +412,9 @@ export default function SettingsPage() {
                                             ) : (
                                                 <label
                                                     htmlFor="logo-upload"
-                                                    className="w-full h-32 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition-all text-slate-400 hover:text-blue-500"
+                                                    className="w-48 h-48 bg-slate-50 border-4 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-all text-slate-400 hover:text-indigo-500 mx-auto md:mx-0"
                                                 >
-                                                    <ImageIcon size={32} className="mb-2" />
+                                                    <ImageIcon size={48} className="mb-3" />
                                                     <span className="font-bold text-sm">Subir Logo Oficial</span>
                                                     <span className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">Recomendado: 512x512px</span>
                                                 </label>
