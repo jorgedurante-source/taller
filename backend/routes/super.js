@@ -201,9 +201,10 @@ router.post('/impersonate/:slug', superAuth, (req, res) => {
     let permissions = [];
     try { permissions = JSON.parse(adminRole?.permissions || '[]'); } catch (e) { }
 
+    const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
     const token = jwt.sign(
         { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions, slug, isSuperuser: true },
-        process.env.JWT_SECRET,
+        secret,
         { expiresIn: '8h' }
     );
 
