@@ -57,7 +57,10 @@ export default function DashboardLayout({
     useEffect(() => {
         if (slug) {
             axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/${slug}/config`)
-                .then(res => setTenantConfig(res.data))
+                .then(res => {
+                    console.log(`[layout] Config for ${slug}:`, res.data);
+                    setTenantConfig(res.data);
+                })
                 .catch(() => { });
         }
     }, [slug]);
@@ -171,7 +174,7 @@ export default function DashboardLayout({
             {tenantConfig?.environment === 'dev' && (
                 <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-white py-1 px-4 flex items-center justify-center gap-4 shadow-lg border-b border-amber-600 animate-in slide-in-from-top duration-500">
                     <div className="flex items-center gap-2">
-                        <Settings size={14} className="animate-spin-slow" />
+                        <Settings size={14} className="animate-spin" />
                         <span className="text-[10px] font-black uppercase tracking-[0.3em] italic">Entorno de Desarrollo</span>
                     </div>
                     <div className="h-3 w-[1px] bg-white/30 hidden sm:block" />

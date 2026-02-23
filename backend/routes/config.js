@@ -1,5 +1,5 @@
 const express = require('express');
-const router = express.Router();
+const router = express.Router({ mergeParams: true });
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -27,7 +27,7 @@ router.get('/', (req, res) => {
         const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
         // Also get environment from superDb
         const superDb = require('../superDb');
-        const workshop = superDb.prepare('SELECT environment, status FROM workshops WHERE slug = ?').get(req.params.slug);
+        const workshop = superDb.prepare('SELECT environment, status FROM workshops WHERE slug = ?').get(req.slug);
 
         res.json({
             ...config,
