@@ -9,6 +9,14 @@ const auth = (req, res, next) => {
     try {
         const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const decoded = jwt.verify(token, secret);
+
+        // --- Security Isolation Fix ---
+        // If we are in a tenant context (req.slug exists), verify the token belongs to this tenant
+        // Superusers can bypass this check (they have isSuperuser: true and potentially a different slug)
+        if (req.slug && !decoded.isSuperuser && decoded.slug !== req.slug) {
+            return res.status(403).json({ message: 'Acceso denegado: El token no pertenece a este taller' });
+        }
+
         req.user = decoded;
         next();
     } catch (err) {

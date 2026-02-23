@@ -30,11 +30,11 @@ router.post('/login', async (req, res) => {
 
                 const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
                 const token = jwt.sign(
-                    { id: user.id, username: user.username, role: roleName, permissions },
+                    { id: user.id, username: user.username, role: roleName, permissions, slug: req.slug },
                     secret,
                     { expiresIn: '8h' }
                 );
-                return res.json({ token, user: { id: user.id, username: user.username, role: roleName, permissions } });
+                return res.json({ token, user: { id: user.id, username: user.username, role: roleName, permissions, slug: req.slug } });
             }
             // If staff password doesn't match, fall through to try client login
             // if the username looks like an email
@@ -59,7 +59,7 @@ router.post('/login', async (req, res) => {
 
         const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const clientToken = jwt.sign(
-            { id: client.id, username: client.email, role: 'client', permissions: [], clientId: client.id },
+            { id: client.id, username: client.email, role: 'client', permissions: [], clientId: client.id, slug: req.slug },
             secret,
             { expiresIn: '8h' }
         );
@@ -71,6 +71,7 @@ router.post('/login', async (req, res) => {
                 username: client.email,
                 role: 'client',
                 permissions: [],
+                slug: req.slug,
                 name: `${client.first_name} ${client.last_name}`.trim()
             }
         });
