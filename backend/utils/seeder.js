@@ -14,6 +14,7 @@ function seedWorkshop(db) {
     const insertVehicle = db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, year, km) VALUES (?, ?, ?, ?, ?, ?)');
     const insertOrder = db.prepare('INSERT INTO orders (client_id, vehicle_id, description, status, payment_status, payment_amount, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
     const insertItem = db.prepare('INSERT INTO order_items (order_id, description, labor_price, parts_price, subtotal) VALUES (?, ?, ?, ?, ?)');
+    const insertService = db.prepare('INSERT INTO service_catalog (name, description, base_price, category) VALUES (?, ?, ?, ?)');
 
     const transaction = db.transaction(() => {
         const clientIds = [];
@@ -53,7 +54,18 @@ function seedWorkshop(db) {
             vehicleIds.push({ id: res.lastInsertRowid, clientId });
         }
 
-        // 3. Insert 30 Orders
+        // 3. Insert 10 Services
+        const serviceNames = ['Cambio de Aceite', 'Frenos', 'Alineación', 'Balanceo', 'Escaneo Computarizado', 'Carga de AC', 'Revisión General', 'Limpieza de Inyectores', 'Cambio de Batería', 'Suspensión'];
+        for (const sName of serviceNames) {
+            insertService.run(
+                sName,
+                `Servicio de ${sName.toLowerCase()} profesional`,
+                Math.floor(5000 + Math.random() * 25000),
+                'Mecánica'
+            );
+        }
+
+        // 4. Insert 30 Orders
         for (let i = 0; i < 30; i++) {
             const v = vehicleIds[Math.floor(Math.random() * vehicleIds.length)];
             const status = orderStatuses[Math.floor(Math.random() * orderStatuses.length)];
@@ -99,10 +111,11 @@ function clearWorkshop(db) {
         db.prepare("DELETE FROM orders").run();
         db.prepare("DELETE FROM vehicle_km_history").run();
         db.prepare("DELETE FROM vehicles").run();
-        db.prepare("DELETE FROM users WHERE username != 'admin'").run();
+        // db.prepare("DELETE FROM users WHERE username != 'admin'").run(); // PRESERVING USERS
         db.prepare("DELETE FROM clients").run();
         db.prepare("DELETE FROM service_catalog").run();
         db.prepare("DELETE FROM budgets").run();
+        // db.prepare("DELETE FROM roles").run(); // PRESERVING ROLES
     });
     transaction();
 }
