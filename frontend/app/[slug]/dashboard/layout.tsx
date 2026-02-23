@@ -167,8 +167,24 @@ export default function DashboardLayout({
                 </div>
             </aside>
 
+            {/* Dev Mode Banner (Fixed Top) */}
+            {tenantConfig?.environment === 'dev' && (
+                <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-white py-1 px-4 flex items-center justify-center gap-4 shadow-lg border-b border-amber-600 animate-in slide-in-from-top duration-500">
+                    <div className="flex items-center gap-2">
+                        <Settings size={14} className="animate-spin-slow" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.3em] italic">Entorno de Desarrollo</span>
+                    </div>
+                    <div className="h-3 w-[1px] bg-white/30 hidden sm:block" />
+                    <span className="text-[9px] font-bold uppercase tracking-widest hidden sm:block">Los datos sembrados son ficticios y solo para pruebas</span>
+                    <div className="flex items-center gap-1.5 bg-white/20 px-2 py-0.5 rounded-full">
+                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                        <span className="text-[9px] font-black uppercase">Modo Dev</span>
+                    </div>
+                </div>
+            )}
+
             {/* Main Content */}
-            <main className="flex-grow md:ml-64 p-8">
+            <main className={`flex-grow md:ml-64 p-8 ${tenantConfig?.environment === 'dev' ? 'pt-12' : ''}`}>
                 {/* Dev Mode Banner */}
                 {tenantConfig?.environment === 'dev' && (
                     <div className="mb-6 bg-gradient-to-r from-amber-500 to-orange-600 p-[1px] rounded-2xl shadow-lg shadow-amber-500/20 overflow-hidden">
