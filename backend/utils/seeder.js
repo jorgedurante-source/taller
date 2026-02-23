@@ -40,7 +40,7 @@ function seedWorkshop(db) {
             const plate = (String.fromCharCode(65 + Math.floor(Math.random() * 26)) +
                 String.fromCharCode(65 + Math.floor(Math.random() * 26)) +
                 String.fromCharCode(65 + Math.floor(Math.random() * 26)) +
-                Math.floor(100 + Math.random() * 900)).toUpperCase() + i;
+                Math.floor(100 + Math.random() * 900)).toUpperCase() + '-' + clientId;
 
             const res = insertVehicle.run(
                 clientId,
