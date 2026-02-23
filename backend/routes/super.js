@@ -112,6 +112,11 @@ router.patch('/workshops/:slug', superAuth, (req, res) => {
 router.post('/workshops/:slug/seed', superAuth, (req, res) => {
     const { slug } = req.params;
     try {
+        const workshop = superDb.prepare('SELECT environment FROM workshops WHERE slug = ?').get(slug);
+        if (workshop?.environment !== 'dev') {
+            return res.status(403).json({ message: 'Esta operación solo está permitida en modo Desarrollo' });
+        }
+
         const db = getDb(slug);
         const { seedWorkshop } = require('../utils/seeder');
         seedWorkshop(db);
@@ -126,6 +131,11 @@ router.post('/workshops/:slug/seed', superAuth, (req, res) => {
 router.post('/workshops/:slug/clear', superAuth, (req, res) => {
     const { slug } = req.params;
     try {
+        const workshop = superDb.prepare('SELECT environment FROM workshops WHERE slug = ?').get(slug);
+        if (workshop?.environment !== 'dev') {
+            return res.status(403).json({ message: 'Esta operación solo está permitida en modo Desarrollo' });
+        }
+
         const db = getDb(slug);
         const { clearWorkshop } = require('../utils/seeder');
         clearWorkshop(db);

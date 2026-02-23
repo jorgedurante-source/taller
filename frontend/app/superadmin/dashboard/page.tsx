@@ -113,6 +113,15 @@ export default function SuperAdminDashboard() {
     };
 
     const handleUpdateWorkshop = async (slug: string, updates: Partial<Workshop>) => {
+        // Confirmation for environment change
+        if (updates.environment) {
+            const isToProd = updates.environment === 'prod';
+            const msg = isToProd
+                ? '¿Estás seguro de pasar a PRODUCCIÓN? Se desactivarán las herramientas de limpieza y generación de datos de prueba.'
+                : '¿Pasar a modo DESARROLLO? Se habilitarán herramientas para sembrar datos de prueba y limpiar la base de datos.';
+            if (!confirm(msg)) return;
+        }
+
         try {
             await superApi.patch(`/workshops/${slug}`, updates);
             fetchData();
@@ -195,10 +204,17 @@ export default function SuperAdminDashboard() {
     };
 
     const handleClearData = async (slug: string) => {
-        if (!confirm('¿LIMPIAR BASE DE DATOS? Se borrarán todas las órdenes, clientes y vehículos. El usuario admin se mantendrá.')) return;
+        if (!showManageModal || showManageModal.environment === 'prod') return;
+
+        const confirm1 = confirm('¿LIMPIAR BASE DE DATOS? Se borrarán todas las órdenes, clientes y vehículos.');
+        if (!confirm1) return;
+
+        const confirm2 = confirm('ADVERTENCIA: Esta acción es IRREVERSIBLE. Se borrarán todos los registros operativos del taller. ¿Estás SEGURO de continuar?');
+        if (!confirm2) return;
+
         try {
             await superApi.post(`/workshops/${slug}/clear`);
-            alert('Base de datos limpia');
+            alert('Base de datos limpia correctamente');
             fetchData();
         } catch (err) {
             alert('Error al limpiar base de datos');
@@ -491,8 +507,8 @@ export default function SuperAdminDashboard() {
 
             {/* Manage Workshop Modal */}
             {showManageModal && (
-                <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-2xl z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-2xl rounded-[4rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-12 duration-500">
+                <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-2xl z-[100] flex items-start justify-center p-4 overflow-y-auto">
+                    <div className="bg-white w-full max-w-2xl rounded-[4rem] shadow-2xl overflow-hidden my-8 animate-in fade-in slide-in-from-bottom-12 duration-500">
                         <div className="p-12 relative">
                             <button
                                 onClick={() => { setShowManageModal(null); setShowToken(false); }}
@@ -585,28 +601,30 @@ export default function SuperAdminDashboard() {
                                 </div>
 
                                 {/* Data Management Section */}
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-3">
-                                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Datos de Prueba</label>
-                                        <button
-                                            onClick={() => handleSeedData(showManageModal.slug)}
-                                            className="w-full bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 p-5 rounded-3xl font-black text-sm transition-all flex items-center justify-center gap-2 border border-slate-100"
-                                        >
-                                            <Database size={18} />
-                                            Sembrar Datos
-                                        </button>
+                                {showManageModal.environment === 'dev' && (
+                                    <div className="grid grid-cols-2 gap-6 animate-in fade-in zoom-in duration-300">
+                                        <div className="space-y-3">
+                                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Datos de Prueba</label>
+                                            <button
+                                                onClick={() => handleSeedData(showManageModal.slug)}
+                                                className="w-full bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 p-5 rounded-3xl font-black text-sm transition-all flex items-center justify-center gap-2 border border-slate-100"
+                                            >
+                                                <Database size={18} />
+                                                Sembrar Datos
+                                            </button>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Mantenimiento</label>
+                                            <button
+                                                onClick={() => handleClearData(showManageModal.slug)}
+                                                className="w-full bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 p-5 rounded-3xl font-black text-sm transition-all flex items-center justify-center gap-2 border border-slate-100"
+                                            >
+                                                <RefreshCw size={18} />
+                                                Limpiar DB
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="space-y-3">
-                                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Mantenimiento</label>
-                                        <button
-                                            onClick={() => handleClearData(showManageModal.slug)}
-                                            className="w-full bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 p-5 rounded-3xl font-black text-sm transition-all flex items-center justify-center gap-2 border border-slate-100"
-                                        >
-                                            <RefreshCw size={18} />
-                                            Limpiar DB
-                                        </button>
-                                    </div>
-                                </div>
+                                )}
 
                                 {/* API Security Token */}
                                 <div className="bg-slate-950 rounded-[3rem] p-10 space-y-5 border border-slate-800 relative overflow-hidden group/tokenbox">
