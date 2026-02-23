@@ -1,8 +1,0 @@
-[phases.setup]
-nixPkgs = ["...", "python3", "gcc"]
-
-[phases.build]
-cmds = ["npm install"]
-
-[start]
-cmd = "node server.js"
