@@ -201,33 +201,32 @@ function initTenantDb(db, slug) {
     const adminRole = db.prepare("SELECT permissions FROM roles WHERE name = 'Admin'").get();
     if (adminRole) {
         let perms = JSON.parse(adminRole.permissions || '[]');
-        if (!perms.includes('reminders')) {
-            perms.push('reminders');
+        let modified = false;
+        if (!perms.includes('reminders')) { perms.push('reminders'); modified = true; }
+        if (!perms.includes('appointments')) { perms.push('appointments'); modified = true; }
+
+        if (modified) {
             db.prepare("UPDATE roles SET permissions = ? WHERE name = 'Admin'").run(JSON.stringify(perms));
         }
     } else {
         db.prepare("INSERT INTO roles (name, permissions) VALUES ('Admin', ?)").run(
-            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles', 'reminders'])
+            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles', 'reminders', 'appointments'])
         );
     }
 
     const mecanicoRole = db.prepare("SELECT permissions FROM roles WHERE name = 'Mecánico'").get();
     if (mecanicoRole) {
         let perms = JSON.parse(mecanicoRole.permissions || '[]');
-        if (!perms.includes('reminders')) {
-            perms.push('reminders');
+        let modified = false;
+        if (!perms.includes('reminders')) { perms.push('reminders'); modified = true; }
+        if (!perms.includes('appointments')) { perms.push('appointments'); modified = true; }
+
+        if (modified) {
             db.prepare("UPDATE roles SET permissions = ? WHERE name = 'Mecánico'").run(JSON.stringify(perms));
         }
     } else {
         db.prepare("INSERT INTO roles (name, permissions) VALUES ('Mecánico', ?)").run(
-            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'reminders'])
-        );
-    }
-
-    const recordatoriosRole = db.prepare("SELECT id FROM roles WHERE name = 'Recordatorios'").get();
-    if (!recordatoriosRole) {
-        db.prepare("INSERT INTO roles (name, permissions) VALUES ('Recordatorios', ?)").run(
-            JSON.stringify(['reminders', 'orders'])
+            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'reminders', 'appointments'])
         );
     }
 

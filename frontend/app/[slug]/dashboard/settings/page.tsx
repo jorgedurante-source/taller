@@ -116,7 +116,7 @@ export default function SettingsPage() {
     const [roles, setRoles] = useState<any[]>([]);
     const [newUser, setNewUser] = useState({ username: '', password: '', role_id: '', first_name: '', last_name: '' });
     const [permissionsList] = useState([
-        'dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles', 'reminders'
+        'dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles', 'reminders', 'appointments'
     ]);
 
     const handleInsertToken = (token: string) => {
