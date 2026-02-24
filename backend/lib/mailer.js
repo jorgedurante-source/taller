@@ -29,7 +29,10 @@ async function sendEmail(db, to, subject, text, attachments = [], html = null) {
         tls: {
             rejectUnauthorized: false
         },
-        family: 4
+        family: 4,
+        connectionTimeout: 10000, // 10 seconds
+        greetingTimeout: 10000,
+        socketTimeout: 20000
     });
 
     try {
