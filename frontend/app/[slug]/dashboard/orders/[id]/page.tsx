@@ -24,7 +24,10 @@ import {
     CircleDollarSign,
     CircleSlash,
     ArrowRight,
-    X
+    X,
+    Share2,
+    Copy,
+    ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
@@ -98,6 +101,12 @@ export default function OrderDetailsPage() {
         } finally {
             setUpdating(false);
         }
+    };
+
+    const copyPublicLink = () => {
+        const url = `${window.location.origin}/${slug}/o/${order.share_token}`;
+        navigator.clipboard.writeText(url);
+        alert('Enlace de seguimiento copiado al portapapeles');
     };
 
     const handlePaymentUpdate = async () => {
@@ -226,6 +235,14 @@ export default function OrderDetailsPage() {
                                 >
                                     <MessageSquare size={14} /> Notificar WA
                                 </button>
+                                {order?.share_token && (
+                                    <button
+                                        onClick={copyPublicLink}
+                                        className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2"
+                                    >
+                                        <Share2 size={14} /> Compartir Seguimiento
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>

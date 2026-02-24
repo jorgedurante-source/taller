@@ -39,12 +39,14 @@ router.get('/', auth, (req, res) => {
 router.post('/', auth, async (req, res) => {
     const { client_id, vehicle_id, description, items } = req.body;
 
-    const insertOrder = req.db.prepare('INSERT INTO orders (client_id, vehicle_id, description, created_by_id) VALUES (?, ?, ?, ?)');
+    const crypto = require('crypto');
+    const share_token = crypto.randomBytes(6).toString('hex');
+    const insertOrder = req.db.prepare('INSERT INTO orders (client_id, vehicle_id, description, created_by_id, share_token) VALUES (?, ?, ?, ?, ?)');
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
-        const orderResult = insertOrder.run(data.client_id, data.vehicle_id, data.description || '', actingUserId);
+        const orderResult = insertOrder.run(data.client_id, data.vehicle_id, data.description || '', actingUserId, share_token);
         const orderId = orderResult.lastInsertRowid;
 
         if (data.items && data.items.length > 0) {

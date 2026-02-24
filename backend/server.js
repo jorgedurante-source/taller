@@ -39,6 +39,7 @@ tenantRouter.use('/templates', require('./routes/templates'));
 tenantRouter.use('/client', require('./routes/client'));
 tenantRouter.use('/users', require('./routes/users'));
 tenantRouter.use('/roles', require('./routes/roles'));
+tenantRouter.use('/public/order', require('./routes/public_order'));
 tenantRouter.use('/', require('./routes/api'));
 
 // ─── Public System Info ──────────────────────────────────────────────────────
@@ -63,6 +64,18 @@ app.get('/api/info', (req, res) => {
 
 // Mount tenant router
 app.use('/api/:slug', tenantMiddleware, tenantRouter);
+
+// ─── Scheduled Tasks (Cron) ──────────────────────────────────────────────────
+const { processReminders } = require('./cron/daily_reminders');
+// Run once on startup after 10s delay, then every 24 hours
+setTimeout(processReminders, 10000);
+setInterval(processReminders, 24 * 60 * 60 * 1000);
+
+// Manual trigger for superadmin
+app.post('/api/super/trigger-reminders', (req, res) => {
+    processReminders();
+    res.json({ message: 'Proceso de recordatorios iniciado' });
+});
 
 // ─── Startup: Ensure at least one workshop exists or initialize existing ones ──
 const { createTenant, listTenants, getDb } = require('./tenantManager');

@@ -13,7 +13,9 @@ import {
     Plus,
     ChevronRight,
     Eye,
-    EyeOff
+    EyeOff,
+    Bell,
+    Settings
 } from 'lucide-react';
 import {
     BarChart,
@@ -71,146 +73,267 @@ export default function DashboardPage() {
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
     // Use accent color from CSS var for chart ticks
-    const tickStyle = { fill: 'var(--text-muted)', fontSize: 12 };
-    const gridColor = 'var(--border)';
+    const tickStyle = { fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' };
+    const gridColor = '#f1f5f9';
 
     return (
-        <>
-            <header className="flex justify-between items-center mb-8">
+        <div className="space-y-10 pb-20">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
-                    <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
-                        Bienvenido, {user?.username}
+                    <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">
+                        Panel de Control
                     </h2>
-                    <p style={{ color: 'var(--text-muted)' }}>Aquí tienes el resumen de hoy para el taller.</p>
+                    <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">
+                        Hola, {user?.username} · Resumen operativo de {slug}
+                    </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 w-full md:w-auto">
                     {hasPermission('income') && (
                         <button
                             onClick={togglePrivacy}
-                            className="bg-white p-2 rounded-xl border border-slate-100 shadow-sm transition-all"
-                            style={{ color: 'var(--text-muted)' }}
+                            className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all text-slate-400 hover:text-slate-900"
                         >
-                            {showTotals ? <EyeOff size={18} /> : <Eye size={18} />}
+                            {showTotals ? <EyeOff size={20} /> : <Eye size={20} />}
                         </button>
                     )}
-                    <Link href={`/${slug}/dashboard/orders/create`}>
-                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm transition-all text-sm font-bold">
+                    <Link href={`/${slug}/dashboard/orders/create`} className="flex-1 md:flex-none">
+                        <button className="w-full bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-2xl flex items-center justify-center gap-3 shadow-xl transition-all text-xs font-black uppercase tracking-widest">
                             <Plus size={20} />
-                            <span>Nueva Orden</span>
+                            Nueva Orden
                         </button>
                     </Link>
                 </div>
             </header>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {/* Main Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
                     title="Órdenes Activas"
                     value={data?.ordersByStatus
-                        .filter((item: any) => item.status !== 'Pendiente' && item.status !== 'Entregado')
+                        .filter((item: any) => !['Pendiente', 'Entregado', 'Entregada'].includes(item.status))
                         .reduce((acc: number, item: any) => acc + item.count, 0) || 0}
-                    icon={<ClipboardList className="text-blue-500" />}
-                    accent="#3b82f6"
+                    icon={<ClipboardList size={24} />}
+                    color="blue"
+                    description="En reparación taller"
                 />
                 <StatCard
-                    title="Clientes Nuevos (Mes)"
+                    title="Clientes Nuevos"
                     value={data?.newClientsThisMonth || 0}
-                    icon={<Users className="text-amber-500" />}
-                    accent="#f59e0b"
+                    icon={<Users size={24} />}
+                    color="amber"
+                    description="Registrados este mes"
                 />
                 <StatCard
-                    title="Vehículos Atendidos"
-                    value={data?.vehiclesByMonth[0]?.count || 0}
-                    icon={<Car className="text-purple-500" />}
-                    accent="#8b5cf6"
+                    title="Listo para Entrega"
+                    value={showTotals ? formatCurrency(data?.readyToDeliverTotal || 0) : '***'}
+                    icon={<Car size={24} />}
+                    color="emerald"
+                    description="Pendiente de cobro"
+                />
+                <StatCard
+                    title="Ingresos del Mes"
+                    value={showTotals ? formatCurrency((data?.monthlyStats?.labor_total || 0) + (data?.monthlyStats?.parts_total || 0)) : '***'}
+                    icon={<TrendingUp size={24} />}
+                    color="indigo"
+                    description="Facturación total"
                 />
             </div>
 
-            {/* Charts Grid */}
-            <div className="grid grid-cols-1 gap-8 mb-8">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-semibold mb-6" style={{ color: 'var(--text-primary)' }}>
-                        Órdenes por Estado
-                    </h3>
-                    <div className="h-[300px] flex items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Income Chart */}
+                <div className="lg:col-span-2 bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
+                    <div className="flex items-center justify-between mb-8">
+                        <div>
+                            <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">Evolución de Ingresos</h3>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Últimos 12 meses (Mano de obra + Repuestos)</p>
+                        </div>
+                        {hasPermission('income') && (
+                            <div className="flex items-center gap-2">
+                                <span className="w-3 h-3 rounded-full bg-blue-600"></span>
+                                <span className="text-[10px] font-black uppercase text-slate-500">Total</span>
+                            </div>
+                        )}
+                    </div>
+                    <div className="h-[350px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={[...(data?.incomeByMonth || [])].reverse()}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
+                                <XAxis
+                                    dataKey="month"
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={tickStyle}
+                                    dy={10}
+                                />
+                                <YAxis
+                                    axisLine={false}
+                                    tickLine={false}
+                                    tick={tickStyle}
+                                    tickFormatter={(val) => showTotals ? `$${val / 1000}k` : '***'}
+                                />
+                                <Tooltip
+                                    cursor={{ fill: '#f8fafc' }}
+                                    contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '20px' }}
+                                    formatter={(value: any) => [showTotals ? formatCurrency(value) : '***', 'Ingresos']}
+                                />
+                                <Bar
+                                    dataKey={(row: any) => (row.labor_income || 0) + (row.parts_price || 0)}
+                                    fill="#2563eb"
+                                    radius={[10, 10, 0, 0]}
+                                    barSize={40}
+                                />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Status Distribution */}
+                <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
+                    <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight mb-8">Estado del Taller</h3>
+                    <div className="h-[250px] relative">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
-                                <Pie data={data?.ordersByStatus} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="count" nameKey="status">
+                                <Pie
+                                    data={data?.ordersByStatus}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={70}
+                                    outerRadius={90}
+                                    paddingAngle={8}
+                                    dataKey="count"
+                                    nameKey="status"
+                                    stroke="none"
+                                >
                                     {data?.ordersByStatus.map((entry: any, index: number) => (
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip
-                                    contentStyle={{
-                                        borderRadius: '12px',
-                                        border: '1px solid var(--border)',
-                                        backgroundColor: 'var(--bg-surface)',
-                                        color: 'var(--text-primary)'
-                                    }}
-                                    itemStyle={{ color: 'var(--text-muted)' }}
-                                />
+                                <Tooltip />
                             </PieChart>
                         </ResponsiveContainer>
-                        <div className="space-y-2 ml-4">
-                            {data?.ordersByStatus.map((item: any, index: number) => (
-                                <div key={item.status} className="flex items-center gap-2 text-sm">
-                                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                                    <span style={{ color: 'var(--text-muted)' }}>{item.status}: <strong style={{ color: 'var(--text-primary)' }}>{item.count}</strong></span>
-                                </div>
-                            ))}
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-3xl font-black text-slate-900">
+                                {data?.ordersByStatus.reduce((acc: number, item: any) => acc + item.count, 0) || 0}
+                            </span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Órdenes</span>
                         </div>
+                    </div>
+                    <div className="mt-8 space-y-3">
+                        {data?.ordersByStatus.map((item: any, index: number) => (
+                            <div key={item.status} className="flex items-center justify-between group">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                                    <span className="text-xs font-bold text-slate-500 group-hover:text-slate-900 transition-colors uppercase tracking-tight">{item.status}</span>
+                                </div>
+                                <span className="text-xs font-black text-slate-900">{item.count}</span>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Servicios Recientes</h3>
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1">
-                        Ver todos <ChevronRight size={16} />
-                    </button>
+            {/* Bottom Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Common Services */}
+                <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
+                    <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
+                        <h3 className="text-lg font-black text-slate-900 uppercase italic">Servicios más solicitados</h3>
+                        <div className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-blue-600 border border-slate-100 uppercase tracking-widest">Top 5</div>
+                    </div>
+                    <div className="p-4">
+                        <table className="w-full text-left">
+                            <tbody className="divide-y divide-slate-50">
+                                {data?.commonServices.map((service: any, i: number) => (
+                                    <tr key={i} className="hover:bg-slate-50/80 transition-all rounded-2xl group">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                                    {i + 1}
+                                                </div>
+                                                <span className="font-bold text-slate-600 uppercase text-xs">{service.description}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-right">
+                                            <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-black group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-all">
+                                                {service.count} <span className="text-[10px] ml-0.5 opacity-60">VEH.</span>
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-                <div className="p-0">
-                    <table className="w-full text-left">
-                        <thead className="text-xs uppercase tracking-wider" style={{ backgroundColor: 'var(--bg-base)', color: 'var(--text-muted)', borderBottom: '1px solid var(--border)' }}>
-                            <tr>
-                                <th className="px-6 py-4 font-medium">Descripción</th>
-                                <th className="px-6 py-4 font-medium text-right">Cant.</th>
-                            </tr>
-                        </thead>
-                        <tbody style={{ borderColor: 'var(--border)' }}>
-                            {data?.commonServices.map((service: any, i: number) => (
-                                <tr
-                                    key={i}
-                                    className="transition-all"
-                                    style={{ borderBottom: '1px solid var(--border)' }}
-                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-base)')}
-                                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                                >
-                                    <td className="px-6 py-4 font-medium" style={{ color: 'var(--text-primary)' }}>{service.description}</td>
-                                    <td className="px-6 py-4 text-right font-bold" style={{ color: 'var(--accent)' }}>{service.count}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </>
-    );
-}
 
-function StatCard({ title, value, icon, accent }: { title: string, value: string | number, icon: React.ReactNode, accent: string }) {
-    return (
-        <div
-            className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between"
-        >
-            <div>
-                <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-muted)' }}>{title}</p>
-                <p className="text-3xl font-black tracking-tighter" style={{ color: 'var(--text-primary)' }}>{value}</p>
-            </div>
-            <div className="p-3 rounded-xl" style={{ backgroundColor: `${accent}15`, border: `1px solid ${accent}25` }}>
-                {icon}
+                {/* Quick Actions / Shortcuts */}
+                <div className="grid grid-cols-2 gap-4">
+                    <ShortcutCard
+                        href={`/${slug}/dashboard/reminders`}
+                        title="Seguimientos"
+                        subtitle="Clientes para hoy"
+                        icon={<Bell className="text-blue-500" />}
+                        color="blue"
+                    />
+                    <ShortcutCard
+                        href={`/${slug}/dashboard/reports`}
+                        title="Informes"
+                        subtitle="Rendimiento taller"
+                        icon={<TrendingUp className="text-indigo-500" />}
+                        color="indigo"
+                    />
+                    <ShortcutCard
+                        href={`/${slug}/dashboard/clients`}
+                        title="Clientes"
+                        subtitle="Base de datos"
+                        icon={<Users className="text-amber-500" />}
+                        color="amber"
+                    />
+                    <ShortcutCard
+                        href={`/${slug}/dashboard/settings`}
+                        title="Ajustes"
+                        subtitle="Configuración taller"
+                        icon={<Settings className="text-slate-500" />}
+                        color="slate"
+                    />
+                </div>
             </div>
         </div>
     );
 }
+
+function StatCard({ title, value, icon, color, description }: { title: string, value: string | number, icon: React.ReactNode, color: string, description: string }) {
+    const colorClasses: Record<string, string> = {
+        blue: 'bg-blue-50 text-blue-600 border-blue-100',
+        amber: 'bg-amber-50 text-amber-600 border-amber-100',
+        emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
+        indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100'
+    };
+
+    return (
+        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 transition-all">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 border ${colorClasses[color]}`}>
+                {icon}
+            </div>
+            <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
+                <p className="text-2xl font-black text-slate-900 tracking-tighter">{value}</p>
+                <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-tight">{description}</p>
+            </div>
+        </div>
+    );
+}
+
+function ShortcutCard({ href, title, subtitle, icon, color }: { href: string, title: string, subtitle: string, icon: React.ReactNode, color: string }) {
+    return (
+        <Link href={href}>
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl transition-all h-full group">
+                <div className="p-3 rounded-2xl bg-slate-50 group-hover:scale-110 transition-transform w-fit mb-4">
+                    {icon}
+                </div>
+                <h4 className="font-black text-slate-900 uppercase italic text-sm tracking-tight">{title}</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{subtitle}</p>
+            </div>
+        </Link>
+    );
+}
+
