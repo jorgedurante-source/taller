@@ -90,16 +90,23 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
 
     const orders = db.prepare(`
         SELECT * FROM orders 
-        WHERE vehicle_id = ? AND status = 'Entregado'
+        WHERE vehicle_id = ?
         ORDER BY updated_at DESC
     `).all(vehicleId);
 
     const workshop = db.prepare('SELECT * FROM config LIMIT 1').get() || { workshop_name: 'Taller' };
 
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([600, 800]);
+    let page = pdfDoc.addPage([600, 800]);
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const checkPage = () => {
+        if (y < 80) {
+            page = pdfDoc.addPage([600, 800]);
+            y = 750;
+        }
+    };
 
     const wName = sanitize((workshop.workshop_name || 'TALLER').toUpperCase());
     page.drawText(wName, { x: 50, y: 750, size: 24, font: bold });
@@ -112,29 +119,34 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
     let y = 620;
 
     if (orders.length === 0) {
-        page.drawText('No hay registros de historial finalizados (entregados) para este vehiculo.', { x: 50, y, size: 10, font });
+        page.drawText('No hay registros de ordenes para este vehiculo.', { x: 50, y, size: 10, font });
     } else {
         orders.forEach(order => {
-            if (y < 100) {
-                // Ignore pagination for short histories 
-            }
+            checkPage();
+
+            // Infer KM at the time of order
+            const orderKmQuery = db.prepare(`SELECT km FROM vehicle_km_history WHERE vehicle_id = ? AND recorded_at <= ? ORDER BY recorded_at DESC LIMIT 1`).get(vehicleId, order.updated_at || order.created_at);
+            const orderKm = orderKmQuery ? orderKmQuery.km : null;
 
             const dateStr = order.updated_at ? new Date(order.updated_at).toLocaleDateString() : 'N/A';
 
             page.drawText(`Fecha: ${dateStr}`, { x: 50, y, size: 10, font: bold });
-            const kmText = vehicle.km ? ` - ${vehicle.km} km aprox` : '';
-            page.drawText(`Servicio reportado${kmText}`, { x: 200, y, size: 10, font: bold });
+            const kmText = orderKm ? ` - ${orderKm} km aprox` : '';
+            page.drawText(`Mantenimiento${kmText} | Estado: ${order.status}`, { x: 200, y, size: 10, font: bold });
             y -= 20;
+            checkPage();
 
             const svcDesc = order.description || order.desc || 'Sin detalle';
             page.drawText(`Servicio: ${sanitize(svcDesc).substring(0, 100)}`, { x: 50, y, size: 10, font });
             y -= 20;
+            checkPage();
 
             // Fetch last note if exists
             const lastNote = db.prepare('SELECT notes FROM order_history WHERE order_id = ? ORDER BY created_at DESC LIMIT 1').get(order.id);
             if (lastNote && lastNote.notes) {
                 page.drawText(`Notas: ${sanitize(lastNote.notes).substring(0, 100)}`, { x: 50, y, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
                 y -= 20;
+                checkPage();
             }
 
             page.drawLine({ start: { x: 50, y: y + 10 }, end: { x: 550, y: y + 10 }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
