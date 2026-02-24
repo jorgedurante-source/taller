@@ -15,7 +15,8 @@ import {
     Eye,
     EyeOff,
     Bell,
-    Settings
+    Settings,
+    Clock
 } from 'lucide-react';
 import {
     BarChart,
@@ -30,10 +31,12 @@ import {
     Cell
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
+import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
     const { user, hasPermission } = useAuth();
     const { slug } = useSlug();
+    const router = useRouter();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [showTotals, setShowTotals] = useState(true);
@@ -114,7 +117,7 @@ export default function DashboardPage() {
                         .reduce((acc: number, item: any) => acc + item.count, 0) || 0}
                     icon={<ClipboardList size={24} />}
                     color="blue"
-                    description="En reparación taller"
+                    description="Trabajos en curso"
                 />
                 <StatCard
                     title="Clientes Nuevos"
@@ -124,71 +127,24 @@ export default function DashboardPage() {
                     description="Registrados este mes"
                 />
                 <StatCard
-                    title="Listo para Entrega"
-                    value={showTotals ? formatCurrency(data?.readyToDeliverTotal || 0) : '***'}
-                    icon={<Car size={24} />}
-                    color="emerald"
-                    description="Pendiente de cobro"
+                    title="Esperando Aprobación"
+                    value={data?.ordersByStatus.find((s: any) => s.status === 'Pendiente')?.count || 0}
+                    icon={<Clock size={24} />}
+                    color="indigo"
+                    description="Nuevos presupuestos"
                 />
                 <StatCard
-                    title="Ingresos del Mes"
-                    value={showTotals ? formatCurrency((data?.monthlyStats?.labor_total || 0) + (data?.monthlyStats?.parts_total || 0)) : '***'}
-                    icon={<TrendingUp size={24} />}
-                    color="indigo"
-                    description="Facturación total"
+                    title="Listos para entrega"
+                    value={data?.ordersByStatus.find((s: any) => s.status === 'Listo para entrega')?.count || 0}
+                    icon={<Car size={24} />}
+                    color="emerald"
+                    description="Vehículos terminados"
                 />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Income Chart */}
-                <div className="lg:col-span-2 bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
-                    <div className="flex items-center justify-between mb-8">
-                        <div>
-                            <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">Evolución de Ingresos</h3>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Últimos 12 meses (Mano de obra + Repuestos)</p>
-                        </div>
-                        {hasPermission('income') && (
-                            <div className="flex items-center gap-2">
-                                <span className="w-3 h-3 rounded-full bg-blue-600"></span>
-                                <span className="text-[10px] font-black uppercase text-slate-500">Total</span>
-                            </div>
-                        )}
-                    </div>
-                    <div className="h-[350px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={[...(data?.incomeByMonth || [])].reverse()}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-                                <XAxis
-                                    dataKey="month"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={tickStyle}
-                                    dy={10}
-                                />
-                                <YAxis
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={tickStyle}
-                                    tickFormatter={(val) => showTotals ? `$${val / 1000}k` : '***'}
-                                />
-                                <Tooltip
-                                    cursor={{ fill: '#f8fafc' }}
-                                    contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '20px' }}
-                                    formatter={(value: any) => [showTotals ? formatCurrency(value) : '***', 'Ingresos']}
-                                />
-                                <Bar
-                                    dataKey={(row: any) => (row.labor_income || 0) + (row.parts_price || 0)}
-                                    fill="#2563eb"
-                                    radius={[10, 10, 0, 0]}
-                                    barSize={40}
-                                />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-
                 {/* Status Distribution */}
-                <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
+                <div className="lg:col-span-1 bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
                     <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight mb-8">Estado del Taller</h3>
                     <div className="h-[250px] relative">
                         <ResponsiveContainer width="100%" height="100%">
@@ -220,7 +176,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="mt-8 space-y-3">
                         {data?.ordersByStatus.map((item: any, index: number) => (
-                            <div key={item.status} className="flex items-center justify-between group">
+                            <div key={item.status} className="flex items-center justify-between group cursor-pointer hover:bg-slate-50 p-2 rounded-xl transition-all" onClick={() => router.push(`/${slug}/dashboard/orders?status=${item.status}`)}>
                                 <div className="flex items-center gap-3">
                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
                                     <span className="text-xs font-bold text-slate-500 group-hover:text-slate-900 transition-colors uppercase tracking-tight">{item.status}</span>
@@ -230,15 +186,12 @@ export default function DashboardPage() {
                         ))}
                     </div>
                 </div>
-            </div>
 
-            {/* Bottom Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Common Services */}
-                <div className="bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
+                <div className="lg:col-span-2 bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
                     <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-                        <h3 className="text-lg font-black text-slate-900 uppercase italic">Servicios más solicitados</h3>
-                        <div className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-blue-600 border border-slate-100 uppercase tracking-widest">Top 5</div>
+                        <h3 className="text-lg font-black text-slate-900 uppercase italic">Servicios frecuentes</h3>
+                        <div className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-blue-600 border border-slate-100 uppercase tracking-widest">Global</div>
                     </div>
                     <div className="p-4">
                         <table className="w-full text-left">
@@ -264,29 +217,32 @@ export default function DashboardPage() {
                         </table>
                     </div>
                 </div>
+            </div>
 
+            {/* Bottom Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {/* Quick Actions / Shortcuts */}
                 <div className="grid grid-cols-2 gap-4">
                     <ShortcutCard
-                        href={`/${slug}/dashboard/reminders`}
+                        href={`/${slug}/dashboard/orders?filter=active_work`}
                         title="Seguimientos"
-                        subtitle="Clientes para hoy"
-                        icon={<Bell className="text-blue-500" />}
+                        subtitle="Unidades en taller"
+                        icon={<Car className="text-blue-500" />}
                         color="blue"
                     />
                     <ShortcutCard
-                        href={`/${slug}/dashboard/reports`}
+                        href={`/${slug}/dashboard/income`}
                         title="Informes"
-                        subtitle="Rendimiento taller"
+                        subtitle="Ingresos y reportes"
                         icon={<TrendingUp className="text-indigo-500" />}
                         color="indigo"
                     />
                     <ShortcutCard
-                        href={`/${slug}/dashboard/clients`}
-                        title="Clientes"
-                        subtitle="Base de datos"
-                        icon={<Users className="text-amber-500" />}
-                        color="amber"
+                        href={`/${slug}/dashboard/reminders`}
+                        title="Recordatorios"
+                        subtitle="Mantenimiento preventivo"
+                        icon={<Bell className="text-emerald-500" />}
+                        color="emerald"
                     />
                     <ShortcutCard
                         href={`/${slug}/dashboard/settings`}

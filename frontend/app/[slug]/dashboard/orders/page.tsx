@@ -40,6 +40,10 @@ export default function OrdersPage() {
             setShowAll(true);
             setSearch('Entregado');
         }
+        if (filterParam === 'active_work') {
+            setShowAll(false);
+            setSearch('Apro'); // Will match Aprobado
+        }
     }, [statusParam, historyParam, filterParam]);
 
     useEffect(() => {

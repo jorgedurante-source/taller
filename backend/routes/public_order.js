@@ -5,17 +5,23 @@ const router = express.Router();
 // @desc    Get order details for the public view
 router.get('/:token', (req, res) => {
     try {
+        const token = (req.params.token || '').trim();
         const order = req.db.prepare(`
             SELECT o.id, o.status, o.description, o.created_at, o.updated_at,
                    v.brand, v.model, v.plate,
-                   c.workshop_name, c.phone as workshop_phone, c.address as workshop_address, c.logo_path
+                   (SELECT workshop_name FROM config LIMIT 1) as workshop_name,
+                   (SELECT phone FROM config LIMIT 1) as workshop_phone,
+                   (SELECT address FROM config LIMIT 1) as workshop_address,
+                   (SELECT logo_path FROM config LIMIT 1) as logo_path
             FROM orders o
             JOIN vehicles v ON o.vehicle_id = v.id
-            CROSS JOIN config c
             WHERE o.share_token = ?
-        `).get(req.params.token);
+        `).get(token);
 
-        if (!order) return res.status(404).json({ message: 'Orden no encontrada' });
+        if (!order) {
+            console.log(`[PublicOrder] Order not found for token: ${token}`);
+            return res.status(404).json({ message: 'Orden no encontrada' });
+        }
 
         const items = req.db.prepare('SELECT description, subtotal FROM order_items WHERE order_id = ?').all(order.id);
         const history = req.db.prepare(`

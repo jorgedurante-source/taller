@@ -79,7 +79,7 @@ export default function RemindersPage() {
                         <Bell className="text-blue-600" /> Recordatorios
                     </h2>
                     <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">
-                        {showHistory ? 'Historial de seguimientos pasados' : 'Gestión de seguimientos pendientes'}
+                        {showHistory ? 'Historial de seguimientos pasados' : 'Seguimientos preventivos por mantenimiento (Post-entrega)'}
                     </p>
                 </div>
 
@@ -99,8 +99,8 @@ export default function RemindersPage() {
                     <button
                         onClick={() => setShowHistory(!showHistory)}
                         className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${showHistory
-                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                                : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
+                            : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
                             }`}
                     >
                         <History size={14} />
