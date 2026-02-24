@@ -211,21 +211,48 @@ router.get('/top-customers', auth, (req, res) => {
 
 // @route   GET api/reports/reminders
 router.get('/reminders', auth, (req, res) => {
-    const showHistory = req.query.history === 'true';
+    const tab = req.query.tab || 'today';
     try {
+        let whereClause = "WHERE o.reminder_at IS NOT NULL AND o.status = 'Entregado'";
+        const todayStr = "date('now', 'localtime')";
+        const tomorrowStr = "date('now', '+1 day', 'localtime')";
+        const lastWeekStr = "date('now', '-7 days', 'localtime')";
+
+        const dayOfWeek = new Date().getDay(); // 0 = Sun
+
+        switch (tab) {
+            case 'today':
+                // Today + Sunday if it's Monday
+                if (dayOfWeek === 1) { // Monday
+                    whereClause += ` AND o.reminder_status = 'pending' AND date(o.reminder_at) <= ${todayStr}`;
+                } else {
+                    whereClause += ` AND o.reminder_status = 'pending' AND date(o.reminder_at) = ${todayStr}`;
+                }
+                break;
+            case 'upcoming':
+                whereClause += ` AND o.reminder_status = 'pending' AND date(o.reminder_at) > ${todayStr}`;
+                break;
+            case 'skipped':
+                whereClause += " AND o.reminder_status = 'skipped'";
+                break;
+            case 'sent':
+                whereClause += ` AND o.reminder_status = 'sent' AND date(o.reminder_sent_at) >= ${lastWeekStr}`;
+                break;
+            case 'history': // Backward compatibility
+                whereClause += ` AND (o.reminder_status = 'sent' OR o.reminder_at < ${todayStr})`;
+                break;
+        }
+
         const reminders = req.db.prepare(`
-            SELECT o.id as order_id, o.reminder_at, o.status,
+            SELECT o.id as order_id, o.reminder_at, o.status, o.reminder_status, o.reminder_sent_at,
                    c.first_name || ' ' || c.last_name as client_name, c.phone as client_phone,
                    v.plate, v.brand, v.model, v.km as vehicle_km,
                    (SELECT GROUP_CONCAT(description, ', ') FROM order_items WHERE order_id = o.id) as services_done
             FROM orders o
             JOIN clients c ON o.client_id = c.id
             JOIN vehicles v ON o.vehicle_id = v.id
-            WHERE o.reminder_at IS NOT NULL
-            ${showHistory
-                ? "AND o.reminder_at < date('now', 'start of day')"
-                : "AND o.reminder_at >= date('now', 'start of day')"}
-            ORDER BY o.reminder_at ${showHistory ? 'DESC' : 'ASC'}
+            ${whereClause}
+            ORDER BY o.reminder_at ASC
         `).all();
         res.json(reminders);
     } catch (err) {

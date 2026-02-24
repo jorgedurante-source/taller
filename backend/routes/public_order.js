@@ -6,6 +6,8 @@ const router = express.Router();
 router.get('/:token', (req, res) => {
     try {
         const token = (req.params.token || '').trim();
+        console.log(`[PublicOrder] Searching for token: "${token}" in tenant: ${req.slug}`);
+
         const order = req.db.prepare(`
             SELECT o.id, o.status, o.description, o.created_at, o.updated_at,
                    v.brand, v.model, v.plate,
@@ -14,14 +16,16 @@ router.get('/:token', (req, res) => {
                    (SELECT address FROM config LIMIT 1) as workshop_address,
                    (SELECT logo_path FROM config LIMIT 1) as logo_path
             FROM orders o
-            JOIN vehicles v ON o.vehicle_id = v.id
+            LEFT JOIN vehicles v ON o.vehicle_id = v.id
             WHERE o.share_token = ?
         `).get(token);
 
         if (!order) {
-            console.log(`[PublicOrder] Order not found for token: ${token}`);
+            console.log(`[PublicOrder] ❌ Order NOT found for token: "${token}"`);
             return res.status(404).json({ message: 'Orden no encontrada' });
         }
+
+        console.log(`[PublicOrder] ✅ Order found: #${order.id}`);
 
         const items = req.db.prepare('SELECT description, subtotal FROM order_items WHERE order_id = ?').all(order.id);
         const history = req.db.prepare(`

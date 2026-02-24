@@ -436,14 +436,55 @@ router.post('/:id/send-email', auth, async (req, res) => {
 
         const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
 
-        let message = template.content
-            .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
-            .replace(/\[cliente\]/g, order.first_name || 'Cliente')
-            .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
-            .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
-            .replace(/\[servicios\]/g, servicesStr || 'Mantenimiento General')
-            .replace(/\[km\]/g, order.km || '---')
-            .replace(/{orden_id}|\[orden_id\]/g, order.id);
+        // Dynamic SITE_URL detection
+        let siteUrl = process.env.SITE_URL;
+        if (!siteUrl && req.headers.origin) {
+            siteUrl = req.headers.origin;
+        } else if (!siteUrl) {
+            const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+            siteUrl = `${protocol}://${req.get('host')}`.replace(':5000', ':3000'); // Common dev fallback
+        }
+
+        if (!order.share_token) {
+            const crypto = require('crypto');
+            order.share_token = crypto.randomBytes(6).toString('hex');
+            req.db.prepare('UPDATE orders SET share_token = ? WHERE id = ?').run(order.share_token, order.id);
+            console.log(`[Orders] Generated missing share_token for #${order.id}: ${order.share_token}`);
+        }
+
+        const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
+
+        // Replacement data
+        const replacements = {
+            'apodo': order.nickname || order.first_name || 'Cliente',
+            'cliente': order.first_name || 'Cliente',
+            'vehiculo': `${order.brand} ${order.model}`,
+            'taller': config.workshop_name || 'Nuestro Taller',
+            'servicios': servicesStr || 'Mantenimiento General',
+            'km': order.km || '---',
+            'orden_id': order.id,
+            'link': trackingLink
+        };
+
+        let messageText = template.content;
+        let messageHtml = template.content.replace(/\n/g, '<br>');
+
+        console.log(`[Orders] Sending email for #${order.id}. Tracking Link: ${trackingLink}`);
+
+        Object.keys(replacements).forEach(key => {
+            const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
+            const value = String(replacements[key] || '');
+
+            messageText = messageText.replace(regex, value);
+
+            if (key === 'link') {
+                messageHtml = messageHtml.replace(regex, `<a href="${value}" style="color: #2563eb; font-weight: bold; text-decoration: underline;">${value}</a>`);
+            } else {
+                messageHtml = messageHtml.replace(regex, value);
+            }
+        });
+
+        console.log(`- Final check: Replaced [link]? ${!messageText.includes('[link]')}`);
 
         let attachments = [];
         const pdfBuffer = await generateOrderPDF(req.db, order.id);
@@ -451,11 +492,11 @@ router.post('/:id/send-email', auth, async (req, res) => {
             attachments.push({ filename: `orden_${order.id}.pdf`, content: pdfBuffer });
         }
 
-        await sendEmail(req.db, order.email, `Actualización de tu Orden #${order.id}`, message, attachments);
+        await sendEmail(req.db, order.email, `Actualización de tu Orden #${order.id}`, messageText, attachments, messageHtml);
         res.json({ message: 'Email enviado correctamente' });
     } catch (err) {
-        console.error(err);
-        res.status(500).send('Error al enviar email');
+        console.error('[Orders] CRITICAL ERROR:', err);
+        res.status(500).json({ message: 'Error interno al enviar email' });
     }
 });
 
@@ -482,6 +523,17 @@ router.post('/send-manual-template', auth, async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).send('Error al enviar el mensaje');
+    }
+});
+
+// @route   PUT api/orders/:id/reminder-status
+router.put('/:id/reminder-status', auth, (req, res) => {
+    const { status } = req.body; // 'pending', 'skipped', 'sent'
+    try {
+        req.db.prepare('UPDATE orders SET reminder_status = ? WHERE id = ?').run(status, req.params.id);
+        res.json({ message: 'Estado de recordatorio actualizado' });
+    } catch (err) {
+        res.status(500).json({ message: 'Error al actualizar estado de recordatorio' });
     }
 });
 

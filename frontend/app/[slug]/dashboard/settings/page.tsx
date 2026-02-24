@@ -26,7 +26,9 @@ import {
     Image as ImageIcon,
     Copy,
     Check,
-    Link2
+    Link2,
+    Bell,
+    AlertCircle
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { THEMES, applyTheme, getStoredTheme } from '@/lib/theme';
@@ -544,6 +546,54 @@ export default function SettingsPage() {
                         <div className="flex flex-col xl:flex-row gap-10 items-start">
                             <div className="flex-grow w-full space-y-8">
                                 <div className="max-w-2xl flex justify-between items-end">
+                                    <div className="bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden shadow-xl mb-10">
+                                        <div className="absolute right-0 top-0 opacity-10 translate-x-1/4 -translate-y-1/4">
+                                            <Bell size={200} />
+                                        </div>
+                                        <div className="relative z-10 max-w-2xl space-y-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="bg-blue-600 p-2 rounded-xl">
+                                                    <Clock size={20} />
+                                                </div>
+                                                <h3 className="text-xl font-black uppercase italic tracking-tight">Recordatorios Automáticos</h3>
+                                            </div>
+                                            <p className="text-slate-400 text-sm font-bold leading-relaxed">
+                                                El sistema enviará automáticamente un email de seguimiento a tus clientes basándose en la fecha de recordatorio de sus órdenes finalizadas.
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-8 pt-4">
+                                                <label className="flex items-center gap-3 cursor-pointer group">
+                                                    <div className="relative">
+                                                        <input
+                                                            type="checkbox"
+                                                            className="sr-only"
+                                                            checked={config.reminder_enabled === 1}
+                                                            onChange={(e) => setConfig((prev: any) => ({ ...prev, reminder_enabled: e.target.checked ? 1 : 0 }))}
+                                                        />
+                                                        <div className={`w-12 h-6 rounded-full transition-colors ${config.reminder_enabled === 1 ? 'bg-blue-500' : 'bg-slate-700'}`}></div>
+                                                        <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${config.reminder_enabled === 1 ? 'translate-x-6' : ''}`}></div>
+                                                    </div>
+                                                    <span className="text-xs font-black uppercase tracking-widest">Servicio Activo</span>
+                                                </label>
+
+                                                <div className="bg-white/5 border border-white/10 rounded-2xl p-2 px-4 flex items-center gap-4">
+                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Hora de envío</span>
+                                                    <input
+                                                        type="time"
+                                                        className="bg-transparent border-none outline-none text-white font-black text-lg"
+                                                        value={config.reminder_time || '09:00'}
+                                                        onChange={(e) => setConfig((prev: any) => ({ ...prev, reminder_time: e.target.value }))}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="bg-blue-600/20 border border-blue-500/20 p-4 rounded-2xl flex items-start gap-3">
+                                                <AlertCircle size={18} className="text-blue-400 shrink-0 mt-0.5" />
+                                                <p className="text-[10px] font-bold text-slate-300 uppercase leading-relaxed">
+                                                    Los recordatorios se envían de <span className="text-white">Lunes a Sábado</span>. Los que caigan <span className="text-white">Domingo</span> se enviarán automáticamente el <span className="text-white">Lunes</span> a la hora configurada.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                     <div>
                                         <h3 className="text-2xl font-bold text-slate-800">Plantillas de Mensajes</h3>
                                         <p className="text-slate-500 mt-1">Configurá qué mensajes se enviarán automáticamente a tus clientes en cada etapa.</p>
@@ -730,6 +780,17 @@ export default function SettingsPage() {
                                             <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-violet-400">Insertar</span>
                                         </div>
                                         <p className="text-slate-400 text-xs mt-1">Kilometraje del vehículo.</p>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleInsertToken('[link]')}
+                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
+                                    >
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-blue-400 font-black tracking-wider">[link]</span>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
+                                        </div>
+                                        <p className="text-slate-400 text-xs mt-1">Link directo de seguimiento para el cliente.</p>
                                     </button>
                                 </div>
                             </div>

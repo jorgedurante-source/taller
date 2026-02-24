@@ -7,19 +7,20 @@ const nodemailer = require('nodemailer');
  * @param {string} subject Email subject
  * @param {string} text Plain text message
  * @param {Array} attachments Array of {filename, content} (buffer)
+ * @param {string} html Optional HTML message
  */
-async function sendEmail(db, to, subject, text, attachments = []) {
+async function sendEmail(db, to, subject, text, attachments = [], html = null) {
     const config = db.prepare('SELECT * FROM config LIMIT 1').get() || {};
 
     if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
-        console.warn('SMTP support is not fully configured. Email skipped.');
+        console.warn(`[mailer] SMTP not configured for ${config.workshop_name || 'unknown'}. Email to ${to} skipped.`);
         return;
     }
 
     const transporter = nodemailer.createTransport({
         host: config.smtp_host,
         port: config.smtp_port || 587,
-        secure: config.smtp_port === 465, // true for 465, false for other ports
+        secure: config.smtp_port === 465,
         auth: {
             user: config.smtp_user,
             pass: config.smtp_pass,
@@ -32,11 +33,12 @@ async function sendEmail(db, to, subject, text, attachments = []) {
             to,
             subject,
             text,
+            html: html || text.replace(/\n/g, '<br>'), // Fallback to text with br
             attachments
         });
-        console.log(`Email sent to ${to}`);
+        console.log(`[mailer] Email sent to ${to}: ${subject}`);
     } catch (err) {
-        console.error('Error sending email:', err);
+        console.error('[mailer] Error sending email:', err);
         throw err;
     }
 }

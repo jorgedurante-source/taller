@@ -127,7 +127,7 @@ export default function DashboardPage() {
                     description="Registrados este mes"
                 />
                 <StatCard
-                    title="Esperando Aprobación"
+                    title="Esperando Presupuesto"
                     value={data?.ordersByStatus.find((s: any) => s.status === 'Pendiente')?.count || 0}
                     icon={<Clock size={24} />}
                     color="indigo"

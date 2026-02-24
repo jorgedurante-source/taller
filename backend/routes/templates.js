@@ -3,7 +3,7 @@ const router = express.Router();
 // db is injected per-request via req.db (tenant middleware)
 // Each route reads db from req.db
 function getDb(req) { return req.db; }
-const { auth, isAdmin } = require('../middleware/auth');
+const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 
 // @route   GET api/templates
 router.get('/', auth, (req, res) => {
@@ -16,7 +16,7 @@ router.get('/', auth, (req, res) => {
 });
 
 // @route   POST api/templates
-router.post('/', auth, isAdmin, (req, res) => {
+router.post('/', auth, hasPermission('settings'), (req, res) => {
     const { name, content, trigger_status, include_pdf, send_whatsapp, send_email } = req.body;
     try {
         if (trigger_status) {
@@ -40,7 +40,7 @@ router.post('/', auth, isAdmin, (req, res) => {
 });
 
 // @route   PUT api/templates/:id
-router.put('/:id', auth, isAdmin, (req, res) => {
+router.put('/:id', auth, hasPermission('settings'), (req, res) => {
     const { name, content, trigger_status, include_pdf, send_whatsapp, send_email } = req.body;
     try {
         if (trigger_status) {
@@ -62,7 +62,7 @@ router.put('/:id', auth, isAdmin, (req, res) => {
 });
 
 // @route   DELETE api/templates/:id
-router.delete('/:id', auth, isAdmin, (req, res) => {
+router.delete('/:id', auth, hasPermission('settings'), (req, res) => {
     try {
         req.db.prepare('DELETE FROM templates WHERE id = ?').run(req.params.id);
         res.json({ message: 'Template deleted' });

@@ -24,8 +24,10 @@ router.get('/', auth, (req, res) => {
 
 // @route   POST api/users
 router.post('/', auth, async (req, res) => {
-    // Superuser or Admin or Mechanic can create users
-    const isElevated = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'mecánico'));
+    // Superuser or Admin or user with manage_users permission
+    const isElevated = req.user.isSuperuser ||
+        (req.user.role && req.user.role.toLowerCase() === 'admin') ||
+        (req.user.permissions && req.user.permissions.includes('manage_users'));
 
     if (!isElevated) {
         return res.status(403).json({ message: 'No tienes permiso para crear usuarios' });
@@ -76,7 +78,9 @@ router.post('/', auth, async (req, res) => {
 
 // @route   PUT api/users/:id
 router.put('/:id', auth, async (req, res) => {
-    const isElevated = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'mecánico'));
+    const isElevated = req.user.isSuperuser ||
+        (req.user.role && req.user.role.toLowerCase() === 'admin') ||
+        (req.user.permissions && req.user.permissions.includes('manage_users'));
 
     if (!isElevated) {
         return res.status(403).json({ message: 'No tienes permiso para editar usuarios' });
@@ -130,7 +134,9 @@ router.put('/:id', auth, async (req, res) => {
 
 // @route   DELETE api/users/:id
 router.delete('/:id', auth, (req, res) => {
-    const isElevated = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'mecánico'));
+    const isElevated = req.user.isSuperuser ||
+        (req.user.role && req.user.role.toLowerCase() === 'admin') ||
+        (req.user.permissions && req.user.permissions.includes('manage_users'));
     if (!isElevated) return res.status(403).json({ message: 'No tienes permiso para eliminar usuarios' });
 
     try {

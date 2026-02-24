@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 
 // Auth middlewares
-const { auth, isAdmin } = require('../middleware/auth');
+const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 
 // Multer storage for logo
 const storage = multer.diskStorage({
@@ -42,7 +42,7 @@ router.get('/', (req, res) => {
 });
 
 // @route   PUT api/config
-router.put('/', auth, isAdmin, (req, res) => {
+router.put('/', auth, hasPermission('settings'), (req, res) => {
     const {
         workshop_name, footer_text, logo_path,
         address, phone, email, whatsapp, instagram, business_hours,
@@ -76,7 +76,7 @@ router.put('/', auth, isAdmin, (req, res) => {
 });
 
 // @route   POST api/config/logo
-router.post('/logo', auth, isAdmin, upload.single('logo'), (req, res) => {
+router.post('/logo', auth, hasPermission('settings'), upload.single('logo'), (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Logo file required' });
     try {
         const slug = req.user.slug || req.slug;

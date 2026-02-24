@@ -78,7 +78,9 @@ function initTenantDb(db, slug) {
             smtp_port INTEGER,
             smtp_user TEXT,
             smtp_pass TEXT,
-            theme_id TEXT DEFAULT 'default'
+            theme_id TEXT DEFAULT 'default',
+            reminder_enabled INTEGER DEFAULT 1,
+            reminder_time TEXT DEFAULT '09:00'
         );
 
         CREATE TABLE IF NOT EXISTS clients (
@@ -129,6 +131,8 @@ function initTenantDb(db, slug) {
             reminder_at DATETIME,
             delivered_at DATETIME,
             reminder_days INTEGER,
+            reminder_status TEXT DEFAULT 'pending',
+            reminder_sent_at DATETIME,
             created_by_id INTEGER,
             modified_by_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -225,9 +229,13 @@ function initTenantDb(db, slug) {
     addColumn('orders', 'reminder_at', "DATETIME");
     addColumn('orders', 'delivered_at', "DATETIME");
     addColumn('orders', 'reminder_days', "INTEGER");
+    addColumn('orders', 'reminder_status', "TEXT DEFAULT 'pending'");
+    addColumn('orders', 'reminder_sent_at', "DATETIME");
     addColumn('order_history', 'user_id', "INTEGER");
     addColumn('templates', 'send_whatsapp', "INTEGER DEFAULT 0");
     addColumn('templates', 'send_email', "INTEGER DEFAULT 1");
+    addColumn('config', 'reminder_enabled', "INTEGER DEFAULT 1");
+    addColumn('config', 'reminder_time', "TEXT DEFAULT '09:00'");
 
     const configCount = db.prepare('SELECT COUNT(*) as count FROM config').get().count;
     if (configCount === 0) {
@@ -242,7 +250,7 @@ function initTenantDb(db, slug) {
         const defaultTemplates = [
             {
                 name: 'Recepción de Vehículo',
-                content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id].',
+                content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Podés seguir el progreso en tiempo real aquí: [link]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id].',
                 trigger_status: 'Pendiente',
                 include_pdf: 0,
                 send_email: 1,

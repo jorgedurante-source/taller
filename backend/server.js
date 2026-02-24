@@ -67,9 +67,9 @@ app.use('/api/:slug', tenantMiddleware, tenantRouter);
 
 // ─── Scheduled Tasks (Cron) ──────────────────────────────────────────────────
 const { processReminders } = require('./cron/daily_reminders');
-// Run once on startup after 10s delay, then every 24 hours
+// Run once on startup after 10s delay, then every hour to check for scheduled tasks
 setTimeout(processReminders, 10000);
-setInterval(processReminders, 24 * 60 * 60 * 1000);
+setInterval(processReminders, 1 * 60 * 60 * 1000);
 
 // Manual trigger for superadmin
 app.post('/api/super/trigger-reminders', (req, res) => {

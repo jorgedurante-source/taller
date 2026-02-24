@@ -25,11 +25,27 @@ export default function PublicOrderPage() {
     useEffect(() => {
         const fetchOrder = async () => {
             try {
-                const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/${params.slug}/public/order/${params.token}`);
-                if (!res.ok) throw new Error('No se pudo encontrar la orden');
+                // Base API detection
+                let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+
+                // Remove /api if it's already there to build the URL cleanly
+                const apiBase = baseUrl.endsWith('/api') ? baseUrl.slice(0, -4) : baseUrl;
+                const url = `${apiBase}/api/${params.slug}/public/order/${params.token}`;
+
+                console.log('[Portal] Fetching order details from:', url);
+
+                const res = await fetch(url);
+                console.log('[Portal] Server response status:', res.status);
+
+                if (!res.ok) {
+                    const errorMsg = await res.json().catch(() => ({ message: 'Error desconocido' }));
+                    throw new Error(errorMsg.message || 'No se pudo encontrar la orden');
+                }
+
                 const data = await res.json();
                 setOrder(data);
             } catch (err: any) {
+                console.error('[Portal] Fetch Error:', err);
                 setError(err.message);
             } finally {
                 setLoading(false);
@@ -54,7 +70,7 @@ export default function PublicOrderPage() {
                     <AlertCircle size={40} />
                 </div>
                 <h2 className="text-xl font-black text-slate-900 uppercase italic mb-2">Error</h2>
-                <p className="text-slate-500 font-bold text-sm mb-8">{error || 'La orden no existe o el enlace ha caducado.'}</p>
+                <p className="text-slate-500 font-bold text-sm mb-8">{error || 'La orden no existe.'}</p>
                 <button
                     onClick={() => window.location.reload()}
                     className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl uppercase text-xs tracking-widest hover:bg-black transition-all"
@@ -71,6 +87,17 @@ export default function PublicOrderPage() {
         return currentIndex;
     };
 
+    // Helper for absolute image URLs
+    const getImageUrl = (path: string) => {
+        if (!path) return null;
+        if (path.startsWith('http')) return path;
+
+        let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+        const serverBase = baseUrl.endsWith('/api') ? baseUrl.slice(0, -4) : baseUrl;
+
+        return `${serverBase}${path.startsWith('/') ? '' : '/'}${path}`;
+    };
+
     return (
         <div className="min-h-screen bg-slate-100">
             {/* Header / Logo */}
@@ -78,7 +105,7 @@ export default function PublicOrderPage() {
                 <div className="max-w-4xl mx-auto flex items-center justify-between">
                     <div className="flex items-center gap-3">
                         {order.logo_path ? (
-                            <img src={`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/uploads/${params.slug}/${order.logo_path}`} className="h-10 w-auto" alt="Logo" />
+                            <img src={getImageUrl(order.logo_path)} className="h-10 w-auto" alt="Logo" />
                         ) : (
                             <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-black text-xl italic">
                                 M
@@ -93,10 +120,8 @@ export default function PublicOrderPage() {
             </div>
 
             <main className="max-w-4xl mx-auto p-6 space-y-6 lg:py-10">
-                {/* Status Card */}
                 <div className="bg-white rounded-[40px] p-8 md:p-12 shadow-xl border border-slate-100 overflow-hidden relative">
                     <div className="absolute right-0 top-0 w-64 h-64 bg-slate-50 -translate-y-1/2 translate-x-1/2 rounded-full -z-0 opacity-50" />
-
                     <div className="relative z-10">
                         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12">
                             <div>
@@ -107,7 +132,7 @@ export default function PublicOrderPage() {
                                     {order.status}
                                 </h2>
                                 <p className="text-slate-400 font-bold text-sm mt-1 uppercase tracking-wider">
-                                    Actualizado: {new Date(order.updated_at).toLocaleDateString()} a las {new Date(order.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    Actualizado: {new Date(order.updated_at).toLocaleDateString()}
                                 </p>
                             </div>
                             <div className="bg-slate-900 text-white p-8 rounded-[32px] shadow-2xl">
@@ -119,7 +144,6 @@ export default function PublicOrderPage() {
                             </div>
                         </div>
 
-                        {/* Progress Tracker */}
                         <div className="space-y-8">
                             <div className="relative">
                                 <div className="absolute top-5 left-0 w-full h-[2px] bg-slate-100 -z-0" />
@@ -137,8 +161,7 @@ export default function PublicOrderPage() {
                                                     }`}>
                                                     {isCompleted ? <CheckCircle2 size={20} /> : <div className="font-black text-xs">{idx + 1}</div>}
                                                 </div>
-                                                <span className={`text-[10px] font-black uppercase tracking-widest whitespace-nowrap ${isCompleted || isActive ? 'text-slate-900' : 'text-slate-300'
-                                                    }`}>
+                                                <span className={`text-[10px] font-black uppercase tracking-widest whitespace-nowrap ${isCompleted || isActive ? 'text-slate-900' : 'text-slate-300'}`}>
                                                     {step}
                                                 </span>
                                             </div>
@@ -151,7 +174,6 @@ export default function PublicOrderPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Items Card */}
                     <div className="bg-white rounded-[40px] p-8 shadow-lg border border-slate-100">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
@@ -166,13 +188,9 @@ export default function PublicOrderPage() {
                                     <span className="text-sm font-bold text-slate-600 leading-relaxed">{item.description}</span>
                                 </li>
                             ))}
-                            {(!order.items || order.items.length === 0) && (
-                                <p className="text-slate-400 font-bold text-xs uppercase tracking-widest py-4">Sin detalles registrados aun</p>
-                            )}
                         </ul>
                     </div>
 
-                    {/* Timeline / History Card */}
                     <div className="bg-white rounded-[40px] p-8 shadow-lg border border-slate-100">
                         <div className="flex items-center gap-3 mb-6">
                             <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
@@ -183,8 +201,7 @@ export default function PublicOrderPage() {
                         <div className="space-y-6 relative before:absolute before:left-3 before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-100">
                             {order.history?.map((h: any, idx: number) => (
                                 <div key={idx} className="relative pl-8">
-                                    <div className={`absolute left-0 top-1 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center ${idx === 0 ? 'bg-blue-600' : 'bg-slate-200'
-                                        }`} />
+                                    <div className={`absolute left-0 top-1 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center ${idx === 0 ? 'bg-blue-600' : 'bg-slate-200'}`} />
                                     <p className={`text-xs font-black uppercase italic ${idx === 0 ? 'text-slate-900' : 'text-slate-500'}`}>{h.status}</p>
                                     <p className="text-[11px] text-slate-400 font-bold mb-1">{h.notes}</p>
                                     <p className="text-[9px] font-black text-slate-300 uppercase letter-spacing-widest">
@@ -196,7 +213,6 @@ export default function PublicOrderPage() {
                     </div>
                 </div>
 
-                {/* Taller Footer Card */}
                 <div className="bg-slate-900 rounded-[40px] p-8 md:p-10 text-white flex flex-col md:flex-row items-center justify-between gap-8">
                     <div className="text-center md:text-left">
                         <h4 className="text-xl font-black italic uppercase tracking-tighter mb-2">{order.workshop_name}</h4>

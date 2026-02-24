@@ -3,7 +3,7 @@ const router = express.Router();
 // db is injected per-request via req.db (tenant middleware)
 // Each route reads db from req.db
 function getDb(req) { return req.db; }
-const { auth, isAdmin } = require('../middleware/auth');
+const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 
 // @route   GET api/roles
 router.get('/', auth, (req, res) => {
@@ -23,7 +23,7 @@ router.get('/', auth, (req, res) => {
 });
 
 // @route   POST api/roles
-router.post('/', auth, isAdmin, (req, res) => {
+router.post('/', auth, hasPermission('manage_roles'), (req, res) => {
     const { name, permissions } = req.body;
     try {
         const result = req.db.prepare('INSERT INTO roles (name, permissions) VALUES (?, ?)').run(
@@ -37,7 +37,7 @@ router.post('/', auth, isAdmin, (req, res) => {
 });
 
 // @route   PUT api/roles/:id
-router.put('/:id', auth, isAdmin, (req, res) => {
+router.put('/:id', auth, hasPermission('manage_roles'), (req, res) => {
     const { name, permissions } = req.body;
     try {
         const role = req.db.prepare('SELECT * FROM roles WHERE id = ?').get(req.params.id);
@@ -60,7 +60,7 @@ router.put('/:id', auth, isAdmin, (req, res) => {
 });
 
 // @route   DELETE api/roles/:id
-router.delete('/:id', auth, isAdmin, (req, res) => {
+router.delete('/:id', auth, hasPermission('manage_roles'), (req, res) => {
     try {
         const role = req.db.prepare('SELECT * FROM roles WHERE id = ?').get(req.params.id);
         if (!role) return res.status(404).json({ message: 'Rol no encontrado' });
