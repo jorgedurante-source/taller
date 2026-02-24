@@ -11,12 +11,12 @@ const port = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// ─── Static uploads ──────────────────────────────────────────────────────────
 // Serve tenant uploads: /uploads/:slug/site/logo.png
-// Internal structure: tenants/:slug/uploads/site/logo.png
+// Internal structure: [DATA_DIR]/tenants/:slug/uploads/site/logo.png
+const { getTenantDir } = require('./tenantManager');
 app.use('/uploads/:slug', (req, res, next) => {
     const slug = req.params.slug;
-    express.static(path.join(__dirname, 'tenants', slug, 'uploads'))(req, res, next);
+    express.static(path.join(getTenantDir(slug), 'uploads'))(req, res, next);
 });
 
 // ─── Super admin routes (no tenant middleware) ────────────────────────────────
