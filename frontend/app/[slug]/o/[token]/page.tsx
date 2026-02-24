@@ -89,7 +89,7 @@ export default function PublicOrderPage() {
 
     // Helper for absolute image URLs
     const getImageUrl = (path: string) => {
-        if (!path) return null;
+        if (!path) return undefined;
         if (path.startsWith('http')) return path;
 
         let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
