@@ -33,6 +33,7 @@ import {
 import { useAuth } from '@/lib/auth';
 import { THEMES, applyTheme, getStoredTheme } from '@/lib/theme';
 import { useSlug } from '@/lib/slug';
+import Link from 'next/link';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('global');
