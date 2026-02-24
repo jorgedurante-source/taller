@@ -94,15 +94,22 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
                 const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
                 const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
 
-                let message = template.content
-                    .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
-                    .replace(/\[cliente\]/g, order.first_name || 'Cliente')
-                    .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
-                    .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
-                    .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
-                    .replace(/\[turno_fecha\]/g, '---')
-                    .replace(/\[link\]/g, trackingLink)
-                    .replace(/{orden_id}|\[orden_id\]/g, orderId);
+                const replacements = {
+                    'apodo': order.nickname || order.first_name || 'Cliente',
+                    'cliente': order.first_name || 'Cliente',
+                    'vehiculo': `${order.brand} ${order.model}`,
+                    'taller': config.workshop_name || 'Nuestro Taller',
+                    'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim(),
+                    'turno_fecha': '---',
+                    'link': trackingLink,
+                    'orden_id': orderId
+                };
+
+                let message = template.content;
+                Object.keys(replacements).forEach(key => {
+                    const regex = new RegExp(`[\\\\{\\\\[]${key}[\\\\}\\\\]]`, 'gi');
+                    message = message.replace(regex, replacements[key]);
+                });
 
                 let attachments = [];
                 if (template.include_pdf === 1) {
@@ -245,18 +252,25 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                 const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
                 const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
 
-                let message = (template.content || '')
-                    .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
-                    .replace(/\[cliente\]/g, order.first_name || 'Cliente')
-                    .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
-                    .replace(/{taller}|\[taller\]/g, workshopName)
-                    .replace(/\[servicios\]/g, servicesStr || 'servicios realizados')
-                    .replace(/\[items\]/g, servicesStr || 'servicios realizados')
-                    .replace(/\[km\]/g, order.km || '---')
-                    .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
-                    .replace(/\[turno_fecha\]/g, appointmentDateFormatted)
-                    .replace(/\[link\]/g, trackingLink)
-                    .replace(/{orden_id}|\[orden_id\]/g, order.id);
+                const replacements = {
+                    'apodo': order.nickname || order.first_name || 'Cliente',
+                    'cliente': order.first_name || 'Cliente',
+                    'vehiculo': `${order.brand} ${order.model}`,
+                    'taller': workshopName,
+                    'servicios': servicesStr || 'servicios realizados',
+                    'items': servicesStr || 'servicios realizados',
+                    'km': order.km || '---',
+                    'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim(),
+                    'turno_fecha': appointmentDateFormatted,
+                    'link': trackingLink,
+                    'orden_id': order.id
+                };
+
+                let message = (template.content || '');
+                Object.keys(replacements).forEach(key => {
+                    const regex = new RegExp(`[\\\\{\\\\[]${key}[\\\\}\\\\]]`, 'gi');
+                    message = message.replace(regex, replacements[key]);
+                });
 
                 let attachments = [];
                 if (template.include_pdf === 1) {
