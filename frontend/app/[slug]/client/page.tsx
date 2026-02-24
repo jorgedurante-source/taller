@@ -118,7 +118,7 @@ export default function ClientDashboardPage() {
 
     const handleDownloadHistory = async (vehicle: any) => {
         try {
-            const response = await clientApi.get(`/history-pdf/${vehicle.id}`, { responseType: 'blob' });
+            const response = await clientApi.get(`/client/history-pdf/${vehicle.id}`, { responseType: 'blob' });
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
@@ -391,10 +391,10 @@ export default function ClientDashboardPage() {
                                     <div className="mt-6 pt-6 border-t border-[var(--border)]">
                                         <button
                                             onClick={() => handleDownloadHistory(v)}
-                                            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-colors"
+                                            className="w-full bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border)] py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-colors shadow-sm"
                                             title={`Descargar Historial Mantenimiento - ${v.plate}`}
                                         >
-                                            <FileText size={16} className="text-blue-500" /> Historial Clínico
+                                            <FileText size={16} style={{ color: 'var(--accent)' }} /> Historial Clínico
                                         </button>
                                     </div>
                                 </div>

@@ -73,6 +73,12 @@ async function generateOrderPDF(db, orderId) {
 }
 
 async function generateVehicleHistoryPDF(db, vehicleId) {
+    const sanitize = (str) => {
+        if (str === null || str === undefined) return '';
+        // Replace chars that are not in Latin-1 and replace newlines/tabs with spaces
+        return String(str).replace(/[^\x00-\xFF]/g, '').replace(/[\n\r\t]+/g, ' ').trim();
+    };
+
     const vehicle = db.prepare(`
         SELECT v.*, c.first_name, c.last_name 
         FROM vehicles v 
@@ -95,39 +101,39 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-    const wName = (workshop.workshop_name || 'TALLER').toUpperCase();
+    const wName = sanitize((workshop.workshop_name || 'TALLER').toUpperCase());
     page.drawText(wName, { x: 50, y: 750, size: 24, font: bold });
     page.drawText('HISTORIAL DE MANTENIMIENTO', { x: 300, y: 750, size: 14, font: bold, color: rgb(0.2, 0.4, 0.8) });
 
-    page.drawText(`Cliente: ${vehicle.first_name || ''} ${vehicle.last_name || ''}`, { x: 50, y: 700, size: 12, font });
-    page.drawText(`Vehículo: ${vehicle.brand || ''} ${vehicle.model || ''}`, { x: 50, y: 680, size: 12, font });
-    page.drawText(`Patente: ${vehicle.plate || ''} | Kilometraje Actual: ${vehicle.km || 'N/A'}`, { x: 50, y: 660, size: 12, font });
+    page.drawText(`Cliente: ${sanitize(vehicle.first_name)} ${sanitize(vehicle.last_name)}`, { x: 50, y: 700, size: 12, font });
+    page.drawText(`Vehiculo: ${sanitize(vehicle.brand)} ${sanitize(vehicle.model)}`, { x: 50, y: 680, size: 12, font });
+    page.drawText(`Patente: ${sanitize(vehicle.plate)} | Kilometraje: ${sanitize(vehicle.km)}`, { x: 50, y: 660, size: 12, font });
 
     let y = 620;
 
     if (orders.length === 0) {
-        page.drawText('No hay registros de historial finalizados (entregados) para este vehículo.', { x: 50, y, size: 10, font });
+        page.drawText('No hay registros de historial finalizados (entregados) para este vehiculo.', { x: 50, y, size: 10, font });
     } else {
         orders.forEach(order => {
             if (y < 100) {
-                // We simplify by not doing multi-page for brevity or if simple enough 
-                // But let's keep it simple as it's just a download.
+                // Ignore pagination for short histories 
             }
 
             const dateStr = order.updated_at ? new Date(order.updated_at).toLocaleDateString() : 'N/A';
 
             page.drawText(`Fecha: ${dateStr}`, { x: 50, y, size: 10, font: bold });
-            const kmText = order.km ? ` - ${order.km} km` : '';
-            page.drawText(`Kilometraje al servicio: ${kmText}`, { x: 200, y, size: 10, font: bold });
+            const kmText = vehicle.km ? ` - ${vehicle.km} km aprox` : '';
+            page.drawText(`Servicio reportado${kmText}`, { x: 200, y, size: 10, font: bold });
             y -= 20;
 
-            page.drawText(`Servicio: ${order.description || order.desc || 'Sin detalle'}`, { x: 50, y, size: 10, font });
+            const svcDesc = order.description || order.desc || 'Sin detalle';
+            page.drawText(`Servicio: ${sanitize(svcDesc).substring(0, 100)}`, { x: 50, y, size: 10, font });
             y -= 20;
 
             // Fetch last note if exists
             const lastNote = db.prepare('SELECT notes FROM order_history WHERE order_id = ? ORDER BY created_at DESC LIMIT 1').get(order.id);
             if (lastNote && lastNote.notes) {
-                page.drawText(`Notas: ${lastNote.notes.substring(0, 80)}`, { x: 50, y, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+                page.drawText(`Notas: ${sanitize(lastNote.notes).substring(0, 100)}`, { x: 50, y, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
                 y -= 20;
             }
 
