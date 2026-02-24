@@ -25,6 +25,11 @@ async function sendEmail(db, to, subject, text, attachments = [], html = null) {
             user: config.smtp_user,
             pass: config.smtp_pass,
         },
+        // Force IPv4, as Railway sometimes fails resolving IPv6 for SMTP
+        tls: {
+            rejectUnauthorized: false
+        },
+        family: 4
     });
 
     try {
