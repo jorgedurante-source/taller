@@ -11,40 +11,72 @@ const nodemailer = require('nodemailer');
  */
 async function sendEmail(db, to, subject, text, attachments = [], html = null) {
     const config = db.prepare('SELECT * FROM config LIMIT 1').get() || {};
+    const provider = config.mail_provider || 'smtp';
 
-    if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
-        console.warn(`[mailer] SMTP not configured for ${config.workshop_name || 'unknown'}. Email to ${to} skipped.`);
-        return;
-    }
-
-    const transporter = nodemailer.createTransport({
-        host: config.smtp_host,
-        port: config.smtp_port || 587,
-        secure: config.smtp_port === 465,
-        auth: {
-            user: config.smtp_user,
-            pass: config.smtp_pass,
-        },
-        // Force IPv4, as Railway sometimes fails resolving IPv6 for SMTP
-        tls: {
-            rejectUnauthorized: false
-        },
-        family: 4,
-        connectionTimeout: 10000, // 10 seconds
-        greetingTimeout: 10000,
-        socketTimeout: 20000
-    });
+    const fromAddress = `"${config.workshop_name}" <${config.smtp_user}>`;
+    const finalHtml = html || text.replace(/\n/g, '<br>');
 
     try {
-        await transporter.sendMail({
-            from: `"${config.workshop_name}" <${config.smtp_user}>`,
-            to,
-            subject,
-            text,
-            html: html || text.replace(/\n/g, '<br>'), // Fallback to text with br
-            attachments
-        });
-        console.log(`[mailer] Email sent to ${to}: ${subject}`);
+        if (provider === 'resend' && config.resend_api_key) {
+            const { Resend } = require('resend');
+            const resend = new Resend(config.resend_api_key);
+
+            // Format attachments for Resend if any exist
+            const resendAttachments = attachments.map(att => ({
+                filename: att.filename,
+                content: att.content // Resend accepts Buffer
+            }));
+
+            const { data, error } = await resend.emails.send({
+                from: fromAddress,
+                to: [to],
+                subject: subject,
+                html: finalHtml,
+                text: text,
+                attachments: resendAttachments.length > 0 ? resendAttachments : undefined
+            });
+
+            if (error) {
+                console.error('[mailer:resend] Error sending email:', error);
+                throw new Error(error.message);
+            }
+            console.log(`[mailer:resend] Email sent to ${to}: ${subject}`);
+
+        } else {
+            // Default to SMTP
+            if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
+                console.warn(`[mailer] SMTP not configured. Email to ${to} skipped.`);
+                return;
+            }
+
+            const transporter = nodemailer.createTransport({
+                host: config.smtp_host,
+                port: config.smtp_port || 587,
+                secure: config.smtp_port === 465,
+                auth: {
+                    user: config.smtp_user,
+                    pass: config.smtp_pass,
+                },
+                // Force IPv4, as Railway sometimes fails resolving IPv6 for SMTP
+                tls: {
+                    rejectUnauthorized: false
+                },
+                family: 4,
+                connectionTimeout: 10000, // 10 seconds
+                greetingTimeout: 10000,
+                socketTimeout: 20000
+            });
+
+            await transporter.sendMail({
+                from: fromAddress,
+                to,
+                subject,
+                text,
+                html: finalHtml,
+                attachments
+            });
+            console.log(`[mailer:smtp] Email sent to ${to}: ${subject}`);
+        }
     } catch (err) {
         console.error('[mailer] Error sending email:', err);
         throw err;

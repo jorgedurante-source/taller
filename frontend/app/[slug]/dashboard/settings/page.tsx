@@ -487,15 +487,56 @@ export default function SettingsPage() {
                                     <Mail className="text-blue-500" size={24} />
                                     Configuración de Servidor de Correo
                                 </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <ConfigInput label="Servidor SMTP (Host)" value={config.smtp_host} onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_host: v }))} />
-                                    <ConfigInput label="Puerto" type="number" value={config.smtp_port} onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_port: parseInt(v) || '' }))} />
-                                    <ConfigInput label="Usuario (Email)" value={config.smtp_user} onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_user: v }))} />
-                                    <ConfigInput label="Contraseña" type="password" value={config.smtp_pass} onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_pass: v }))} />
+
+                                <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                                    <button
+                                        className={`flex-1 py-2 text-sm font-bold uppercase tracking-wide rounded-lg transition-all ${config.mail_provider === 'smtp' || !config.mail_provider ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                        onClick={() => setConfig((prev: any) => ({ ...prev, mail_provider: 'smtp' }))}
+                                        type="button"
+                                    >
+                                        SMTP Tradicional
+                                    </button>
+                                    <button
+                                        className={`flex-1 py-2 text-sm font-bold uppercase tracking-wide rounded-lg transition-all ${config.mail_provider === 'resend' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
+                                        onClick={() => setConfig((prev: any) => ({ ...prev, mail_provider: 'resend' }))}
+                                        type="button"
+                                    >
+                                        Resend API
+                                    </button>
                                 </div>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-loose">
-                                    ℹ️ Se utiliza para enviar presupuestos automáticamente vía email. Ej (Gmail): host: smtp.gmail.com, puerto: 465 o 587.
-                                </p>
+
+                                {(config.mail_provider === 'smtp' || !config.mail_provider) ? (
+                                    <>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <ConfigInput label="Servidor SMTP (Host)" value={config.smtp_host} onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_host: v }))} />
+                                            <ConfigInput label="Puerto" type="number" value={config.smtp_port} onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_port: parseInt(v) || '' }))} />
+                                            <ConfigInput label="Usuario (Email)" value={config.smtp_user} onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_user: v }))} />
+                                            <ConfigInput label="Contraseña" type="password" value={config.smtp_pass} onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_pass: v }))} />
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-loose">
+                                            ℹ️ Se utiliza para enviar presupuestos automáticamente. Ej (Gmail): host: smtp.gmail.com, puerto: 465 o 587.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="grid grid-cols-1 gap-6">
+                                            <ConfigInput
+                                                label="API Key de Resend (Recomendado)"
+                                                value={config.resend_api_key}
+                                                type="password"
+                                                onChange={(v) => setConfig((prev: any) => ({ ...prev, resend_api_key: v }))}
+                                            />
+                                            <ConfigInput
+                                                label="Email Remitente (Debe estar verificado en Resend)"
+                                                value={config.smtp_user}
+                                                onChange={(v) => setConfig((prev: any) => ({ ...prev, smtp_user: v }))}
+                                            />
+                                        </div>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest leading-loose">
+                                            ℹ️ Resend ignora los bloqueos de puerto. Obtené tu clave en resend.com. El email remitente se guarda en el mismo campo que el "Usuario SMTP".
+                                        </p>
+                                    </>
+                                )}
                             </section>
                         </div>
 

@@ -47,7 +47,8 @@ router.put('/', auth, hasPermission('settings'), (req, res) => {
         workshop_name, footer_text, logo_path,
         address, phone, email, whatsapp, instagram, business_hours,
         tax_percentage, income_include_parts, parts_profit_percentage,
-        smtp_host, smtp_port, smtp_user, smtp_pass, theme_id
+        smtp_host, smtp_port, smtp_user, smtp_pass, theme_id,
+        reminder_enabled, reminder_time, mail_provider, resend_api_key
     } = req.body;
 
     try {
@@ -59,14 +60,19 @@ router.put('/', auth, hasPermission('settings'), (req, res) => {
                 address = ?, phone = ?, email = ?, whatsapp = ?, instagram = ?, 
                 business_hours = ?, tax_percentage = ?, income_include_parts = ?, 
                 parts_profit_percentage = ?, smtp_host = ?, smtp_port = ?, 
-                smtp_user = ?, smtp_pass = ?, theme_id = ?
+                smtp_user = ?, smtp_pass = ?, theme_id = ?,
+                reminder_enabled = ?, reminder_time = ?, mail_provider = ?, resend_api_key = ?
             WHERE id = 1
         `).run(
             workshop_name, footer_text, logo_path,
             address, phone, email, whatsapp, instagram,
             typeof business_hours === 'string' ? business_hours : JSON.stringify(business_hours),
             tax_percentage, income_include_parts, parts_profit_percentage,
-            smtp_host, port, smtp_user, smtp_pass, theme_id || 'default'
+            smtp_host, port, smtp_user, smtp_pass, theme_id || 'default',
+            reminder_enabled === undefined ? 1 : reminder_enabled,
+            reminder_time || '09:00',
+            mail_provider || 'smtp',
+            resend_api_key || null
         );
         res.json({ message: 'Configuration updated successfully' });
     } catch (err) {

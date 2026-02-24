@@ -237,6 +237,8 @@ function initTenantDb(db, slug) {
     addColumn('templates', 'send_email', "INTEGER DEFAULT 1");
     addColumn('config', 'reminder_enabled', "INTEGER DEFAULT 1");
     addColumn('config', 'reminder_time', "TEXT DEFAULT '09:00'");
+    addColumn('config', 'mail_provider', "TEXT DEFAULT 'smtp'");
+    addColumn('config', 'resend_api_key', "TEXT");
 
     const configCount = db.prepare('SELECT COUNT(*) as count FROM config').get().count;
     if (configCount === 0) {
