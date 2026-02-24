@@ -8,6 +8,7 @@ import axios from 'axios';
 import { useSlug } from '@/lib/slug';
 import { superApi } from '@/lib/api';
 import { useConfig } from '@/lib/config';
+import { useNotification } from '@/lib/notification';
 import {
     Users,
     Car,
@@ -34,6 +35,7 @@ export default function DashboardLayout({
     children: React.ReactNode;
 }) {
     const { user, logout, loading, hasPermission } = useAuth();
+    const { notify } = useNotification();
     const { slug } = useSlug();
     const router = useRouter();
     const pathname = usePathname();
@@ -79,7 +81,7 @@ export default function DashboardLayout({
             localStorage.setItem('current_slug', targetSlug);
             window.location.href = `/${targetSlug}/dashboard`;
         } catch (err) {
-            alert('Error al cambiar de taller');
+            notify('error', 'Error al cambiar de taller');
         }
     };
 
@@ -151,7 +153,7 @@ export default function DashboardLayout({
                         </>
                     )}
                     {hasPermission('income') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label="Ingresos" />}
-                    {hasPermission('orders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label="Recordatorios" />}
+                    {hasPermission('reminders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label="Recordatorios" />}
                     {hasPermission('settings') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label="Configuración" />}
                 </nav>
 

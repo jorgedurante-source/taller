@@ -28,20 +28,24 @@ import {
     Check,
     Link2,
     Bell,
-    AlertCircle
+    AlertCircle,
+    RefreshCw
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { THEMES, applyTheme, getStoredTheme } from '@/lib/theme';
 import { useSlug } from '@/lib/slug';
 import Link from 'next/link';
+import { useNotification } from '@/lib/notification';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('global');
+    const [commsTab, setCommsTab] = useState('reminders');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [currentTheme, setCurrentTheme] = useState('default');
     const { slug } = useSlug();
     const [copiedPortal, setCopiedPortal] = useState(false);
+    const { notify } = useNotification();
 
     // Load stored theme on mount
     React.useEffect(() => {
@@ -58,7 +62,7 @@ export default function SettingsPage() {
             await api.put('/config', updatedConfig);
         } catch (error) {
             console.error('Error guardando el tema:', error);
-            alert('Error al guardar el tema en el servidor.');
+            notify('error', 'Error al guardar el tema en el servidor.');
         }
     };
 
@@ -72,9 +76,9 @@ export default function SettingsPage() {
         try {
             const res = await api.post('/config/logo', formData);
             setConfig((prev: any) => ({ ...prev, logo_path: res.data.logo_path }));
-            alert('Logo actualizado');
+            notify('success', 'Logo actualizado correctamente');
         } catch (err) {
-            alert('Error al subir logo');
+            notify('error', 'Error al subir logo');
         }
     };
 
@@ -110,14 +114,14 @@ export default function SettingsPage() {
     const { user: currentUser, hasPermission } = useAuth();
     const [users, setUsers] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
-    const [newUser, setNewUser] = useState({ username: '', password: '', role_id: '' });
+    const [newUser, setNewUser] = useState({ username: '', password: '', role_id: '', first_name: '', last_name: '' });
     const [permissionsList] = useState([
-        'dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles'
+        'dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles', 'reminders'
     ]);
 
     const handleInsertToken = (token: string) => {
         if (lastFocusedId === null) {
-            alert('Por favor, hacé clic en el cuadro de texto del mensaje donde querés insertar el token.');
+            notify('info', 'Hacé clic en el mensaje donde querés insertar el token.');
             return;
         }
         let updatedTemplate: any = null;
@@ -194,9 +198,9 @@ export default function SettingsPage() {
         setSaving(true);
         try {
             await api.put('/config', config);
-            alert('Configuración guardada exitosamente');
+            notify('success', 'Configuración guardada exitosamente');
         } catch (err) {
-            alert('Error al guardar');
+            notify('error', 'Error al guardar la configuración');
         } finally {
             setSaving(false);
         }
@@ -211,8 +215,9 @@ export default function SettingsPage() {
             });
             setServices([...services, response.data]);
             setNewService({ name: '', base_price: '' });
+            notify('success', 'Servicio agregado');
         } catch (err) {
-            alert('Error al agregar servicio');
+            notify('error', 'Error al agregar servicio');
         }
     };
 
@@ -221,8 +226,9 @@ export default function SettingsPage() {
         try {
             await api.delete(`/services/${id}`);
             setServices(services.filter(s => s.id !== id));
+            notify('success', 'Servicio eliminado');
         } catch (err) {
-            alert('Error al eliminar');
+            notify('error', 'Error al eliminar el servicio');
         }
     };
 
@@ -231,8 +237,9 @@ export default function SettingsPage() {
             await api.put(`/users/${id}`, data);
             const res = await api.get('/users');
             setUsers(res.data);
+            notify('success', 'Usuario actualizado');
         } catch (err) {
-            alert('Error al actualizar usuario');
+            notify('error', 'Error al actualizar usuario');
         }
     };
 
@@ -240,12 +247,12 @@ export default function SettingsPage() {
         e.preventDefault();
         try {
             await api.post('/users', newUser);
-            setNewUser({ username: '', password: '', role_id: '' });
+            setNewUser({ username: '', password: '', role_id: '', first_name: '', last_name: '' });
             const res = await api.get('/users');
             setUsers(res.data);
-            alert('Usuario creado con éxito');
+            notify('success', 'Usuario creado con éxito');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al crear usuario');
+            notify('error', err.response?.data?.message || 'Error al crear usuario');
         }
     };
 
@@ -254,8 +261,9 @@ export default function SettingsPage() {
         try {
             await api.delete(`/users/${id}`);
             setUsers(users.filter(u => u.id !== id));
+            notify('success', 'Usuario eliminado');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al eliminar');
+            notify('error', err.response?.data?.message || 'Error al eliminar usuario');
         }
     };
 
@@ -264,9 +272,9 @@ export default function SettingsPage() {
             await api.put(`/roles/${id}`, data);
             const res = await api.get('/roles');
             setRoles(res.data);
-            alert('Rol actualizado con éxito');
+            notify('success', 'Rol actualizado con éxito');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al actualizar rol');
+            notify('error', err.response?.data?.message || 'Error al actualizar rol');
         }
     };
 
@@ -277,8 +285,9 @@ export default function SettingsPage() {
             await api.post('/roles', { name, permissions: [] });
             const res = await api.get('/roles');
             setRoles(res.data);
+            notify('success', 'Rol creado');
         } catch (err) {
-            alert('Error al crear rol');
+            notify('error', 'Error al crear rol');
         }
     };
 
@@ -287,8 +296,9 @@ export default function SettingsPage() {
         try {
             await api.delete(`/roles/${id}`);
             setRoles(roles.filter(r => r.id !== id));
+            notify('success', 'Rol eliminado');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al eliminar');
+            notify('error', err.response?.data?.message || 'Error al eliminar rol');
         }
     };
 
@@ -296,8 +306,9 @@ export default function SettingsPage() {
         try {
             await api.put(`/templates/${id}`, data);
             setTemplates(templates.map(t => t.id === id ? { ...t, ...data } : t));
+            notify('success', 'Plantilla actualizada');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al actualizar plantilla');
+            notify('error', err.response?.data?.message || 'Error al actualizar plantilla');
         }
     };
 
@@ -313,8 +324,9 @@ export default function SettingsPage() {
             });
             const templatesRes = await api.get('/templates');
             setTemplates(templatesRes.data);
+            notify('success', 'Plantilla creada');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al crear plantilla');
+            notify('error', err.response?.data?.message || 'Error al crear plantilla');
         }
     };
 
@@ -323,8 +335,9 @@ export default function SettingsPage() {
         try {
             await api.delete(`/templates/${id}`);
             setTemplates(templates.filter(t => t.id !== id));
+            notify('success', 'Plantilla eliminada');
         } catch (err) {
-            alert('Error al eliminar');
+            notify('error', 'Error al eliminar plantilla');
         }
     };
 
@@ -340,7 +353,7 @@ export default function SettingsPage() {
             {/* Tabs Navigation */}
             <div className="flex flex-wrap bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm w-fit gap-1">
                 <TabButton active={activeTab === 'global'} onClick={() => setActiveTab('global')} icon={<Globe size={18} />} label="Global" />
-                <TabButton active={activeTab === 'messages'} onClick={() => setActiveTab('messages')} icon={<MessageSquare size={18} />} label="Comunicaciones" />
+                <TabButton active={activeTab === 'comms'} onClick={() => setActiveTab('comms')} icon={<MessageSquare size={18} />} label="Comunicaciones" />
                 <TabButton active={activeTab === 'services'} onClick={() => setActiveTab('services')} icon={<Wrench size={18} />} label="Catálogo / Servicios" />
                 {hasPermission('manage_users') && <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<UserIcon size={18} />} label="Usuarios" />}
                 {hasPermission('manage_roles') && <TabButton active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} icon={<Shield size={18} />} label="Roles" />}
@@ -538,8 +551,8 @@ export default function SettingsPage() {
                                     </>
                                 )}
                             </section>
-                        </div>
 
+                        </div>
                         <div className="space-y-8">
                             {config.logo_path && (
                                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-4">
@@ -583,27 +596,46 @@ export default function SettingsPage() {
                     </div>
                 )}
 
-                {activeTab === 'messages' && (
-                    <div className="bg-white p-6 md:p-10 rounded-3xl border border-slate-100 shadow-sm space-y-12">
-                        <div className="flex flex-col xl:flex-row gap-10 items-start">
-                            <div className="flex-grow w-full space-y-8">
-                                <div className="max-w-2xl flex justify-between items-end">
-                                    <div className="bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden shadow-xl mb-10">
-                                        <div className="absolute right-0 top-0 opacity-10 translate-x-1/4 -translate-y-1/4">
-                                            <Bell size={200} />
-                                        </div>
-                                        <div className="relative z-10 max-w-2xl space-y-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="bg-blue-600 p-2 rounded-xl">
-                                                    <Clock size={20} />
-                                                </div>
-                                                <h3 className="text-xl font-black uppercase italic tracking-tight">Recordatorios Automáticos</h3>
+                {activeTab === 'comms' && (
+                    <div className="space-y-8">
+                        {/* Sub-tabs for Communications */}
+                        <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit gap-1 border border-slate-200">
+                            <button
+                                onClick={() => setCommsTab('reminders')}
+                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${commsTab === 'reminders' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                <Bell size={14} className="inline mr-2" />
+                                Recordatorios
+                            </button>
+                            <button
+                                onClick={() => setCommsTab('messages')}
+                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${commsTab === 'messages' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                            >
+                                <MessageSquare size={14} className="inline mr-2" />
+                                Mensajes (Plantillas)
+                            </button>
+                        </div>
+
+                        {commsTab === 'reminders' && (
+                            <div className="max-w-4xl space-y-8">
+                                <div className="bg-slate-900 rounded-[32px] p-10 text-white relative overflow-hidden shadow-2xl">
+                                    <div className="absolute right-0 top-0 opacity-10 translate-x-1/4 -translate-y-1/4">
+                                        <Bell size={240} />
+                                    </div>
+                                    <div className="relative z-10 space-y-8">
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-500/20">
+                                                <Clock size={24} />
                                             </div>
-                                            <p className="text-slate-400 text-sm font-bold leading-relaxed">
-                                                El sistema enviará automáticamente un email de seguimiento a tus clientes basándose en la fecha de recordatorio de sus órdenes finalizadas.
-                                            </p>
-                                            <div className="flex flex-wrap items-center gap-8 pt-4">
-                                                <label className="flex items-center gap-3 cursor-pointer group">
+                                            <div>
+                                                <h3 className="text-2xl font-black uppercase italic tracking-tight">Envío Automático</h3>
+                                                <p className="text-slate-400 text-sm font-bold opacity-80 mt-1">Configura cuándo y cómo se envían los recordatorios.</p>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 py-6 border-y border-white/10">
+                                            <div className="flex items-center gap-6">
+                                                <label className="flex items-center gap-4 cursor-pointer group">
                                                     <div className="relative">
                                                         <input
                                                             type="checkbox"
@@ -611,232 +643,268 @@ export default function SettingsPage() {
                                                             checked={config.reminder_enabled === 1}
                                                             onChange={(e) => setConfig((prev: any) => ({ ...prev, reminder_enabled: e.target.checked ? 1 : 0 }))}
                                                         />
-                                                        <div className={`w-12 h-6 rounded-full transition-colors ${config.reminder_enabled === 1 ? 'bg-blue-500' : 'bg-slate-700'}`}></div>
-                                                        <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${config.reminder_enabled === 1 ? 'translate-x-6' : ''}`}></div>
+                                                        <div className={`w-14 h-7 rounded-full transition-colors ${config.reminder_enabled === 1 ? 'bg-blue-500' : 'bg-slate-700'}`}></div>
+                                                        <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${config.reminder_enabled === 1 ? 'translate-x-7' : ''}`}></div>
                                                     </div>
-                                                    <span className="text-xs font-black uppercase tracking-widest">Servicio Activo</span>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs font-black uppercase tracking-widest">Servicio Activo</span>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">Habilita el cron diario</p>
+                                                    </div>
                                                 </label>
-
-                                                <div className="bg-white/5 border border-white/10 rounded-2xl p-2 px-4 flex items-center gap-4">
-                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Hora de envío</span>
-                                                    <input
-                                                        type="time"
-                                                        className="bg-transparent border-none outline-none text-white font-black text-lg"
-                                                        value={config.reminder_time || '09:00'}
-                                                        onChange={(e) => setConfig((prev: any) => ({ ...prev, reminder_time: e.target.value }))}
-                                                    />
-                                                </div>
                                             </div>
-                                            <div className="bg-blue-600/20 border border-blue-500/20 p-4 rounded-2xl flex items-start gap-3">
-                                                <AlertCircle size={18} className="text-blue-400 shrink-0 mt-0.5" />
-                                                <p className="text-[10px] font-bold text-slate-300 uppercase leading-relaxed">
-                                                    Los recordatorios se envían de <span className="text-white">Lunes a Sábado</span>. Los que caigan <span className="text-white">Domingo</span> se enviarán automáticamente el <span className="text-white">Lunes</span> a la hora configurada.
-                                                </p>
+
+                                            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 px-6 flex items-center justify-between">
+                                                <div className="flex items-center gap-3">
+                                                    <Clock size={18} className="text-blue-400" />
+                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora de envío</span>
+                                                </div>
+                                                <select
+                                                    className="bg-transparent border-none outline-none text-white font-black text-xl [color-scheme:dark] cursor-pointer"
+                                                    value={config.reminder_time?.split(':')[0] || '09'}
+                                                    onChange={(e) => setConfig((prev: any) => ({ ...prev, reminder_time: `${e.target.value}:00` }))}
+                                                >
+                                                    {Array.from({ length: 24 }).map((_, i) => {
+                                                        const hour = String(i).padStart(2, '0');
+                                                        return (
+                                                            <option key={hour} value={hour} className="bg-slate-900 text-white">
+                                                                {hour}:00
+                                                            </option>
+                                                        );
+                                                    })}
+                                                </select>
                                             </div>
                                         </div>
-                                    </div>
 
+                                        <div className="flex items-start gap-4 bg-blue-600/20 border border-blue-500/20 p-5 rounded-2xl">
+                                            <AlertCircle size={20} className="text-blue-400 shrink-0 mt-0.5" />
+                                            <p className="text-xs font-bold text-slate-200 uppercase leading-relaxed opacity-90">
+                                                Los recordatorios se procesan según la <span className="text-white underline decoration-blue-500 underline-offset-4">fecha programada</span> en cada orden. Si el taller está configurado para no trabajar los domingos, esos mensajes se enviarán el siguiente lunes.
+                                            </p>
+                                        </div>
+
+                                        <div className="pt-4 flex justify-end">
+                                            <button
+                                                onClick={handleSaveConfig}
+                                                disabled={saving}
+                                                className="bg-white text-slate-900 px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center gap-3 disabled:opacity-50 shadow-xl"
+                                            >
+                                                {saving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                                                {saving ? 'Guardando...' : 'Guardar Configuración'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {commsTab === 'messages' && (
+                            <div className="bg-white p-6 md:p-10 rounded-3xl border border-slate-100 shadow-sm space-y-8">
+                                <div className="flex justify-between items-end gap-4 border-b border-slate-100 pb-8">
                                     <div>
                                         <h3 className="text-2xl font-bold text-slate-800">Plantillas de Mensajes</h3>
-                                        <p className="text-slate-500 mt-1">Configurá qué mensajes se enviarán automáticamente a tus clientes en cada etapa.</p>
+                                        <p className="text-slate-500 mt-1">Personaliza los mensajes que se envían por cada estado de la reparación.</p>
                                     </div>
                                     <button
                                         onClick={handleCreateTemplate}
-                                        className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-100 flex items-center gap-2"
+                                        className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-100 flex items-center gap-2 shrink-0"
                                     >
                                         <Plus size={16} /> Nueva Plantilla
                                     </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 gap-8">
-                                    {templates.map((template) => (
-                                        <div key={template.id} className="p-6 md:p-8 bg-slate-50 rounded-[32px] border border-slate-100 space-y-6 shadow-sm">
-                                            <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
-                                                <div className="flex items-center gap-3">
-                                                    <input
-                                                        className="font-black text-slate-800 uppercase tracking-tighter italic text-lg bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-100 rounded px-1"
-                                                        value={template.name}
-                                                        onChange={(e) => setTemplates(templates.map(t => t.id === template.id ? { ...t, name: e.target.value } : t))}
-                                                        onBlur={(e) => handleUpdateTemplate(template.id, { ...template, name: e.target.value })}
-                                                    />
-                                                    <button onClick={() => handleDeleteTemplate(template.id)} className="text-slate-300 hover:text-red-500 transition-colors">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                                <div className="flex flex-wrap items-center gap-4">
-                                                    <div className="space-y-1">
-                                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Disparador</label>
-                                                        <select
-                                                            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                                                            value={template.trigger_status || ''}
-                                                            onChange={(e) => handleUpdateTemplate(template.id, { ...template, trigger_status: e.target.value, include_pdf: e.target.value ? template.include_pdf : 0 })}
-                                                        >
-                                                            <option value="">Manual</option>
-                                                            <option value="Pendiente">Al crear (Pendiente)</option>
-                                                            <option value="En proceso">En proceso</option>
-                                                            <option value="Presupuestado">Presupuestado</option>
-                                                            <option value="Aprobado">Aprobado</option>
-                                                            <option value="En reparación">En reparación</option>
-                                                            <option value="Listo para entrega">Listo para entrega</option>
-                                                            <option value="Entregado">Entregado</option>
-                                                            <option value="Recordatorio">Recordatorio</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="flex flex-wrap items-center gap-4 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm shrink-0">
-                                                        <div className="flex items-center gap-2">
+                                <div className="flex flex-col xl:flex-row gap-10 items-start">
+                                    <div className="flex-grow w-full space-y-8">
+                                        <div className="grid grid-cols-1 gap-8">
+                                            {templates.map((template) => (
+                                                <div key={template.id} className="p-6 md:p-8 bg-slate-50 rounded-[32px] border border-slate-100 space-y-6 shadow-sm">
+                                                    <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
+                                                        <div className="flex items-center gap-3">
                                                             <input
-                                                                type="checkbox"
-                                                                id={`email-${template.id}`}
-                                                                checked={template.send_email !== 0}
-                                                                onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_email: e.target.checked ? 1 : 0 })}
-                                                                className="w-4 h-4 rounded text-blue-600 border-slate-300"
+                                                                className="font-black text-slate-800 uppercase tracking-tighter italic text-lg bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-100 rounded px-1"
+                                                                value={template.name}
+                                                                onChange={(e) => setTemplates(templates.map(t => t.id === template.id ? { ...t, name: e.target.value } : t))}
+                                                                onBlur={(e) => handleUpdateTemplate(template.id, { ...template, name: e.target.value })}
                                                             />
-                                                            <label htmlFor={`email-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
-                                                                <Mail size={12} className="text-blue-500" /> Email
-                                                            </label>
+                                                            <button onClick={() => handleDeleteTemplate(template.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                                                <Trash2 size={16} />
+                                                            </button>
                                                         </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <input
-                                                                type="checkbox"
-                                                                id={`wa-${template.id}`}
-                                                                checked={template.send_whatsapp === 1}
-                                                                onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_whatsapp: e.target.checked ? 1 : 0 })}
-                                                                className="w-4 h-4 rounded text-emerald-600 border-slate-300"
-                                                            />
-                                                            <label htmlFor={`wa-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
-                                                                <MessageSquare size={12} className="text-emerald-500" /> WhatsApp
-                                                            </label>
-                                                        </div>
-                                                        {template.trigger_status && (
-                                                            <div className="flex items-center gap-2 pl-4 border-l border-slate-100">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    id={`pdf-${template.id}`}
-                                                                    checked={template.include_pdf === 1}
-                                                                    onChange={(e) => handleUpdateTemplate(template.id, { ...template, include_pdf: e.target.checked ? 1 : 0 })}
-                                                                    className="w-4 h-4 rounded text-indigo-600 border-slate-300"
-                                                                />
-                                                                <label htmlFor={`pdf-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
-                                                                    <FileText size={12} className="text-indigo-500" /> PDF
-                                                                </label>
+                                                        <div className="flex flex-wrap items-center gap-4">
+                                                            <div className="space-y-1">
+                                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Disparador</label>
+                                                                <select
+                                                                    className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                                                                    value={template.trigger_status || ''}
+                                                                    onChange={(e) => handleUpdateTemplate(template.id, { ...template, trigger_status: e.target.value, include_pdf: e.target.value ? template.include_pdf : 0 })}
+                                                                >
+                                                                    <option value="">Manual</option>
+                                                                    <option value="Pendiente">Al crear (Pendiente)</option>
+                                                                    <option value="En proceso">En proceso</option>
+                                                                    <option value="Presupuestado">Presupuestado</option>
+                                                                    <option value="Aprobado">Aprobado</option>
+                                                                    <option value="En reparación">En reparación</option>
+                                                                    <option value="Listo para entrega">Listo para entrega</option>
+                                                                    <option value="Entregado">Entregado</option>
+                                                                    <option value="Recordatorio">Recordatorio</option>
+                                                                </select>
                                                             </div>
-                                                        )}
+                                                            <div className="flex flex-wrap items-center gap-4 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm shrink-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id={`email-${template.id}`}
+                                                                        checked={template.send_email !== 0}
+                                                                        onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_email: e.target.checked ? 1 : 0 })}
+                                                                        className="w-4 h-4 rounded text-blue-600 border-slate-300"
+                                                                    />
+                                                                    <label htmlFor={`email-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                        <Mail size={12} className="text-blue-500" /> Email
+                                                                    </label>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        id={`wa-${template.id}`}
+                                                                        checked={template.send_whatsapp === 1}
+                                                                        onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_whatsapp: e.target.checked ? 1 : 0 })}
+                                                                        className="w-4 h-4 rounded text-emerald-600 border-slate-300"
+                                                                    />
+                                                                    <label htmlFor={`wa-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                        <MessageSquare size={12} className="text-emerald-500" /> WhatsApp
+                                                                    </label>
+                                                                </div>
+                                                                {template.trigger_status && (
+                                                                    <div className="flex items-center gap-2 pl-4 border-l border-slate-100">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            id={`pdf-${template.id}`}
+                                                                            checked={template.include_pdf === 1}
+                                                                            onChange={(e) => handleUpdateTemplate(template.id, { ...template, include_pdf: e.target.checked ? 1 : 0 })}
+                                                                            className="w-4 h-4 rounded text-indigo-600 border-slate-300"
+                                                                        />
+                                                                        <label htmlFor={`pdf-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                            <FileText size={12} className="text-indigo-500" /> PDF
+                                                                        </label>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
+                                                    <textarea
+                                                        className="w-full h-32 p-6 rounded-2xl border border-slate-200 outline-none shadow-inner text-slate-900 font-bold text-sm bg-white/50 focus:bg-white transition-all placeholder:text-slate-300"
+                                                        value={template.content}
+                                                        onFocus={() => {
+                                                            setLastFocusedId(template.id);
+                                                        }}
+                                                        onSelect={(e: any) => setCursorPos(e.target.selectionStart)}
+                                                        onChange={(e) => {
+                                                            setCursorPos(e.target.selectionStart);
+                                                            setTemplates(templates.map(t => t.id === template.id ? { ...t, content: e.target.value } : t));
+                                                        }}
+                                                        onBlur={(e) => handleUpdateTemplate(template.id, { ...template, content: e.target.value })}
+                                                    />
                                                 </div>
-                                            </div>
-                                            <textarea
-                                                className="w-full h-32 p-6 rounded-2xl border border-slate-200 outline-none shadow-inner text-slate-900 font-bold text-sm bg-white/50 focus:bg-white transition-all placeholder:text-slate-300"
-                                                value={template.content}
-                                                onFocus={() => {
-                                                    setLastFocusedId(template.id);
-                                                }}
-                                                onSelect={(e: any) => setCursorPos(e.target.selectionStart)}
-                                                onChange={(e) => {
-                                                    setCursorPos(e.target.selectionStart);
-                                                    setTemplates(templates.map(t => t.id === template.id ? { ...t, content: e.target.value } : t));
-                                                }}
-                                                onBlur={(e) => handleUpdateTemplate(template.id, { ...template, content: e.target.value })}
-                                            />
+                                            ))}
                                         </div>
-                                    ))}
+                                    </div>
+
+                                    <div className="xl:w-80 xl:sticky xl:top-24 bg-slate-900 p-8 rounded-3xl text-white space-y-6 shrink-0 shadow-xl">
+                                        <h4 className="text-lg font-bold flex items-center gap-2 text-blue-400">
+                                            <ShieldCheck size={20} /> Tokens Disponibles
+                                        </h4>
+                                        <div className="space-y-4 text-sm font-medium">
+                                            <button
+                                                onClick={() => handleInsertToken('[apodo]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-pink-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-pink-400 font-black tracking-wider">[apodo]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-pink-400">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Usa el apodo o el primer nombre.</p>
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleInsertToken('[cliente]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-blue-400 font-black tracking-wider">[cliente]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Nombre completo del cliente.</p>
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleInsertToken('[vehiculo]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-emerald-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-emerald-400 font-black tracking-wider">[vehiculo]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Marca y modelo.</p>
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleInsertToken('[link]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-blue-400 font-black tracking-wider">[link]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Link de seguimiento.</p>
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleInsertToken('[items]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-amber-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-amber-400 font-black tracking-wider">[items]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-amber-400">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Lista de trabajos realizados.</p>
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleInsertToken('[total]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-emerald-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-emerald-400 font-black tracking-wider">[total]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Total de la orden.</p>
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleInsertToken('[usuario]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-purple-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-purple-400 font-black tracking-wider">[usuario]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-purple-400">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Nombre y apellido del empleado o mecánico.</p>
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleInsertToken('[taller]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-slate-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-slate-200 font-black tracking-wider">[taller]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-slate-200">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Nombre de tu taller.</p>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
-
-                            <div className="xl:w-80 xl:sticky xl:top-24 bg-slate-900 p-8 rounded-3xl text-white space-y-6 shrink-0">
-                                <h4 className="text-lg font-bold flex items-center gap-2 text-blue-400">
-                                    <ShieldCheck size={20} /> Tokens Disponibles
-                                </h4>
-                                <div className="space-y-4 text-sm font-medium">
-                                    <button
-                                        onClick={() => handleInsertToken('[apodo]')}
-                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-pink-500/30 group"
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-pink-400 font-black tracking-wider">[apodo]</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-pink-400">Insertar</span>
-                                        </div>
-                                        <p className="text-slate-400 text-xs mt-1">Usa el apodo si existe, sino el primer nombre.</p>
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleInsertToken('[cliente]')}
-                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-blue-400 font-black tracking-wider">[cliente]</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
-                                        </div>
-                                        <p className="text-slate-400 text-xs mt-1">Usa siempre el primer nombre del cliente.</p>
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleInsertToken('[vehiculo]')}
-                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-emerald-500/30 group"
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-emerald-400 font-black tracking-wider">[vehiculo]</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
-                                        </div>
-                                        <p className="text-slate-400 text-xs mt-1">Marca y modelo de la unidad.</p>
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleInsertToken('[taller]')}
-                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-amber-500/30 group"
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-amber-400 font-black tracking-wider">[taller]</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-amber-400">Insertar</span>
-                                        </div>
-                                        <p className="text-slate-400 text-xs mt-1">Nombre de tu taller.</p>
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleInsertToken('[orden_id]')}
-                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-indigo-500/30 group"
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-indigo-400 font-black tracking-wider">[orden_id]</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-indigo-400">Insertar</span>
-                                        </div>
-                                        <p className="text-slate-400 text-xs mt-1">Número de orden.</p>
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleInsertToken('[servicios]')}
-                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-cyan-500/30 group"
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-cyan-400 font-black tracking-wider">[servicios]</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-cyan-400">Insertar</span>
-                                        </div>
-                                        <p className="text-slate-400 text-xs mt-1">Lista de trabajos realizados.</p>
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleInsertToken('[km]')}
-                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-violet-500/30 group"
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-violet-400 font-black tracking-wider">[km]</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-violet-400">Insertar</span>
-                                        </div>
-                                        <p className="text-slate-400 text-xs mt-1">Kilometraje del vehículo.</p>
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleInsertToken('[link]')}
-                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
-                                    >
-                                        <div className="flex justify-between items-center">
-                                            <span className="text-blue-400 font-black tracking-wider">[link]</span>
-                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
-                                        </div>
-                                        <p className="text-slate-400 text-xs mt-1">Link directo de seguimiento para el cliente.</p>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
+                        )}
                     </div>
                 )}
 
@@ -897,156 +965,173 @@ export default function SettingsPage() {
                             </div>
                         </div>
                     </div>
-                )}
+                )
+                }
 
-                {activeTab === 'users' && hasPermission('manage_users') && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        <div className="md:col-span-1">
-                            <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 sticky top-24">
-                                <h3 className="text-xl font-bold text-slate-800">Crear Usuario</h3>
-                                <form onSubmit={handleCreateUser} className="space-y-4">
-                                    <ConfigInput label="Usuario" value={newUser.username} onChange={(v) => setNewUser({ ...newUser, username: v })} />
-                                    <ConfigInput label="Contraseña" type="password" value={newUser.password} onChange={(v) => setNewUser({ ...newUser, password: v })} />
-                                    <div className="space-y-1">
-                                        <label className="text-sm font-bold text-slate-900 ml-1">Rol</label>
-                                        <select
-                                            className="w-full px-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold"
-                                            value={newUser.role_id}
-                                            onChange={(e) => setNewUser({ ...newUser, role_id: e.target.value })}
-                                            required
-                                        >
-                                            <option value="">Seleccionar Rol</option>
-                                            {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
-                                        <Plus size={20} /> Crear Usuario
-                                    </button>
-                                </form>
-                            </section>
-                        </div>
-                        <div className="md:col-span-2">
-                            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-                                <table className="w-full text-left">
-                                    <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-widest border-b border-slate-100">
-                                        <tr>
-                                            <th className="px-8 py-5">Usuario</th>
-                                            <th className="px-8 py-5">Rol Actual</th>
-                                            <th className="px-8 py-5 text-right">Acciones</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {users.map(u => (
-                                            <UserRow key={u.id} userItem={u} roles={roles} onUpdate={handleUpdateUser} onDelete={handleDeleteUser} />
-                                        ))}
-                                    </tbody>
-                                </table>
+                {
+                    activeTab === 'users' && hasPermission('manage_users') && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div className="md:col-span-1">
+                                <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 sticky top-24">
+                                    <h3 className="text-xl font-bold text-slate-800">Crear Usuario</h3>
+                                    <form onSubmit={handleCreateUser} className="space-y-4">
+                                        <ConfigInput label="Usuario" value={newUser.username} onChange={(v) => setNewUser({ ...newUser, username: v })} />
+                                        <ConfigInput label="Contraseña" type="password" value={newUser.password} onChange={(v) => setNewUser({ ...newUser, password: v })} />
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <ConfigInput label="Nombre" value={newUser.first_name} onChange={(v) => setNewUser({ ...newUser, first_name: v })} />
+                                            <ConfigInput label="Apellido" value={newUser.last_name} onChange={(v) => setNewUser({ ...newUser, last_name: v })} />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-sm font-bold text-slate-900 ml-1">Rol</label>
+                                            <select
+                                                className="w-full px-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold"
+                                                value={newUser.role_id}
+                                                onChange={(e) => setNewUser({ ...newUser, role_id: e.target.value })}
+                                                required
+                                            >
+                                                <option value="">Seleccionar Rol</option>
+                                                {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                                            </select>
+                                        </div>
+                                        <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
+                                            <Plus size={20} /> Crear Usuario
+                                        </button>
+                                    </form>
+                                </section>
+                            </div>
+                            <div className="md:col-span-2">
+                                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+                                    <table className="w-full text-left">
+                                        <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-widest border-b border-slate-100">
+                                            <tr>
+                                                <th className="px-8 py-5">Usuario</th>
+                                                <th className="px-8 py-5">Nombre / Apellido</th>
+                                                <th className="px-8 py-5">Rol Actual</th>
+                                                <th className="px-8 py-5 text-right">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {users.map(u => (
+                                                <UserRow key={u.id} userItem={u} roles={roles} onUpdate={handleUpdateUser} onDelete={handleDeleteUser} />
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
-                {activeTab === 'roles' && hasPermission('manage_roles') && (
-                    <div className="space-y-8">
-                        <div className="flex justify-between items-center">
-                            <h3 className="text-2xl font-bold text-slate-800 italic uppercase">Editor de Roles y Permisos</h3>
-                            <button onClick={handleCreateRole} className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-lg flex items-center gap-2">
-                                <Plus size={16} /> Nuevo Rol
-                            </button>
+                {
+                    activeTab === 'roles' && hasPermission('manage_roles') && (
+                        <div className="space-y-8">
+                            <div className="flex justify-between items-center">
+                                <h3 className="text-2xl font-bold text-slate-800 italic uppercase">Editor de Roles y Permisos</h3>
+                                <button onClick={handleCreateRole} className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-lg flex items-center gap-2">
+                                    <Plus size={16} /> Nuevo Rol
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {roles.map(role => (
+                                    <RoleCard
+                                        key={role.id}
+                                        role={role}
+                                        permissionsList={permissionsList.filter(p => config.enabled_modules?.includes(p))}
+                                        onUpdate={handleUpdateRole}
+                                        onDelete={handleDeleteRole}
+                                    />
+                                ))}
+                            </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {roles.map(role => (
-                                <RoleCard
-                                    key={role.id}
-                                    role={role}
-                                    permissionsList={permissionsList}
-                                    onUpdate={handleUpdateRole}
-                                    onDelete={handleDeleteRole}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                )}
+                    )
+                }
 
-                {activeTab === 'appearance' && (
-                    <div className="max-w-4xl space-y-8">
-                        <div>
-                            <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">Apariencia</h3>
-                            <p className="text-slate-500 text-sm mt-1 font-bold">Elegí el tema visual de tu taller. Este cambio se aplicará a todos tus usuarios y al Portal del Cliente.</p>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                            {THEMES.map(theme => {
-                                const active = currentTheme === theme.id;
-                                return (
-                                    <button
-                                        key={theme.id}
-                                        onClick={() => handleThemeChange(theme.id)}
-                                        className={`relative text-left rounded-[28px] overflow-hidden border-2 transition-all duration-200 group hover:scale-[1.02] hover:shadow-2xl ${active
-                                            ? 'border-blue-500 shadow-xl shadow-blue-500/20 ring-2 ring-blue-400/30'
-                                            : 'border-transparent shadow-sm hover:border-slate-200'
-                                            }`}
-                                        style={{ background: theme.preview.surface }}
-                                    >
-                                        {/* Color strip preview */}
-                                        <div className="h-24 relative overflow-hidden" style={{ background: theme.preview.bg }}>
-                                            {/* Sidebar preview */}
-                                            <div className="absolute left-0 top-0 bottom-0 w-10" style={{ background: theme.preview.sidebar }} />
-                                            {/* Fake cards */}
-                                            <div className="absolute left-14 top-3 right-3 h-4 rounded-lg opacity-80" style={{ background: theme.preview.surface }} />
-                                            <div className="absolute left-14 top-10 right-8 h-3 rounded-lg opacity-50" style={{ background: theme.preview.surface }} />
-                                            <div className="absolute left-14 top-16 w-16 h-3 rounded-lg" style={{ background: theme.preview.accent }} />
-                                            {/* Accent dot */}
-                                            <div className="absolute left-3.5 top-4 w-3 h-3 rounded-full" style={{ background: theme.preview.accent }} />
-                                            <div className="absolute left-3.5 top-9 w-3 h-3 rounded-full opacity-40" style={{ background: theme.preview.accent }} />
-                                            <div className="absolute left-3.5 top-14 w-3 h-3 rounded-full opacity-40" style={{ background: theme.preview.accent }} />
-                                        </div>
-
-                                        {/* Info */}
-                                        <div className="p-5" style={{ background: theme.preview.surface }}>
-                                            <div className="flex items-center justify-between">
-                                                <div>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-xl">{theme.emoji}</span>
-                                                        <span className="font-black text-sm uppercase tracking-wider" style={{ color: theme.preview.text }}>
-                                                            {theme.name}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-xs mt-1 font-bold" style={{ color: theme.preview.accent, opacity: 0.8 }}>
-                                                        {theme.description}
-                                                    </p>
-                                                </div>
-                                                {active && (
-                                                    <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: theme.preview.accent }}>
-                                                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                                                            <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                                        </svg>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        <div className="bg-white rounded-3xl border border-slate-100 p-6 flex items-center gap-4 shadow-sm">
-                            <span className="text-2xl">💡</span>
+                {
+                    activeTab === 'appearance' && (
+                        <div className="max-w-4xl space-y-8">
                             <div>
-                                <p className="font-black text-slate-800 text-sm">Cambio Global</p>
-                                <p className="text-xs text-slate-500 font-bold mt-0.5">El tema seleccionado se guarda en la configuración de tu taller y afecta a toda la plataforma para tus clientes y empleados.</p>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">Apariencia</h3>
+                                <p className="text-slate-500 text-sm mt-1 font-bold">Elegí el tema visual de tu taller. Este cambio se aplicará a todos tus usuarios y al Portal del Cliente.</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                                {THEMES.map(theme => {
+                                    const active = currentTheme === theme.id;
+                                    return (
+                                        <button
+                                            key={theme.id}
+                                            onClick={() => handleThemeChange(theme.id)}
+                                            className={`relative text-left rounded-[28px] overflow-hidden border-2 transition-all duration-200 group hover:scale-[1.02] hover:shadow-2xl ${active
+                                                ? 'border-blue-500 shadow-xl shadow-blue-500/20 ring-2 ring-blue-400/30'
+                                                : 'border-transparent shadow-sm hover:border-slate-200'
+                                                }`}
+                                            style={{ background: theme.preview.surface }}
+                                        >
+                                            {/* Color strip preview */}
+                                            <div className="h-24 relative overflow-hidden" style={{ background: theme.preview.bg }}>
+                                                {/* Sidebar preview */}
+                                                <div className="absolute left-0 top-0 bottom-0 w-10" style={{ background: theme.preview.sidebar }} />
+                                                {/* Fake cards */}
+                                                <div className="absolute left-14 top-3 right-3 h-4 rounded-lg opacity-80" style={{ background: theme.preview.surface }} />
+                                                <div className="absolute left-14 top-10 right-8 h-3 rounded-lg opacity-50" style={{ background: theme.preview.surface }} />
+                                                <div className="absolute left-14 top-16 w-16 h-3 rounded-lg" style={{ background: theme.preview.accent }} />
+                                                {/* Accent dot */}
+                                                <div className="absolute left-3.5 top-4 w-3 h-3 rounded-full" style={{ background: theme.preview.accent }} />
+                                                <div className="absolute left-3.5 top-9 w-3 h-3 rounded-full opacity-40" style={{ background: theme.preview.accent }} />
+                                                <div className="absolute left-3.5 top-14 w-3 h-3 rounded-full opacity-40" style={{ background: theme.preview.accent }} />
+                                            </div>
+
+                                            {/* Info */}
+                                            <div className="p-5" style={{ background: theme.preview.surface }}>
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-xl">{theme.emoji}</span>
+                                                            <span className="font-black text-sm uppercase tracking-wider" style={{ color: theme.preview.text }}>
+                                                                {theme.name}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-xs mt-1 font-bold" style={{ color: theme.preview.accent, opacity: 0.8 }}>
+                                                            {theme.description}
+                                                        </p>
+                                                    </div>
+                                                    {active && (
+                                                        <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: theme.preview.accent }}>
+                                                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                                                                <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                                            </svg>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="bg-white rounded-3xl border border-slate-100 p-6 flex items-center gap-4 shadow-sm">
+                                <span className="text-2xl">💡</span>
+                                <div>
+                                    <p className="font-black text-slate-800 text-sm">Cambio Global</p>
+                                    <p className="text-xs text-slate-500 font-bold mt-0.5">El tema seleccionado se guarda en la configuración de tu taller y afecta a toda la plataforma para tus clientes y empleados.</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
-            </div>
-        </div>
+                    )
+                }
+            </div >
+        </div >
     );
 }
 
 function UserRow({ userItem, roles, onUpdate, onDelete }: { userItem: any, roles: any[], onUpdate: (id: number, data: any) => void, onDelete: (id: number) => void }) {
     const [editing, setEditing] = useState(false);
-    const [data, setData] = useState({ username: userItem.username, role_id: userItem.role_id });
+    const [data, setData] = useState({
+        username: userItem.username,
+        role_id: userItem.role_id,
+        first_name: userItem.first_name || '',
+        last_name: userItem.last_name || ''
+    });
 
     const handleSave = () => {
         onUpdate(userItem.id, data);
@@ -1064,6 +1149,28 @@ function UserRow({ userItem, roles, onUpdate, onDelete }: { userItem: any, roles
                     />
                 ) : (
                     <span className="font-bold text-slate-800">{userItem.username}</span>
+                )}
+            </td>
+            <td className="px-8 py-6">
+                {editing ? (
+                    <div className="flex gap-2">
+                        <input
+                            className="bg-white border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-800 w-full"
+                            value={data.first_name || ''}
+                            onChange={e => setData({ ...data, first_name: e.target.value })}
+                            placeholder="Nombre"
+                        />
+                        <input
+                            className="bg-white border border-slate-200 rounded-lg px-3 py-2 font-bold text-slate-800 w-full"
+                            value={data.last_name || ''}
+                            onChange={e => setData({ ...data, last_name: e.target.value })}
+                            placeholder="Apellido"
+                        />
+                    </div>
+                ) : (
+                    <span className="font-medium text-slate-600">
+                        {userItem.first_name || ''} {userItem.last_name || ''}
+                    </span>
                 )}
             </td>
             <td className="px-8 py-6">
@@ -1175,6 +1282,7 @@ function RoleCard({ role, permissionsList, onUpdate, onDelete }: { role: any, pe
 }
 
 function ServiceRow({ service, onDelete }: { service: any, onDelete: (id: number) => void }) {
+    const { notify } = useNotification();
     const [editing, setEditing] = useState(false);
     const [data, setData] = useState({ name: service.name, base_price: service.base_price });
 
@@ -1184,7 +1292,7 @@ function ServiceRow({ service, onDelete }: { service: any, onDelete: (id: number
             setEditing(false);
             window.location.reload(); // Simple refresh to show changes
         } catch (err) {
-            alert('Error al actualizar');
+            notify('error', 'Error al actualizar');
         }
     };
 

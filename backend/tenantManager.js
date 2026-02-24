@@ -53,6 +53,8 @@ function initTenantDb(db, slug) {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
+            first_name TEXT,
+            last_name TEXT,
             role_id INTEGER,
             client_id INTEGER,
             role TEXT,
@@ -150,6 +152,7 @@ function initTenantDb(db, slug) {
             description TEXT NOT NULL,
             labor_price REAL DEFAULT 0,
             parts_price REAL DEFAULT 0,
+            parts_profit REAL DEFAULT 0,
             subtotal REAL NOT NULL,
             FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
         );
@@ -195,13 +198,36 @@ function initTenantDb(db, slug) {
     `);
 
     // Clean up seeding
-    const adminRole = db.prepare("SELECT id FROM roles WHERE name = 'Admin'").get();
-    if (!adminRole) {
+    const adminRole = db.prepare("SELECT permissions FROM roles WHERE name = 'Admin'").get();
+    if (adminRole) {
+        let perms = JSON.parse(adminRole.permissions || '[]');
+        if (!perms.includes('reminders')) {
+            perms.push('reminders');
+            db.prepare("UPDATE roles SET permissions = ? WHERE name = 'Admin'").run(JSON.stringify(perms));
+        }
+    } else {
         db.prepare("INSERT INTO roles (name, permissions) VALUES ('Admin', ?)").run(
-            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles'])
+            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles', 'reminders'])
         );
+    }
+
+    const mecanicoRole = db.prepare("SELECT permissions FROM roles WHERE name = 'Mecánico'").get();
+    if (mecanicoRole) {
+        let perms = JSON.parse(mecanicoRole.permissions || '[]');
+        if (!perms.includes('reminders')) {
+            perms.push('reminders');
+            db.prepare("UPDATE roles SET permissions = ? WHERE name = 'Mecánico'").run(JSON.stringify(perms));
+        }
+    } else {
         db.prepare("INSERT INTO roles (name, permissions) VALUES ('Mecánico', ?)").run(
-            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders'])
+            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'reminders'])
+        );
+    }
+
+    const recordatoriosRole = db.prepare("SELECT id FROM roles WHERE name = 'Recordatorios'").get();
+    if (!recordatoriosRole) {
+        db.prepare("INSERT INTO roles (name, permissions) VALUES ('Recordatorios', ?)").run(
+            JSON.stringify(['reminders', 'orders'])
         );
     }
 
@@ -239,6 +265,27 @@ function initTenantDb(db, slug) {
     addColumn('config', 'reminder_time', "TEXT DEFAULT '09:00'");
     addColumn('config', 'mail_provider', "TEXT DEFAULT 'smtp'");
     addColumn('config', 'resend_api_key', "TEXT");
+    addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
+    addColumn('users', 'first_name', "TEXT");
+    addColumn('users', 'last_name', "TEXT");
+
+    // Self-reparative migration for parts_profit on existing items
+    try {
+        const configMigration = db.prepare('SELECT parts_profit_percentage FROM config LIMIT 1').get();
+        if (configMigration && configMigration.parts_profit_percentage > 0) {
+            const countToUpdate = db.prepare('SELECT COUNT(*) as count FROM order_items WHERE (parts_profit = 0 OR parts_profit IS NULL) AND parts_price > 0').get().count;
+            if (countToUpdate > 0) {
+                db.prepare(`
+                    UPDATE order_items 
+                    SET parts_profit = ROUND(parts_price * (? / 100.0))
+                    WHERE (parts_profit = 0 OR parts_profit IS NULL) AND parts_price > 0
+                `).run(configMigration.parts_profit_percentage);
+                console.log(`[tenant:${slug}] Migration: Populated parts_profit for ${countToUpdate} items`);
+            }
+        }
+    } catch (e) {
+        console.error(`[tenant:${slug}] Error in parts_profit migration:`, e.message);
+    }
 
     const configCount = db.prepare('SELECT COUNT(*) as count FROM config').get().count;
     if (configCount === 0) {
@@ -253,7 +300,7 @@ function initTenantDb(db, slug) {
         const defaultTemplates = [
             {
                 name: 'Recepción de Vehículo',
-                content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Podés seguir el progreso en tiempo real aquí: [link]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id].',
+                content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Podés seguir el progreso en tiempo real aquí: [link]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id].\n\nSaludos,\n[usuario]',
                 trigger_status: 'Pendiente',
                 include_pdf: 0,
                 send_email: 1,
@@ -261,7 +308,7 @@ function initTenantDb(db, slug) {
             },
             {
                 name: 'Presupuesto para Revisión',
-                content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes. Avisanos si estás de acuerdo para comenzar con el trabajo.',
+                content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes. Avisanos si estás de acuerdo para comenzar con el trabajo.\n\nSaludos,\n[usuario]',
                 trigger_status: 'Presupuestado',
                 include_pdf: 1,
                 send_email: 1,
@@ -269,7 +316,7 @@ function initTenantDb(db, slug) {
             },
             {
                 name: 'Trabajo en Marcha',
-                content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [servicios]. Te avisamos en cuanto esté finalizado.',
+                content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [items]. Te avisamos en cuanto esté finalizado.\n\nSaludos,\n[usuario]',
                 trigger_status: 'Aprobado',
                 include_pdf: 0,
                 send_email: 1,
@@ -277,7 +324,7 @@ function initTenantDb(db, slug) {
             },
             {
                 name: 'Vehículo Listo',
-                content: '¡Buenas noticias [apodo]! Tu [vehiculo] ya está listo para ser retirado. Podés pasar por [taller] en nuestros horarios de atención. ¡Te esperamos!',
+                content: '¡Buenas noticias [apodo]! Tu [vehiculo] ya está listo para ser retirado. Podés pasar por [taller] en nuestros horarios de atención. ¡Te esperamos!\n\nSaludos,\n[usuario]',
                 trigger_status: 'Listo para entrega',
                 include_pdf: 0,
                 send_email: 1,
@@ -285,7 +332,7 @@ function initTenantDb(db, slug) {
             },
             {
                 name: 'Agradecimiento y Entrega',
-                content: 'Muchas gracias [apodo] por confiar en [taller]. Acabamos de registrar la entrega de tu [vehiculo] con [km] km. Esperamos que disfrutes del andar y cualquier duda estamos a tu disposición.',
+                content: 'Muchas gracias [apodo] por confiar en [taller]. Acabamos de registrar la entrega de tu [vehiculo] con [km] km. Esperamos que disfrutes del andar y cualquier duda estamos a tu disposición.\n\nSaludos,\n[usuario]',
                 trigger_status: 'Entregado',
                 include_pdf: 1,
                 send_email: 1,
@@ -293,7 +340,7 @@ function initTenantDb(db, slug) {
             },
             {
                 name: 'Seguimiento Preventivo',
-                content: 'Hola [apodo], hace unos meses realizamos el servicio de [servicios] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva y asegurar que todo siga funcionando perfecto. ¡Te esperamos!',
+                content: 'Hola [apodo], hace unos meses realizamos el servicio de [items] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva y asegurar que todo siga funcionando perfecto. ¡Te esperamos!\n\nSaludos,\n[usuario]',
                 trigger_status: 'Recordatorio',
                 include_pdf: 0,
                 send_email: 1,
@@ -301,7 +348,7 @@ function initTenantDb(db, slug) {
             },
             {
                 name: 'Envío de Documento',
-                content: 'Hola [apodo], te enviamos adjunto el documento solicitado relacionado con tu [vehiculo] desde [taller]. Quedamos a tu disposición por cualquier consulta.',
+                content: 'Hola [apodo], te enviamos adjunto el documento solicitado relacionado con tu [vehiculo] desde [taller]. Quedamos a tu disposición por cualquier consulta.\n\nSaludos,\n[usuario]',
                 trigger_status: null,
                 include_pdf: 1,
                 send_email: 1,
@@ -317,6 +364,17 @@ function initTenantDb(db, slug) {
         for (const t of defaultTemplates) {
             insertStmt.run(t.name, t.content, t.trigger_status, t.include_pdf, t.send_email, t.send_whatsapp);
         }
+    }
+
+    // Migration to auto-append 'Saludos, [usuario]' to templates that lack any [usuario] token
+    try {
+        db.prepare(`
+            UPDATE templates 
+            SET content = content || char(10) || char(10) || 'Saludos,' || char(10) || '[usuario]'
+            WHERE content NOT LIKE '%[usuario]%' AND content NOT LIKE '%[usuario_nombre]%'
+        `).run();
+    } catch (e) {
+        console.error(`[tenant:${slug}] Error migrating templates with [usuario] token:`, e.message);
     }
 }
 

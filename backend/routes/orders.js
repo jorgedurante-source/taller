@@ -5,7 +5,7 @@ const path = require('path');
 // db is injected per-request via req.db (tenant middleware)
 // Each route reads db from req.db
 function getDb(req) { return req.db; }
-const { auth } = require('../middleware/auth');
+const { auth, hasPermission } = require('../middleware/auth');
 const { sendEmail } = require('../lib/mailer');
 const { generateOrderPDF } = require('../lib/pdfGenerator');
 
@@ -21,7 +21,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // @route   GET api/orders
-router.get('/', auth, (req, res) => {
+router.get('/', auth, hasPermission('orders'), (req, res) => {
     const orders = req.db.prepare(`
         SELECT o.*, 
             (c.first_name || ' ' || c.last_name) as client_name, 
@@ -36,13 +36,13 @@ router.get('/', auth, (req, res) => {
 });
 
 // @route   POST api/orders
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, hasPermission('orders'), async (req, res) => {
     const { client_id, vehicle_id, description, items } = req.body;
 
     const crypto = require('crypto');
     const share_token = crypto.randomBytes(6).toString('hex');
     const insertOrder = req.db.prepare('INSERT INTO orders (client_id, vehicle_id, description, created_by_id, share_token) VALUES (?, ?, ?, ?, ?)');
-    const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)');
+    const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
@@ -58,6 +58,7 @@ router.post('/', auth, async (req, res) => {
                     item.description,
                     item.labor_price || 0,
                     item.parts_price || 0,
+                    item.parts_profit || 0,
                     subtotal
                 );
             });
@@ -77,10 +78,11 @@ router.post('/', auth, async (req, res) => {
         const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'Pendiente'").get();
         if (template) {
             const order = req.db.prepare(`
-                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand
+                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, u.first_name as user_first_name, u.last_name as user_last_name
                 FROM orders o
                 JOIN clients c ON o.client_id = c.id
                 JOIN vehicles v ON o.vehicle_id = v.id
+                LEFT JOIN users u ON o.created_by_id = u.id
                 WHERE o.id = ?
             `).get(orderId);
 
@@ -94,6 +96,7 @@ router.post('/', auth, async (req, res) => {
                     .replace(/\[cliente\]/g, order.first_name || 'Cliente')
                     .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
                     .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
+                    .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
                     .replace(/{orden_id}|\[orden_id\]/g, orderId);
 
                 let attachments = [];
@@ -116,7 +119,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // @route   GET api/orders/:id
-router.get('/:id', auth, (req, res) => {
+router.get('/:id', auth, hasPermission('orders'), (req, res) => {
     try {
         const order = req.db.prepare(`
             SELECT o.*, (c.first_name || ' ' || c.last_name) as client_name, c.phone as client_phone, c.email as client_email,
@@ -149,7 +152,7 @@ router.get('/:id', auth, (req, res) => {
 });
 
 // @route   PUT api/orders/:id/status
-router.put('/:id/status', auth, async (req, res) => {
+router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
     const { status, notes, reminder_days } = req.body;
     try {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
@@ -164,10 +167,10 @@ router.put('/:id/status', auth, async (req, res) => {
         }
 
         let reminderAt = null;
-        if (status === 'Entregado' && reminder_days) {
+        if (status === 'Entregado' && reminder_days && req.enabledModules.includes('reminders')) {
             const baseDate = new Date(deliveredAt || new Date());
             baseDate.setDate(baseDate.getDate() + parseInt(reminder_days));
-            reminderAt = baseDate.toISOString();
+            reminderAt = baseDate.toISOString().split('T')[0];
         }
 
         req.db.prepare('UPDATE orders SET status = ?, modified_by_id = ?, updated_at = CURRENT_TIMESTAMP, reminder_at = ?, delivered_at = ?, reminder_days = ? WHERE id = ?')
@@ -202,10 +205,11 @@ router.put('/:id/status', auth, async (req, res) => {
         const template = req.db.prepare('SELECT * FROM templates WHERE trigger_status = ?').get(status);
         if (template) {
             const order = req.db.prepare(`
-                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km
+                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km, u.first_name as user_first_name, u.last_name as user_last_name
                 FROM orders o
                 JOIN clients c ON o.client_id = c.id
                 JOIN vehicles v ON o.vehicle_id = v.id
+                LEFT JOIN users u ON o.modified_by_id = u.id
                 WHERE o.id = ?
             `).get(req.params.id);
 
@@ -221,8 +225,10 @@ router.put('/:id/status', auth, async (req, res) => {
                     .replace(/\[cliente\]/g, order.first_name || 'Cliente')
                     .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
                     .replace(/{taller}|\[taller\]/g, workshopName)
-                    .replace(/\[servicios\]/g, servicesStr || 'Mantenimiento General')
+                    .replace(/\[servicios\]/g, servicesStr || 'servicios realizados')
+                    .replace(/\[items\]/g, servicesStr || 'servicios realizados')
                     .replace(/\[km\]/g, order.km || '---')
+                    .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
                     .replace(/{orden_id}|\[orden_id\]/g, order.id);
 
                 let attachments = [];
@@ -246,7 +252,7 @@ router.put('/:id/status', auth, async (req, res) => {
 });
 
 // @route   PUT api/orders/:id/payment
-router.put('/:id/payment', auth, (req, res) => {
+router.put('/:id/payment', auth, hasPermission('orders'), (req, res) => {
     const { payment_status, payment_amount } = req.body;
     if (!['cobrado', 'parcial', 'sin_cobrar'].includes(payment_status)) {
         return res.status(400).json({ message: 'Estado de cobro inválido' });
@@ -267,7 +273,7 @@ router.put('/:id/payment', auth, (req, res) => {
 });
 
 // @route   POST api/orders/:id/photos
-router.post('/:id/photos', auth, upload.array('photos', 5), (req, res) => {
+router.post('/:id/photos', auth, hasPermission('orders'), upload.array('photos', 5), (req, res) => {
     const filenames = req.files.map(f => f.filename);
     const order = req.db.prepare('SELECT photos FROM orders WHERE id = ?').get(req.params.id);
     const existingPhotos = JSON.parse(order.photos || '[]');
@@ -280,7 +286,7 @@ router.post('/:id/photos', auth, upload.array('photos', 5), (req, res) => {
 });
 
 // @route   POST api/orders/:id/budget
-router.post('/:id/budget', auth, (req, res) => {
+router.post('/:id/budget', auth, hasPermission('orders'), (req, res) => {
     const { items, subtotal, tax, total } = req.body;
     const result = req.db.prepare('INSERT INTO budgets (order_id, items, subtotal, tax, total) VALUES (?, ?, ?, ?, ?)').run(
         req.params.id, JSON.stringify(items), subtotal, tax, total
@@ -298,10 +304,11 @@ router.post('/:id/budget', auth, (req, res) => {
             const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'Presupuestado'").get();
             if (template) {
                 const order = req.db.prepare(`
-                    SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km
+                    SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km, u.first_name as user_first_name, u.last_name as user_last_name
                     FROM orders o
                     JOIN clients c ON o.client_id = c.id
                     JOIN vehicles v ON o.vehicle_id = v.id
+                    LEFT JOIN users u ON o.modified_by_id = u.id
                     WHERE o.id = ?
                 `).get(req.params.id);
 
@@ -318,6 +325,7 @@ router.post('/:id/budget', auth, (req, res) => {
                         .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
                         .replace(/\[servicios\]/g, servicesStr || 'Mantenimiento General')
                         .replace(/\[km\]/g, order.km || '---')
+                        .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
                         .replace(/{orden_id}|\[orden_id\]/g, req.params.id);
 
                     let attachments = [];
@@ -341,9 +349,9 @@ router.post('/:id/budget', auth, (req, res) => {
 router.use('/photos', express.static('uploads'));
 
 // @route   POST api/orders/:id/items
-router.post('/:id/items', auth, (req, res) => {
+router.post('/:id/items', auth, hasPermission('orders'), (req, res) => {
     const { items } = req.body;
-    const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, subtotal) VALUES (?, ?, ?, ?, ?, ?)');
+    const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
         data.forEach(item => {
@@ -354,6 +362,7 @@ router.post('/:id/items', auth, (req, res) => {
                 item.description,
                 item.labor_price || 0,
                 item.parts_price || 0,
+                item.parts_profit || 0,
                 subtotal
             );
         });
@@ -372,8 +381,8 @@ router.post('/:id/items', auth, (req, res) => {
 });
 
 // @route   PUT api/orders/items/:itemId
-router.put('/items/:itemId', auth, (req, res) => {
-    const { description, labor_price, parts_price } = req.body;
+router.put('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
+    const { description, labor_price, parts_price, parts_profit } = req.body;
     const subtotal = (parseFloat(labor_price) || 0) + (parseFloat(parts_price) || 0);
     try {
         const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
@@ -381,9 +390,9 @@ router.put('/items/:itemId', auth, (req, res) => {
 
         req.db.prepare(`
             UPDATE order_items 
-            SET description = ?, labor_price = ?, parts_price = ?, subtotal = ? 
+            SET description = ?, labor_price = ?, parts_price = ?, parts_profit = ?, subtotal = ? 
             WHERE id = ?
-        `).run(description, labor_price, parts_price, subtotal, req.params.itemId);
+        `).run(description, labor_price, parts_price, parts_profit || 0, subtotal, req.params.itemId);
 
         const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('UPDATE orders SET modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
@@ -396,7 +405,7 @@ router.put('/items/:itemId', auth, (req, res) => {
 });
 
 // @route   DELETE api/orders/items/:itemId
-router.delete('/items/:itemId', auth, (req, res) => {
+router.delete('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
     try {
         const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
         if (!item) return res.status(404).json({ message: 'Item no encontrado' });
@@ -414,13 +423,14 @@ router.delete('/items/:itemId', auth, (req, res) => {
 });
 
 // @route   POST api/orders/:id/send-email
-router.post('/:id/send-email', auth, async (req, res) => {
+router.post('/:id/send-email', auth, hasPermission('orders'), async (req, res) => {
     try {
         const order = req.db.prepare(`
-            SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km
+            SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km, u.first_name as user_first_name, u.last_name as user_last_name
             FROM orders o
             JOIN clients c ON o.client_id = c.id
             JOIN vehicles v ON o.vehicle_id = v.id
+            LEFT JOIN users u ON o.modified_by_id = u.id
             WHERE o.id = ?
         `).get(req.params.id);
 
@@ -463,7 +473,8 @@ router.post('/:id/send-email', auth, async (req, res) => {
             'servicios': servicesStr || 'Mantenimiento General',
             'km': order.km || '---',
             'orden_id': order.id,
-            'link': trackingLink
+            'link': trackingLink,
+            'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim()
         };
 
         let messageText = template.content;
@@ -501,13 +512,22 @@ router.post('/:id/send-email', auth, async (req, res) => {
 });
 
 // @route   POST api/orders/send-manual-template
-router.post('/send-manual-template', auth, async (req, res) => {
+router.post('/send-manual-template', auth, hasPermission('orders'), async (req, res) => {
     const { clientId, vehicleId, orderId, templateId } = req.body;
     try {
         const client = req.db.prepare('SELECT first_name, nickname, email FROM clients WHERE id = ?').get(clientId);
         const vehicle = req.db.prepare('SELECT brand, model FROM vehicles WHERE id = ?').get(vehicleId);
         const template = req.db.prepare('SELECT * FROM templates WHERE id = ?').get(templateId);
         const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
+        let userFirstName = 'Taller';
+        let userLastName = '';
+        if (req.user && req.user.id !== 0) {
+            const u = req.db.prepare('SELECT first_name, last_name FROM users WHERE id = ?').get(req.user.id);
+            if (u) {
+                userFirstName = u.first_name || 'Taller';
+                userLastName = u.last_name || '';
+            }
+        }
 
         if (!client || !template) return res.status(404).json({ message: 'Client or Template not found' });
 
@@ -516,6 +536,7 @@ router.post('/send-manual-template', auth, async (req, res) => {
             .replace(/\[cliente\]/g, client.first_name || 'Cliente')
             .replace(/{vehiculo}|\[vehiculo\]/g, vehicle ? `${vehicle.brand} ${vehicle.model}` : 'vehículo')
             .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
+            .replace(/\[usuario\]/g, `${userFirstName} ${userLastName}`.trim())
             .replace(/{orden_id}|\[orden_id\]/g, orderId || '');
 
         await sendEmail(req.db, client.email, template.name, message, []);
@@ -527,7 +548,7 @@ router.post('/send-manual-template', auth, async (req, res) => {
 });
 
 // @route   PUT api/orders/:id/reminder-status
-router.put('/:id/reminder-status', auth, (req, res) => {
+router.put('/:id/reminder-status', auth, hasPermission('reminders'), (req, res) => {
     const { status } = req.body; // 'pending', 'skipped', 'sent'
     try {
         req.db.prepare('UPDATE orders SET reminder_status = ? WHERE id = ?').run(status, req.params.id);

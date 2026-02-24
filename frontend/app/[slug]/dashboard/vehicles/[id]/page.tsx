@@ -22,10 +22,12 @@ import {
     CheckCircle2
 } from 'lucide-react';
 import Link from 'next/link';
+import { useNotification } from '@/lib/notification';
 
 export default function VehicleDetailsPage() {
     const { slug } = useSlug();
     const params = useParams();
+    const { notify } = useNotification();
     const [vehicle, setVehicle] = useState<any>(null);
     const [orders, setOrders] = useState<any[]>([]);
     const [kmHistory, setKmHistory] = useState<any[]>([]);
@@ -72,8 +74,9 @@ export default function VehicleDetailsPage() {
             setEditingKm(false);
             setKmNotes('');
             fetchData();
+            notify('success', 'Kilometraje actualizado');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al actualizar kilometraje');
+            notify('error', err.response?.data?.message || 'Error al actualizar kilometraje');
         } finally {
             setSavingKm(false);
         }

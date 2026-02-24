@@ -33,7 +33,15 @@ router.post('/login', async (req, res) => {
             const isMatch = await bcrypt.compare(password, user.password);
             if (isMatch) {
                 let permissions = [];
-                try { permissions = JSON.parse(user.permissions || '[]') || []; } catch (e) { }
+                try {
+                    permissions = JSON.parse(user.permissions || '[]') || [];
+                } catch (e) { }
+
+                // --- Module Enforcement: Filter permissions by enabled modules ---
+                if (req.enabledModules) {
+                    permissions = permissions.filter(p => req.enabledModules.includes(p));
+                }
+
                 const roleName = user.role_name || user.role || 'staff';
 
                 const secret = req.tenantSecret || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';

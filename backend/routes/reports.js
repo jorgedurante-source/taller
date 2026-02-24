@@ -38,7 +38,7 @@ router.get('/order-pdf/:id', auth, async (req, res) => {
 });
 
 // @route   GET api/reports/dashboard
-router.get('/dashboard', auth, (req, res) => {
+router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
     try {
         const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
         const includeParts = config.income_include_parts ?? 1;
@@ -50,7 +50,8 @@ router.get('/dashboard', auth, (req, res) => {
           SELECT 
             strftime('%Y-%m', o.updated_at) as month,
             SUM(oi.labor_price) as labor_income,
-            SUM(oi.parts_price) as parts_price
+            SUM(oi.parts_price) as parts_price,
+            SUM(oi.parts_profit) as parts_profit
           FROM orders o
           JOIN order_items oi ON o.id = oi.order_id
           WHERE o.payment_status IN ('cobrado', 'parcial')
@@ -63,7 +64,8 @@ router.get('/dashboard', auth, (req, res) => {
         const historicalStats = req.db.prepare(`
           SELECT 
             SUM(oi.labor_price) as labor_total,
-            SUM(oi.parts_price) as parts_total
+            SUM(oi.parts_price) as parts_total,
+            SUM(oi.parts_profit) as parts_profit_total
           FROM orders o
           JOIN order_items oi ON o.id = oi.order_id
           WHERE o.payment_status IN ('cobrado', 'parcial')
@@ -73,7 +75,8 @@ router.get('/dashboard', auth, (req, res) => {
         const monthlyStats = req.db.prepare(`
           SELECT 
             SUM(oi.labor_price) as labor_total,
-            SUM(oi.parts_price) as parts_total
+            SUM(oi.parts_price) as parts_total,
+            SUM(oi.parts_profit) as parts_profit_total
           FROM orders o
           JOIN order_items oi ON o.id = oi.order_id
           WHERE o.payment_status IN ('cobrado', 'parcial')
@@ -96,11 +99,11 @@ router.get('/dashboard', auth, (req, res) => {
         `).all();
 
         const readyToDeliverTotal = req.db.prepare(`
-            SELECT SUM(oi.labor_price + (CASE WHEN ? = 1 THEN oi.parts_price * ? ELSE 0 END)) as total
+            SELECT SUM(oi.labor_price + (CASE WHEN ? = 1 THEN oi.parts_profit ELSE 0 END)) as total
             FROM orders o
             JOIN order_items oi ON o.id = oi.order_id
             WHERE o.status = 'Listo para entrega'
-        `).get(includeParts, partsPercentage).total || 0;
+        `).get(includeParts).total || 0;
 
         const commonServices = req.db.prepare(`
           SELECT description, COUNT(*) as count
@@ -159,14 +162,14 @@ router.get('/income-daily', auth, hasPermission('income'), (req, res) => {
             SELECT 
                 strftime('%d', o.updated_at) as day,
                 SUM(oi.labor_price) as labor_income,
-                SUM(oi.parts_price * ?) as parts_profit
+                SUM(oi.parts_profit) as parts_profit
             FROM orders o
             JOIN order_items oi ON o.id = oi.order_id
             WHERE o.payment_status IN ('cobrado', 'parcial')
             AND strftime('%Y-%m', o.updated_at) = ?
             GROUP BY day
             ORDER BY day ASC
-        `).all(partsPercentage, currentMonth);
+        `).all(currentMonth);
 
         res.json(dailyIncome);
     } catch (err) {
@@ -210,7 +213,7 @@ router.get('/top-customers', auth, (req, res) => {
 
 
 // @route   GET api/reports/reminders
-router.get('/reminders', auth, (req, res) => {
+router.get('/reminders', auth, hasPermission('reminders'), (req, res) => {
     const tab = req.query.tab || 'today';
     try {
         let whereClause = "WHERE o.reminder_at IS NOT NULL AND o.status = 'Entregado'";
@@ -261,5 +264,49 @@ router.get('/reminders', auth, (req, res) => {
     }
 });
 
+// @route   PATCH api/reports/reminders/:orderId/date
+router.patch('/reminders/:orderId/date', auth, hasPermission('reminders'), (req, res) => {
+    const { date } = req.body;
+    try {
+        req.db.prepare('UPDATE orders SET reminder_at = ? WHERE id = ?').run(
+            date,
+            req.params.orderId
+        );
+        res.json({ message: 'Fecha de recordatorio actualizada' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error updating date');
+    }
+});
+
+// @route   POST api/reports/reminders/send-bulk
+router.post('/reminders/send-bulk', auth, hasPermission('reminders'), async (req, res) => {
+    const { orderIds } = req.body;
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+        return res.status(400).json({ message: 'No order IDs provided' });
+    }
+
+    const { sendOrderReminder } = require('../lib/reminderUtils');
+    const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
+
+    let sentCount = 0;
+    let errors = [];
+
+    for (const id of orderIds) {
+        try {
+            await sendOrderReminder(req.db, id, req.slug, config);
+            sentCount++;
+        } catch (err) {
+            console.error(`Error sending bulk reminder for #${id}:`, err.message);
+            errors.push({ id, message: err.message });
+        }
+    }
+
+    res.json({
+        message: `Se enviaron ${sentCount} recordatorios correctamente`,
+        sentCount,
+        errors
+    });
+});
 
 module.exports = router;

@@ -4,14 +4,14 @@ const bcrypt = require('bcrypt');
 // db is injected per-request via req.db (tenant middleware)
 // Each route reads db from req.db
 function getDb(req) { return req.db; }
-const { auth, isAdmin } = require('../middleware/auth');
+const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 
 // @route   GET api/users
-router.get('/', auth, (req, res) => {
+router.get('/', auth, hasPermission('manage_users'), (req, res) => {
     try {
         // Hide the master 'admin' user from the list
         const users = req.db.prepare(`
-            SELECT u.id, u.username, r.name as role_name, u.role_id, u.client_id
+            SELECT u.id, u.username, u.first_name, u.last_name, r.name as role_name, u.role_id, u.client_id
             FROM users u
             LEFT JOIN roles r ON u.role_id = r.id
             WHERE u.client_id IS NULL AND u.username != 'admin'
@@ -23,17 +23,9 @@ router.get('/', auth, (req, res) => {
 });
 
 // @route   POST api/users
-router.post('/', auth, async (req, res) => {
-    // Superuser or Admin or user with manage_users permission
-    const isElevated = req.user.isSuperuser ||
-        (req.user.role && req.user.role.toLowerCase() === 'admin') ||
-        (req.user.permissions && req.user.permissions.includes('manage_users'));
+router.post('/', auth, hasPermission('manage_users'), async (req, res) => {
 
-    if (!isElevated) {
-        return res.status(403).json({ message: 'No tienes permiso para crear usuarios' });
-    }
-
-    const { username, password, role_id } = req.body;
+    const { username, password, role_id, first_name, last_name } = req.body;
     if (!username || !password || !role_id) {
         return res.status(400).json({ message: 'Todos los campos son obligatorios' });
     }
@@ -66,8 +58,8 @@ router.post('/', auth, async (req, res) => {
         else if (roleName === 'mecánico' || roleName === 'mechanic') legacyRole = 'mechanic';
         else if (roleName === 'cliente' || roleName === 'client') legacyRole = 'client';
 
-        const result = req.db.prepare('INSERT INTO users (username, password, role_id, role) VALUES (?, ?, ?, ?)').run(
-            username, hashedPassword, normalizedRoleId, legacyRole
+        const result = req.db.prepare('INSERT INTO users (username, password, first_name, last_name, role_id, role) VALUES (?, ?, ?, ?, ?, ?)').run(
+            username, hashedPassword, first_name || null, last_name || null, normalizedRoleId, legacyRole
         );
         res.json({ id: result.lastInsertRowid, username, role_id: normalizedRoleId });
     } catch (err) {
@@ -77,16 +69,9 @@ router.post('/', auth, async (req, res) => {
 });
 
 // @route   PUT api/users/:id
-router.put('/:id', auth, async (req, res) => {
-    const isElevated = req.user.isSuperuser ||
-        (req.user.role && req.user.role.toLowerCase() === 'admin') ||
-        (req.user.permissions && req.user.permissions.includes('manage_users'));
+router.put('/:id', auth, hasPermission('manage_users'), async (req, res) => {
 
-    if (!isElevated) {
-        return res.status(403).json({ message: 'No tienes permiso para editar usuarios' });
-    }
-
-    const { role_id, username, password } = req.body;
+    const { role_id, username, password, first_name, last_name } = req.body;
     try {
         const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
         if (!user) return res.status(404).json({ message: 'Usuario no encontrado' });
@@ -112,8 +97,14 @@ router.put('/:id', auth, async (req, res) => {
         else if (roleName === 'mecánico' || roleName === 'mechanic') legacyRole = 'mechanic';
         else if (roleName === 'cliente' || roleName === 'client') legacyRole = 'client';
 
-        let query = 'UPDATE users SET role_id = ?, username = ?, role = ?';
-        let params = [role_id || user.role_id, username || user.username, legacyRole];
+        let query = 'UPDATE users SET role_id = ?, username = ?, first_name = ?, last_name = ?, role = ?';
+        let params = [
+            role_id || user.role_id,
+            username || user.username,
+            first_name !== undefined ? first_name : user.first_name,
+            last_name !== undefined ? last_name : user.last_name,
+            legacyRole
+        ];
 
         if (password) {
             const hashedPassword = await bcrypt.hash(password, 10);
@@ -133,11 +124,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // @route   DELETE api/users/:id
-router.delete('/:id', auth, (req, res) => {
-    const isElevated = req.user.isSuperuser ||
-        (req.user.role && req.user.role.toLowerCase() === 'admin') ||
-        (req.user.permissions && req.user.permissions.includes('manage_users'));
-    if (!isElevated) return res.status(403).json({ message: 'No tienes permiso para eliminar usuarios' });
+router.delete('/:id', auth, hasPermission('manage_users'), (req, res) => {
 
     try {
         const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
@@ -145,6 +132,13 @@ router.delete('/:id', auth, (req, res) => {
 
         if (user.username === 'admin') {
             return res.status(403).json({ message: 'El usuario admin principal no se puede eliminar' });
+        }
+
+        const isAdminUser = req.user.isSuperuser || (req.user.role && req.user.role.toLowerCase() === 'admin');
+        const targetRole = req.db.prepare('SELECT name FROM roles WHERE id = ?').get(user.role_id);
+
+        if (targetRole && targetRole.name.toLowerCase() === 'admin' && !isAdminUser) {
+            return res.status(403).json({ message: 'Solo un Administrador puede eliminar a otro Administrador' });
         }
 
         req.db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);

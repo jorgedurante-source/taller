@@ -88,8 +88,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const hasPermission = (permission: string) => {
         if (!user) return false;
         if (user.isSuperuser) return true;
-        if (user.role && user.role.toLowerCase() === 'admin') return true;
-        return user.permissions.includes(permission);
+        return Array.isArray(user.permissions) && user.permissions.includes(permission);
     };
 
     return (

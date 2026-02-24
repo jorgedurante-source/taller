@@ -117,13 +117,13 @@ export default function IncomePage() {
     // Historical Breakdown
     const histLabor = summary?.historicalStats?.labor_total || 0;
     const histParts = summary?.historicalStats?.parts_total || 0;
-    const histPartsProfit = histParts * (partsProfitPercentage / 100);
+    const histPartsProfit = summary?.historicalStats?.parts_profit_total || 0;
     const totalHistoricalIncome = histLabor + histPartsProfit;
 
     // Monthly Breakdown
     const monthLabor = summary?.monthlyStats?.labor_total || 0;
     const monthParts = summary?.monthlyStats?.parts_total || 0;
-    const monthPartsProfit = monthParts * (partsProfitPercentage / 100);
+    const monthPartsProfit = summary?.monthlyStats?.parts_profit_total || 0;
     const totalMonthlyIncome = monthLabor + monthPartsProfit;
 
     const avgIncome = totalHistoricalIncome / (summary?.incomeByMonth?.length || 1);
@@ -293,7 +293,7 @@ export default function IncomePage() {
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={summary?.incomeByMonth.slice().reverse().map((m: any) => ({
                                         ...m,
-                                        total_calculated: (m.labor_income || 0) + ((m.parts_price || 0) * (partsProfitPercentage / 100))
+                                        total_calculated: (m.labor_income || 0) + (m.parts_profit || 0)
                                     }))} margin={{ left: 0, right: 0 }}>
                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                         <XAxis

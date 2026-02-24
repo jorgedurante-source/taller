@@ -47,7 +47,12 @@ const hasPermission = (permission) => {
     return (req, res, next) => {
         // Superuser bypasses all individual permissions
         if (req.user && (req.user.isSuperuser || (req.user.permissions && req.user.permissions.includes(permission)))) {
-            next();
+            // Even if the user has the permission, check if the module is enabled globally for this tenant
+            if (req.user.isSuperuser || (req.enabledModules && req.enabledModules.includes(permission))) {
+                next();
+            } else {
+                res.status(403).json({ message: 'Módulo no habilitado' });
+            }
         } else {
             res.status(403).json({ message: `Access denied: Requires permission ${permission}` });
         }

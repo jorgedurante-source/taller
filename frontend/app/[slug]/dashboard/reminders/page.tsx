@@ -16,16 +16,37 @@ import {
     Search,
     History,
     AlertCircle,
-    Gauge
+    Gauge,
+    Edit,
+    Send,
+    RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
+import { useNotification } from '@/lib/notification';
+import { useAuth } from '@/lib/auth';
 
 export default function RemindersPage() {
     const { slug } = useSlug();
+    const { hasPermission } = useAuth();
     const [reminders, setReminders] = useState<any[]>([]);
+    const { notify } = useNotification();
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('today');
     const [search, setSearch] = useState('');
+    const [selectedIds, setSelectedIds] = useState<number[]>([]);
+    const [sendingBulk, setSendingBulk] = useState(false);
+    const [editingDateId, setEditingDateId] = useState<number | null>(null);
+    const [newDate, setNewDate] = useState('');
+
+    if (!hasPermission('reminders')) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
+                <Bell size={48} className="mb-4 opacity-20" />
+                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
+                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+            </div>
+        );
+    }
 
     const fetchReminders = async () => {
         setLoading(true);
@@ -41,19 +62,76 @@ export default function RemindersPage() {
 
     useEffect(() => {
         fetchReminders();
+        setSelectedIds([]);
     }, [activeTab]);
 
     const handleUpdateStatus = async (orderId: number, status: string) => {
         try {
             await api.put(`/orders/${orderId}/reminder-status`, { status });
             fetchReminders();
+            notify('success', 'Recordatorio actualizado');
         } catch (err) {
-            alert('Error al actualizar recordatorio');
+            notify('error', 'Error al actualizar recordatorio');
+        }
+    };
+
+    const handleUpdateDate = async (orderId: number) => {
+        if (!newDate) return;
+        try {
+            await api.patch(`/reports/reminders/${orderId}/date`, { date: newDate });
+            setEditingDateId(null);
+            fetchReminders();
+            notify('success', 'Fecha actualizada');
+        } catch (err) {
+            notify('error', 'Error al actualizar fecha');
+        }
+    };
+
+    const handleBulkSend = async () => {
+        if (selectedIds.length === 0) return;
+        if (!confirm(`¿Desea enviar ${selectedIds.length} recordatorios ahora?`)) return;
+
+        setSendingBulk(true);
+        try {
+            const res = await api.post('/reports/reminders/send-bulk', { orderIds: selectedIds });
+            notify('success', res.data.message);
+            setSelectedIds([]);
+            fetchReminders();
+        } catch (err) {
+            notify('error', 'Error al enviar recordatorios bulk');
+        } finally {
+            setSendingBulk(false);
+        }
+    };
+
+    const toggleSelect = (id: number) => {
+        setSelectedIds(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.length === filteredReminders.length) {
+            setSelectedIds([]);
+        } else {
+            setSelectedIds(filteredReminders.map(r => r.order_id));
         }
     };
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
+        if (!dateStr) return '-';
+
+        let date;
+        if (dateStr.includes(' ') || dateStr.includes('T')) {
+            // It's a full datetime, replace space with T if needed for better browser compatibility
+            date = new Date(dateStr.replace(' ', 'T'));
+        } else {
+            // It's just a date YYYY-MM-DD, force local time
+            date = new Date(`${dateStr}T00:00:00`);
+        }
+
+        if (isNaN(date.getTime())) return 'Fecha inválida';
+
         return date.toLocaleDateString('es-AR', {
             day: '2-digit',
             month: '2-digit',
@@ -62,8 +140,9 @@ export default function RemindersPage() {
     };
 
     const isToday = (dateStr: string) => {
+        if (!dateStr) return false;
         const today = new Date();
-        const date = new Date(dateStr);
+        const date = new Date(dateStr.includes('T') ? dateStr : `${dateStr}T00:00:00`);
         return today.toDateString() === date.toDateString();
     };
 
@@ -108,21 +187,38 @@ export default function RemindersPage() {
                 </div>
             </header>
 
-            {/* Tabs Navigation */}
-            <div className="flex flex-wrap gap-2">
-                {tabs.map((tab) => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === tab.id
-                            ? `bg-slate-900 text-white shadow-lg shadow-slate-200`
-                            : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
-                            }`}
-                    >
-                        {tab.icon}
-                        {tab.label}
-                    </button>
-                ))}
+            {/* Tabs & Bulk Actions */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="flex flex-wrap gap-2">
+                    {tabs.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === tab.id
+                                ? `bg-slate-900 text-white shadow-lg shadow-slate-200`
+                                : 'bg-white border border-slate-100 text-slate-500 hover:bg-slate-50'
+                                }`}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+
+                {selectedIds.length > 0 && (
+                    <div className="flex items-center gap-3 bg-blue-600 text-white px-6 py-3 rounded-[2rem] shadow-xl animate-in slide-in-from-right duration-300">
+                        <span className="text-[10px] font-black uppercase tracking-widest">{selectedIds.length} seleccionados</span>
+                        <div className="w-[1px] h-4 bg-white/20" />
+                        <button
+                            onClick={handleBulkSend}
+                            disabled={sendingBulk}
+                            className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest hover:text-blue-100 transition-colors disabled:opacity-50"
+                        >
+                            {sendingBulk ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+                            Enviar Ahora
+                        </button>
+                    </div>
+                )}
             </div>
 
             <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
@@ -130,6 +226,14 @@ export default function RemindersPage() {
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/50 border-b border-slate-100">
+                                <th className="px-6 py-5 w-10">
+                                    <input
+                                        type="checkbox"
+                                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                        checked={selectedIds.length === filteredReminders.length && filteredReminders.length > 0}
+                                        onChange={toggleSelectAll}
+                                    />
+                                </th>
                                 <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">{activeTab === 'sent' ? 'Enviado el' : 'Recordatorio'}</th>
                                 <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</th>
                                 <th className="px-6 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Vehículo</th>
@@ -141,14 +245,14 @@ export default function RemindersPage() {
                         <tbody className="divide-y divide-slate-50">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-20 text-center">
+                                    <td colSpan={7} className="px-6 py-20 text-center">
                                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
                                         <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Actualizando lista...</p>
                                     </td>
                                 </tr>
                             ) : filteredReminders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="px-6 py-20 text-center">
+                                    <td colSpan={7} className="px-6 py-20 text-center">
                                         <AlertCircle className="mx-auto text-slate-200 mb-4" size={40} />
                                         <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">No hay recordatorios en esta sección</p>
                                     </td>
@@ -157,14 +261,54 @@ export default function RemindersPage() {
                                 filteredReminders.map((r) => (
                                     <tr
                                         key={r.order_id}
-                                        className={`group hover:bg-slate-50/80 transition-colors ${isToday(r.reminder_at) && activeTab === 'today' ? 'bg-blue-50/30' : ''}`}
+                                        className={`group hover:bg-slate-50/80 transition-colors ${selectedIds.includes(r.order_id) ? 'bg-blue-50/50' : ''} ${isToday(r.reminder_at) && activeTab === 'today' ? 'bg-blue-50/30' : ''}`}
                                     >
+                                        <td className="px-6 py-6">
+                                            <input
+                                                type="checkbox"
+                                                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                checked={selectedIds.includes(r.order_id)}
+                                                onChange={() => toggleSelect(r.order_id)}
+                                            />
+                                        </td>
                                         <td className="px-6 py-6 whitespace-nowrap">
                                             <div className="flex items-center gap-2">
                                                 <div className={`w-1.5 h-1.5 rounded-full ${isToday(r.reminder_at) ? 'bg-blue-600 animate-pulse' : 'bg-slate-300'}`} />
-                                                <span className={`font-black italic text-sm ${isToday(r.reminder_at) ? 'text-blue-600' : 'text-slate-900'}`}>
-                                                    {activeTab === 'sent' ? formatDate(r.reminder_sent_at) : formatDate(r.reminder_at)}
-                                                </span>
+                                                {editingDateId === r.order_id ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <input
+                                                            type="date"
+                                                            className="text-xs bg-white border rounded px-2 py-1 outline-none focus:ring-1 focus:ring-blue-500"
+                                                            value={newDate}
+                                                            onChange={(e) => setNewDate(e.target.value)}
+                                                        />
+                                                        <button onClick={() => handleUpdateDate(r.order_id)} className="text-emerald-500 hover:text-emerald-700">
+                                                            <CheckCircle2 size={16} />
+                                                        </button>
+                                                        <button onClick={() => setEditingDateId(null)} className="text-slate-400 hover:text-slate-600">
+                                                            <AlertCircle size={16} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex items-center gap-2 group/date">
+                                                        <span className={`font-black italic text-sm ${isToday(r.reminder_at) ? 'text-blue-600' : 'text-slate-900'}`}>
+                                                            {activeTab === 'sent' ? formatDate(r.reminder_sent_at) : formatDate(r.reminder_at)}
+                                                        </span>
+                                                        {(activeTab === 'today' || activeTab === 'upcoming') && (
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingDateId(r.order_id);
+                                                                    const d = new Date();
+                                                                    const localDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                                                                    setNewDate(localDate);
+                                                                }}
+                                                                className="opacity-0 group-hover/date:opacity-100 p-1 text-slate-400 hover:text-blue-600 transition-all"
+                                                            >
+                                                                <Edit size={12} />
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-6 font-black text-slate-900 uppercase text-xs">

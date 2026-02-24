@@ -25,6 +25,7 @@ import {
     CircleSlash,
     ArrowRight,
     X,
+    Check,
     Share2,
     Copy,
     ExternalLink
@@ -32,6 +33,7 @@ import {
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { useSlug } from '@/lib/slug';
+import { useNotification } from '@/lib/notification';
 
 export default function OrderDetailsPage() {
     const { slug } = useSlug();
@@ -39,6 +41,7 @@ export default function OrderDetailsPage() {
     const router = useRouter();
     const { hasPermission } = useAuth();
     const canSeeIncome = hasPermission('income');
+    const { notify } = useNotification();
 
     const [order, setOrder] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -49,7 +52,12 @@ export default function OrderDetailsPage() {
     const [showItemsModal, setShowItemsModal] = useState(false);
     const [sendingEmail, setSendingEmail] = useState(false);
     const [catalog, setCatalog] = useState<any[]>([]);
-    const [newItems, setNewItems] = useState([{ description: '', labor_price: '0', parts_price: '0', service_id: null }]);
+    const [config, setConfig] = useState<any>(null);
+    const [newItems, setNewItems] = useState([{ description: '', labor_price: '0', parts_price: '0', parts_profit: '0', service_id: null }]);
+
+    // Inline edit state
+    const [editingItemId, setEditingItemId] = useState<number | null>(null);
+    const [editItemData, setEditItemData] = useState<any>(null);
 
     // Payment state
     const [paymentStatus, setPaymentStatus] = useState('sin_cobrar');
@@ -58,12 +66,16 @@ export default function OrderDetailsPage() {
 
     const fetchOrder = useCallback(async () => {
         try {
-            const res = await api.get(`/orders/${params.id}`);
-            setOrder(res.data);
-            setNewStatus(res.data.status);
-            setPaymentStatus(res.data.payment_status || 'sin_cobrar');
-            setPaymentAmount(res.data.payment_amount || 0);
-            setReminderDays(res.data.reminder_days ? String(res.data.reminder_days) : '');
+            const [orderRes, configRes] = await Promise.all([
+                api.get(`/orders/${params.id}`),
+                api.get('/config')
+            ]);
+            setOrder(orderRes.data);
+            setConfig(configRes.data || {});
+            setNewStatus(orderRes.data.status);
+            setPaymentStatus(orderRes.data.payment_status || 'sin_cobrar');
+            setPaymentAmount(orderRes.data.payment_amount || 0);
+            setReminderDays(orderRes.data.reminder_days ? String(orderRes.data.reminder_days) : '');
         } catch (err) {
             console.error('Error fetching order', err);
         } finally {
@@ -96,17 +108,49 @@ export default function OrderDetailsPage() {
             setStatusNotes('');
             setReminderDays('');
             fetchOrder();
+            notify('success', 'Estado actualizado correctamente');
         } catch (err: any) {
-            alert('Error al actualizar estado: ' + (err.response?.data?.message || err.message));
+            notify('error', 'Error al actualizar estado: ' + (err.response?.data?.message || err.message));
         } finally {
             setUpdating(false);
+        }
+    };
+
+    const handleEditItemChange = (field: string, value: string) => {
+        const updated = { ...editItemData, [field]: value };
+        if (field === 'parts_price') {
+            const price = parseFloat(value) || 0;
+            const percentage = parseFloat(config?.parts_profit_percentage) || 0;
+            if (percentage > 0) {
+                updated.parts_profit = Math.round(price * (percentage / 100)).toString();
+            }
+        }
+        setEditItemData(updated);
+    };
+
+    const handleSaveEditItem = async () => {
+        if (!editItemData) return;
+        try {
+            await api.put(`/orders/items/${editingItemId}`, {
+                description: editItemData.description,
+                labor_price: editItemData.labor_price,
+                parts_price: editItemData.parts_price,
+                parts_profit: editItemData.parts_profit
+            });
+            fetchOrder();
+            notify('success', 'Item actualizado');
+            setEditingItemId(null);
+            setEditItemData(null);
+        } catch (err: any) {
+            console.error('Error updating item', err);
+            notify('error', 'Error al actualizar ítem: ' + (err.response?.data?.message || err.message));
         }
     };
 
     const copyPublicLink = () => {
         const url = `${window.location.origin}/${slug}/o/${order.share_token}`;
         navigator.clipboard.writeText(url);
-        alert('Enlace de seguimiento copiado al portapapeles');
+        notify('success', 'Enlace de seguimiento copiado');
     };
 
     const handlePaymentUpdate = async () => {
@@ -117,8 +161,9 @@ export default function OrderDetailsPage() {
                 payment_amount: paymentAmount
             });
             fetchOrder();
+            notify('success', 'Información de cobro actualizada');
         } catch (err: any) {
-            alert('Error al actualizar cobro: ' + (err.response?.data?.message || err.message));
+            notify('error', 'Error al actualizar cobro: ' + (err.response?.data?.message || err.message));
         } finally {
             setSavingPayment(false);
         }
@@ -128,10 +173,11 @@ export default function OrderDetailsPage() {
         try {
             await api.post(`/orders/${order.id}/items`, { items: newItems });
             setShowItemsModal(false);
-            setNewItems([{ description: '', labor_price: '0', parts_price: '0', service_id: null }]);
+            setNewItems([{ description: '', labor_price: '0', parts_price: '0', parts_profit: '0', service_id: null }]);
             fetchOrder();
+            notify('success', 'Items agregados a la orden');
         } catch (err) {
-            alert('Error al agregar items');
+            notify('error', 'Error al agregar items');
         }
     };
 
@@ -147,6 +193,13 @@ export default function OrderDetailsPage() {
             };
         } else {
             (updated[index] as any)[field] = value;
+            if (field === 'parts_price') {
+                const price = parseFloat(value) || 0;
+                const percentage = parseFloat(config?.parts_profit_percentage) || 0;
+                if (percentage > 0) {
+                    (updated[index] as any).parts_profit = Math.round(price * (percentage / 100)).toString();
+                }
+            }
         }
         setNewItems(updated);
     };
@@ -162,7 +215,7 @@ export default function OrderDetailsPage() {
             link.click();
             link.remove();
         } catch (err) {
-            alert('Error al generar PDF');
+            notify('error', 'Error al generar PDF');
         }
     };
 
@@ -170,9 +223,9 @@ export default function OrderDetailsPage() {
         setSendingEmail(true);
         try {
             await api.post(`/orders/${order.id}/send-email`);
-            alert('Email enviado correctamente');
+            notify('success', 'Email enviado correctamente');
         } catch (err) {
-            alert('Error al enviar email');
+            notify('error', 'Error al enviar email');
         } finally {
             setSendingEmail(false);
         }
@@ -231,7 +284,7 @@ export default function OrderDetailsPage() {
                                 </button>
                                 <button
                                     className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2"
-                                    onClick={() => alert('Próximamente: Notificación WA automática')}
+                                    onClick={() => notify('info', 'Próximamente: Notificación WA automática')}
                                 >
                                     <MessageSquare size={14} /> Notificar WA
                                 </button>
@@ -300,63 +353,131 @@ export default function OrderDetailsPage() {
                             <table className="w-full text-left">
                                 <thead className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
                                     <tr>
-                                        <th className="px-8 py-4">Descripción</th>
-                                        <th className="px-8 py-4 text-right">Mano de Obra</th>
-                                        <th className="px-8 py-4 text-right">Repuestos</th>
-                                        <th className="px-8 py-4 text-right">Subtotal</th>
-                                        <th className="px-8 py-4 text-right">Acciones</th>
+                                        <th className="px-8 py-4 whitespace-nowrap">Descripción</th>
+                                        <th className="px-8 py-4 text-right whitespace-nowrap">Mano de Obra</th>
+                                        <th className="px-8 py-4 text-right whitespace-nowrap">Repuestos</th>
+                                        <th className="px-8 py-4 text-right whitespace-nowrap">Gan. Repuestos</th>
+                                        <th className="px-8 py-4 text-right whitespace-nowrap">Subtotal</th>
+                                        <th className="px-8 py-4 text-right whitespace-nowrap">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {order.items.map((item: any) => (
-                                        <tr key={item.id} className="group hover:bg-slate-50 transition-colors">
-                                            <td className="px-8 py-6">
-                                                <p className="font-bold text-slate-800">{item.description}</p>
-                                            </td>
-                                            <td className="px-8 py-6 font-mono font-bold text-slate-500">${item.labor_price?.toLocaleString()}</td>
-                                            <td className="px-8 py-6 font-mono font-bold text-slate-500">${item.parts_price?.toLocaleString()}</td>
-                                            <td className="px-8 py-6 text-right text-slate-900 font-black">${((item.labor_price || 0) + (item.parts_price || 0)).toLocaleString()}</td>
-                                            <td className="px-8 py-6 text-right">
-                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                                    <button
-                                                        onClick={async () => {
-                                                            const desc = prompt('Nueva descripción:', item.description);
-                                                            const labor = prompt('Nueva mano de obra:', item.labor_price);
-                                                            const parts = prompt('Nuevos repuestos:', item.parts_price);
-                                                            if (desc !== null) {
-                                                                await api.put(`/orders/items/${item.id}`, { description: desc, labor_price: labor, parts_price: parts });
-                                                                fetchOrder();
-                                                            }
-                                                        }}
-                                                        className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                                                    >
-                                                        <Pencil size={18} />
-                                                    </button>
-                                                    <button
-                                                        onClick={async () => {
-                                                            if (confirm('¿Eliminar este item?')) {
-                                                                await api.delete(`/orders/items/${item.id}`);
-                                                                fetchOrder();
-                                                            }
-                                                        }}
-                                                        className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-                                                    >
-                                                        <Trash2 size={18} />
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {order.items.map((item: any) => {
+                                        const isEditing = editingItemId === item.id;
+                                        return (
+                                            <tr key={item.id} className="group hover:bg-slate-50 transition-colors">
+                                                {isEditing ? (
+                                                    <>
+                                                        <td className="px-8 py-4">
+                                                            <input
+                                                                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white font-bold text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                value={editItemData.description}
+                                                                onChange={(e) => handleEditItemChange('description', e.target.value)}
+                                                                placeholder="Descripción"
+                                                            />
+                                                        </td>
+                                                        <td className="px-8 py-4">
+                                                            <input
+                                                                type="number"
+                                                                className="w-full text-right px-3 py-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-sm text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                value={editItemData.labor_price}
+                                                                onChange={(e) => handleEditItemChange('labor_price', e.target.value)}
+                                                                placeholder="0"
+                                                            />
+                                                        </td>
+                                                        <td className="px-8 py-4">
+                                                            <input
+                                                                type="number"
+                                                                className="w-full text-right px-3 py-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-sm text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                value={editItemData.parts_price}
+                                                                onChange={(e) => handleEditItemChange('parts_price', e.target.value)}
+                                                                placeholder="0"
+                                                            />
+                                                        </td>
+                                                        <td className="px-8 py-4">
+                                                            <input
+                                                                type="number"
+                                                                className="w-full text-right px-3 py-2 rounded-lg border border-dashed border-slate-200 bg-slate-100 font-mono font-black text-sm text-emerald-500/80 focus:outline-none focus:border-blue-400"
+                                                                value={editItemData.parts_profit}
+                                                                onChange={(e) => handleEditItemChange('parts_profit', e.target.value)}
+                                                                placeholder="0"
+                                                            />
+                                                        </td>
+                                                        <td className="px-8 py-4 text-right text-slate-900 font-black whitespace-nowrap">
+                                                            ${((parseFloat(editItemData.labor_price) || 0) + (parseFloat(editItemData.parts_price) || 0)).toLocaleString()}
+                                                        </td>
+                                                        <td className="px-8 py-4 text-right">
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <button
+                                                                    onClick={handleSaveEditItem}
+                                                                    className="p-1.5 bg-blue-600 text-white rounded hover:bg-black transition-colors"
+                                                                    title="Guardar"
+                                                                >
+                                                                    <Check size={16} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingItemId(null);
+                                                                        setEditItemData(null);
+                                                                    }}
+                                                                    className="p-1.5 bg-slate-200 text-slate-500 rounded hover:bg-slate-300 transition-colors"
+                                                                    title="Cancelar"
+                                                                >
+                                                                    <X size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <td className="px-8 py-4">
+                                                            <p className="font-bold text-slate-800">{item.description}</p>
+                                                        </td>
+                                                        <td className="px-8 py-4 text-right font-mono font-bold text-slate-500">${item.labor_price?.toLocaleString()}</td>
+                                                        <td className="px-8 py-4 text-right font-mono font-bold text-slate-500">${item.parts_price?.toLocaleString()}</td>
+                                                        <td className="px-8 py-4 text-right font-mono font-black text-emerald-500/80">${item.parts_profit?.toLocaleString() || '0'}</td>
+                                                        <td className="px-8 py-4 text-right text-slate-900 font-black">${((item.labor_price || 0) + (item.parts_price || 0)).toLocaleString()}</td>
+                                                        <td className="px-8 py-4 text-right">
+                                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingItemId(item.id);
+                                                                        setEditItemData({ ...item });
+                                                                    }}
+                                                                    className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                                                                >
+                                                                    <Pencil size={18} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={async () => {
+                                                                        if (confirm('¿Eliminar este item?')) {
+                                                                            await api.delete(`/orders/items/${item.id}`);
+                                                                            fetchOrder();
+                                                                            notify('success', 'Item eliminado');
+                                                                        }
+                                                                    }}
+                                                                    className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                                                                >
+                                                                    <Trash2 size={18} />
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </>
+                                                )}
+                                            </tr>
+                                        );
+                                    })}
                                     {order.items?.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} className="px-8 py-10 text-center text-slate-400 italic font-bold">Sin items cargados</td>
+                                            <td colSpan={6} className="px-8 py-10 text-center text-slate-400 italic font-bold">Sin items cargados</td>
                                         </tr>
                                     )}
                                 </tbody>
                                 <tfoot className="bg-slate-50/50 border-t border-slate-100">
                                     <tr>
-                                        <td colSpan={3} className="px-8 py-6 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Estimado</td>
+                                        <td colSpan={4} className="px-8 py-6 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Estimado</td>
                                         <td className="px-8 py-6 text-right text-xl font-black text-blue-600 tracking-tighter">${totalOrder.toLocaleString()}</td>
+                                        <td></td>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -421,7 +542,7 @@ export default function OrderDetailsPage() {
                                     <option value="Entregado" className="text-slate-900">Entregado</option>
                                 </select>
                             </div>
-                            {newStatus === 'Entregado' && (
+                            {newStatus === 'Entregado' && hasPermission('reminders') && (
                                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                                     <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">Recordar en...</label>
                                     <select
@@ -441,7 +562,7 @@ export default function OrderDetailsPage() {
                                                         });
                                                         fetchOrder();
                                                     } catch (err) {
-                                                        alert('Error al guardar recordatorio');
+                                                        notify('error', 'Error al guardar recordatorio');
                                                     }
                                                 })();
                                             }
@@ -686,7 +807,7 @@ export default function OrderDetailsPage() {
                                             />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Mano de Obra</label>
                                             <input
@@ -705,6 +826,15 @@ export default function OrderDetailsPage() {
                                                 onChange={(e) => updateItem(index, 'parts_price', e.target.value)}
                                             />
                                         </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 italic">Ganancia Interna ($)</label>
+                                            <input
+                                                type="number"
+                                                className="w-full px-4 py-3 rounded-xl border border-dashed border-slate-200 bg-slate-100 font-bold text-sm text-slate-500"
+                                                value={item.parts_profit}
+                                                onChange={(e) => updateItem(index, 'parts_profit', e.target.value)}
+                                            />
+                                        </div>
                                     </div>
                                     {newItems.length > 1 && (
                                         <button
@@ -718,7 +848,7 @@ export default function OrderDetailsPage() {
                             ))}
 
                             <button
-                                onClick={() => setNewItems([...newItems, { description: '', labor_price: '0', parts_price: '0', service_id: null }])}
+                                onClick={() => setNewItems([...newItems, { description: '', labor_price: '0', parts_price: '0', parts_profit: '0', service_id: null }])}
                                 className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-[10px] uppercase tracking-widest hover:border-blue-400 hover:text-blue-600 transition-all"
                             >
                                 + Agregar otro Item

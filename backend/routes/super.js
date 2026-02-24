@@ -65,13 +65,20 @@ router.get('/workshops', superAuth, (req, res) => {
     try {
         const workshops = listTenants();
         const enriched = workshops.map(w => {
+            let enabledModules = [];
+            try {
+                enabledModules = JSON.parse(w.enabled_modules || '[]');
+            } catch (e) {
+                console.error(`[super] Error parsing modules for ${w.slug}:`, e.message);
+            }
+
             try {
                 const db = getDb(w.slug);
                 const orders = db.prepare("SELECT COUNT(*) as c FROM orders WHERE status != 'Entregado'").get();
                 const clients = db.prepare("SELECT COUNT(*) as c FROM clients").get();
-                return { ...w, active_orders: orders.c, total_clients: clients.c };
+                return { ...w, enabled_modules: enabledModules, active_orders: orders.c, total_clients: clients.c };
             } catch (e) {
-                return { ...w, active_orders: 0, total_clients: 0 };
+                return { ...w, enabled_modules: enabledModules, active_orders: 0, total_clients: 0 };
             }
         });
         res.json(enriched);
@@ -101,6 +108,12 @@ router.patch('/workshops/:slug', superAuth, (req, res) => {
         if (name) superDb.prepare("UPDATE workshops SET name = ? WHERE slug = ?").run(name, slug);
         if (status) superDb.prepare("UPDATE workshops SET status = ? WHERE slug = ?").run(status, slug);
         if (environment) superDb.prepare("UPDATE workshops SET environment = ? WHERE slug = ?").run(environment, slug);
+        if (req.body.enabled_modules) {
+            superDb.prepare("UPDATE workshops SET enabled_modules = ? WHERE slug = ?").run(
+                JSON.stringify(req.body.enabled_modules),
+                slug
+            );
+        }
         res.json({ message: 'Taller actualizado' });
     } catch (err) {
         res.status(500).send('Server error');
@@ -260,18 +273,24 @@ router.post('/impersonate/:slug', superAuth, (req, res) => {
     let permissions = [];
     try { permissions = JSON.parse(adminRole?.permissions || '[]'); } catch (e) { }
 
-    const workshop = superDb.prepare("SELECT api_token FROM workshops WHERE slug = ?").get(slug);
+    const workshop = superDb.prepare("SELECT api_token, enabled_modules FROM workshops WHERE slug = ?").get(slug);
+    let enabledModules = [];
+    try { enabledModules = JSON.parse(workshop?.enabled_modules || '[]'); } catch (e) { }
+
+    // Superusers get all enabled modules
+    const finalPermissions = enabledModules;
+
     const secret = workshop?.api_token || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
 
     const token = jwt.sign(
-        { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions, slug, isSuperuser: true },
+        { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions: enabledModules, slug, isSuperuser: true },
         secret,
         { expiresIn: '8h' }
     );
 
     res.json({
         token,
-        user: { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions, isSuperuser: true, slug }
+        user: { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions: finalPermissions, isSuperuser: true, slug }
     });
 });
 

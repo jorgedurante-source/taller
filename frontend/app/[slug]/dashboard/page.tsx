@@ -41,6 +41,24 @@ export default function DashboardPage() {
     const [loading, setLoading] = useState(true);
     const [showTotals, setShowTotals] = useState(true);
 
+    if (!hasPermission('dashboard')) {
+        return (
+            <div className="min-h-[70vh] bg-slate-900 rounded-[3rem] flex flex-col items-center justify-center text-center p-12 shadow-2xl border border-slate-800 animate-in fade-in zoom-in duration-500">
+                <div className="bg-blue-600/20 p-8 rounded-[2.5rem] mb-8 ring-1 ring-blue-500/30">
+                    <EyeOff size={64} className="text-blue-400" />
+                </div>
+                <h2 className="text-4xl font-black text-white uppercase italic tracking-tighter mb-4 placeholder:">Panel Restringido</h2>
+                <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-[11px] max-w-md mx-auto leading-loose opacity-70">
+                    Tu plan actual o el rol de tu usuario no tiene habilitado el módulo de estadísticas y Panel de Control.
+                </p>
+                <div className="mt-12 group cursor-pointer" onClick={() => window.location.reload()}>
+                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] group-hover:text-blue-400 transition-colors">Volver a intentar</p>
+                    <div className="h-[2px] w-12 bg-blue-600 mx-auto mt-2 group-hover:w-20 transition-all duration-500" />
+                </div>
+            </div>
+        );
+    }
+
     useEffect(() => {
         const savedPrivacy = localStorage.getItem('hide_income_totals');
         if (savedPrivacy === 'true') setShowTotals(false);

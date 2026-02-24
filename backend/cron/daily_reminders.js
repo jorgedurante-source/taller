@@ -67,61 +67,11 @@ async function processReminders() {
 
             if (dueReminders.length === 0) continue;
 
-            const workshopName = config.workshop_name || 'Nuestro Taller';
-            let template = db.prepare("SELECT * FROM templates WHERE name LIKE '%Seguimiento%' OR name LIKE '%Recordatorio%'").get();
-
-            if (!template) {
-                console.log(`[cron:${slug}] No reminder template found.`);
-                continue;
-            }
+            const { sendOrderReminder } = require('../lib/reminderUtils');
 
             for (const order of dueReminders) {
-                if (!order.email) continue;
-
-                const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
-                const trackingLink = `${siteUrl}/${slug}/o/${order.share_token}`;
-
-                const replacements = {
-                    'apodo': order.nickname || order.first_name || 'Cliente',
-                    'cliente': order.first_name || 'Cliente',
-                    'vehiculo': `${order.brand} ${order.model}`,
-                    'taller': workshopName,
-                    'orden_id': order.id,
-                    'link': trackingLink
-                };
-
-                let messageText = template.content;
-                let messageHtml = template.content.replace(/\n/g, '<br>');
-
-                Object.keys(replacements).forEach(key => {
-                    const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
-                    const value = String(replacements[key] || '');
-                    messageText = messageText.replace(regex, value);
-                    if (key === 'link') {
-                        messageHtml = messageHtml.replace(regex, `<a href="${value}" style="color: #2563eb; font-weight: bold; text-decoration: underline;">${value}</a>`);
-                    } else {
-                        messageHtml = messageHtml.replace(regex, value);
-                    }
-                });
-
-                let attachments = [];
-                if (template.include_pdf === 1) {
-                    const pdfBuffer = await generateOrderPDF(db, order.id);
-                    if (pdfBuffer) {
-                        attachments.push({ filename: `historial_${order.id}.pdf`, content: pdfBuffer });
-                    }
-                }
-
                 try {
-                    await sendEmail(db, order.email, `Recordatorio: Seguimiento de tu vehículo - ${workshopName}`, messageText, attachments, messageHtml);
-
-                    // Mark as sent
-                    db.prepare(`
-                        UPDATE orders 
-                        SET reminder_status = 'sent', reminder_sent_at = CURRENT_TIMESTAMP 
-                        WHERE id = ?
-                    `).run(order.id);
-
+                    await sendOrderReminder(db, order.id, slug, config);
                     console.log(`[cron:${slug}] Sent reminder for order #${order.id}`);
                 } catch (sendErr) {
                     console.error(`[cron:${slug}] Failed to send #${order.id}:`, sendErr.message);

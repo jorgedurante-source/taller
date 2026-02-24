@@ -52,6 +52,7 @@ addColumn('workshops', 'status', "TEXT DEFAULT 'active'");
 addColumn('workshops', 'api_token', 'TEXT');
 addColumn('workshops', 'logo_path', 'TEXT');
 addColumn('workshops', 'environment', "TEXT DEFAULT 'prod'");
+addColumn('workshops', 'enabled_modules', "TEXT DEFAULT '[\"dashboard\", \"clients\", \"vehicles\", \"orders\", \"income\", \"settings\", \"manage_users\", \"manage_roles\", \"reminders\"]'");
 
 // Ensure unique index for token
 try {

@@ -12,6 +12,10 @@ router.get('/', auth, (req, res) => {
         roles.forEach(r => {
             try {
                 r.permissions = JSON.parse(r.permissions);
+                // Filter permissions based on enabled modules
+                if (req.enabledModules) {
+                    r.permissions = r.permissions.filter(p => req.enabledModules.includes(p));
+                }
             } catch (e) {
                 r.permissions = [];
             }

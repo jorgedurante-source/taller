@@ -23,7 +23,7 @@ const templates = [
     },
     {
         name: 'Trabajo en Marcha',
-        content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [servicios]. Te avisamos en cuanto esté finalizado.',
+        content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [items]. Te avisamos en cuanto esté finalizado.',
         trigger_status: 'Aprobado',
         include_pdf: 0,
         send_email: 1,
@@ -47,7 +47,7 @@ const templates = [
     },
     {
         name: 'Seguimiento Preventivo',
-        content: 'Hola [apodo], hace unos meses realizamos el servicio de [servicios] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva y asegurar que todo siga funcionando perfecto. ¡Te esperamos!',
+        content: 'Hola [apodo], hace unos meses realizamos el servicio de [items] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva y asegurar que todo siga funcionando perfecto. ¡Te esperamos!',
         trigger_status: 'Recordatorio',
         include_pdf: 0,
         send_email: 1,

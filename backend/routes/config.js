@@ -33,7 +33,8 @@ router.get('/', (req, res) => {
             environment: workshop?.environment || 'prod',
             status: workshop?.status || 'active',
             workshop_name: workshop?.name || config.workshop_name, // Override with global name
-            logo_path: workshop?.logo_path || config.logo_path     // Override with global logo
+            logo_path: workshop?.logo_path || config.logo_path,     // Override with global logo
+            enabled_modules: req.enabledModules || []
         });
     } catch (err) {
         console.error(err);

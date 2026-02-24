@@ -17,10 +17,15 @@ function tenantMiddleware(req, res, next) {
 
     try {
         const superDb = require('../superDb');
-        const workshop = superDb.prepare("SELECT status, api_token FROM workshops WHERE slug = ?").get(slug);
+        const workshop = superDb.prepare("SELECT status, api_token, enabled_modules FROM workshops WHERE slug = ?").get(slug);
 
         if (workshop) {
             req.tenantSecret = workshop.api_token;
+            try {
+                req.enabledModules = JSON.parse(workshop.enabled_modules || '[]');
+            } catch (e) {
+                req.enabledModules = [];
+            }
         }
 
         if (workshop && workshop.status === 'inactive') {

@@ -5,6 +5,7 @@ import Footer from "@/components/layout/Footer";
 import { AuthProvider } from "@/lib/auth";
 import ThemeProvider from "@/lib/theme";
 import { ConfigProvider } from "@/lib/config";
+import { NotificationProvider } from "@/lib/notification";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -25,14 +26,16 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <ConfigProvider>
-          <AuthProvider>
-            <ThemeProvider>
-              <main className="flex-grow">
-                {children}
-              </main>
-              <Footer />
-            </ThemeProvider>
-          </AuthProvider>
+          <NotificationProvider>
+            <AuthProvider>
+              <ThemeProvider>
+                <main className="flex-grow">
+                  {children}
+                </main>
+                <Footer />
+              </ThemeProvider>
+            </AuthProvider>
+          </NotificationProvider>
         </ConfigProvider>
       </body>
     </html>

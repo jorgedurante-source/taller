@@ -24,11 +24,13 @@ import {
     Image as ImageIcon
 } from 'lucide-react';
 import Link from 'next/link';
+import { useNotification } from '@/lib/notification';
 
 export default function ClientDetailsPage() {
     const { slug } = useSlug();
     const params = useParams();
     const router = useRouter();
+    const { notify } = useNotification();
     const [client, setClient] = useState<any>(null);
     const [vehicles, setVehicles] = useState<any[]>([]);
     const [orders, setOrders] = useState<any[]>([]);
@@ -88,7 +90,7 @@ export default function ClientDetailsPage() {
             setNewVehicleData({ brand: '', model: '', plate: '', year: '', km: '' });
             fetchData();
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al agregar vehículo');
+            notify('error', err.response?.data?.message || 'Error al agregar vehículo');
         }
     };
 
@@ -98,7 +100,7 @@ export default function ClientDetailsPage() {
             await api.delete(`/clients/vehicles/${vid}`);
             fetchData();
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al eliminar vehículo');
+            notify('error', err.response?.data?.message || 'Error al eliminar vehículo');
         }
     };
 
@@ -114,10 +116,10 @@ export default function ClientDetailsPage() {
                 templateId: templateId
             });
 
-            alert('Mensaje enviado correctamente');
+            notify('success', 'Mensaje enviado correctamente');
             setShowManualSendModal(false);
         } catch (err) {
-            alert('Error al enviar el mensaje');
+            notify('error', 'Error al enviar el mensaje');
         }
     };
 
@@ -127,7 +129,7 @@ export default function ClientDetailsPage() {
             setShowEditModal(false);
             fetchData();
         } catch (err) {
-            alert('Error al actualizar cliente');
+            notify('error', 'Error al actualizar cliente');
         }
     };
 
@@ -136,9 +138,9 @@ export default function ClientDetailsPage() {
             await api.post(`/clients/${client.id}/password`, { password: newPassword });
             setShowPasswordModal(false);
             setNewPassword('');
-            alert('Contraseña actualizada correctamente');
+            notify('success', 'Contraseña actualizada correctamente');
         } catch (err) {
-            alert('Error al actualizar contraseña');
+            notify('error', 'Error al actualizar contraseña');
         }
     };
 
@@ -147,7 +149,7 @@ export default function ClientDetailsPage() {
             await api.put(`/clients/vehicles/${v.id}`, { ...v, status });
             fetchData();
         } catch (err) {
-            alert('Error al actualizar estado del vehículo');
+            notify('error', 'Error al actualizar estado del vehículo');
         }
     };
 
@@ -163,7 +165,7 @@ export default function ClientDetailsPage() {
             await api.post(`/clients/vehicles/${vid}/photo`, formData);
             fetchData();
         } catch (err) {
-            alert('Error al subir foto del vehículo');
+            notify('error', 'Error al subir foto del vehículo');
         } finally {
             setUploadingVid(null);
         }

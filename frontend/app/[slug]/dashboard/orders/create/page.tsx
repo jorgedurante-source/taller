@@ -17,6 +17,7 @@ import {
     CheckCircle2,
     ChevronLeft
 } from 'lucide-react';
+import { useNotification } from '@/lib/notification';
 
 export default function CreateOrderPage() {
     const { slug } = useSlug();
@@ -24,30 +25,34 @@ export default function CreateOrderPage() {
     const searchParams = useSearchParams();
     const preClientId = searchParams.get('clientId');
     const preVehicleId = searchParams.get('vehicleId');
+    const { notify } = useNotification();
 
     const [clients, setClients] = useState<any[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]);
     const [catalog, setCatalog] = useState<any[]>([]);
+    const [config, setConfig] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     // Selection state
     const [selectedClient, setSelectedClient] = useState<any>(null);
     const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
     const [items, setItems] = useState<any[]>([
-        { description: '', labor_price: '', parts_price: '', service_id: null }
+        { description: '', labor_price: '', parts_price: '', parts_profit: '', service_id: null }
     ]);
     const [description, setDescription] = useState('');
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [clientsRes, catalogRes] = await Promise.all([
+                const [clientsRes, catalogRes, configRes] = await Promise.all([
                     api.get('/clients'),
-                    api.get('/services')
+                    api.get('/services'),
+                    api.get('/config')
                 ]);
                 const allClients = clientsRes.data || [];
                 setClients(allClients);
                 setCatalog(catalogRes.data || []);
+                setConfig(configRes.data || {});
 
                 // Pre-select client and vehicle from query params
                 if (preClientId) {
@@ -102,7 +107,7 @@ export default function CreateOrderPage() {
     };
 
     const addItem = () => {
-        setItems([...items, { description: '', labor_price: '0', parts_price: '0', service_id: null }]);
+        setItems([...items, { description: '', labor_price: '0', parts_price: '0', parts_profit: '0', service_id: null }]);
     };
 
     const removeItem = (index: number) => {
@@ -114,6 +119,19 @@ export default function CreateOrderPage() {
     const updateItem = (index: number, field: string, value: any) => {
         const newItems = [...items];
         newItems[index][field] = value;
+
+        // Auto-calculate profit if parts_price changes
+        if (field === 'parts_price') {
+            const price = parseFloat(value) || 0;
+            const percentage = parseFloat(config?.parts_profit_percentage) || 0;
+            if (percentage > 0) {
+                // formula: parts_profit = price * (percentage / 100)
+                // but wait, usually profit is included in price. 
+                // USER said: "calculara con el % seteado de ganancia en repuestos"
+                // Usually it means: Profit = TotalParts * (Percentage/100)
+                newItems[index].parts_profit = Math.round(price * (percentage / 100)).toString();
+            }
+        }
 
         // If selecting from catalog
         if (field === 'service_id' && value) {
@@ -137,19 +155,20 @@ export default function CreateOrderPage() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedClient || !selectedVehicle) {
-            alert('Seleccioná un cliente y un vehículo');
+            notify('info', 'Seleccioná un cliente y un vehículo');
             return;
         }
         try {
-            await api.post('/orders', {
+            const res = await api.post('/orders', {
                 client_id: selectedClient.id,
                 vehicle_id: selectedVehicle.id,
                 description,
                 items
             });
-            router.push(`/${selectedClient.slug || slug}/dashboard/orders`);
+            notify('success', 'Orden creada correctamente');
+            router.push(`/${slug}/dashboard/orders/${res.data.id || ''}`);
         } catch (err) {
-            alert('Error al crear la orden');
+            notify('error', 'Error al crear la orden');
         }
     };
 
@@ -289,7 +308,7 @@ export default function CreateOrderPage() {
                     <div className="space-y-6">
                         {items.map((item, index) => (
                             <div key={index} className="grid grid-cols-1 lg:grid-cols-12 gap-5 p-6 bg-slate-50/50 rounded-[24px] border border-slate-100 group">
-                                <div className="lg:col-span-3 space-y-1">
+                                <div className="lg:col-span-2 space-y-1">
                                     <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Servicio Catálogo</label>
                                     <select
                                         className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold bg-white"
@@ -302,7 +321,7 @@ export default function CreateOrderPage() {
                                         ))}
                                     </select>
                                 </div>
-                                <div className="lg:col-span-4 space-y-1">
+                                <div className="lg:col-span-3 space-y-1">
                                     <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Descripción / Tarea</label>
                                     <input
                                         required
@@ -328,6 +347,16 @@ export default function CreateOrderPage() {
                                         className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold bg-white text-blue-600"
                                         value={item.parts_price}
                                         onChange={(e) => updateItem(index, 'parts_price', e.target.value)}
+                                    />
+                                </div>
+                                <div className="lg:col-span-2 space-y-1">
+                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Gan. Rep ($)</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-3 py-3 rounded-xl border border-dashed border-slate-200 text-sm font-bold bg-slate-100/50 text-slate-400 focus:text-blue-600 transition-colors"
+                                        title="Dato interno: Ganancia estimada por repuestos"
+                                        value={item.parts_profit}
+                                        onChange={(e) => updateItem(index, 'parts_profit', e.target.value)}
                                     />
                                 </div>
                                 <div className="lg:col-span-1 flex items-end justify-center pb-2">

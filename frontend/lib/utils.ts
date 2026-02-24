@@ -13,7 +13,18 @@ export function formatCurrency(amount: number) {
 }
 
 export function formatDate(dateString: string) {
-    return new Date(dateString).toLocaleDateString('es-AR', {
+    if (!dateString) return '-';
+
+    let date;
+    if (dateString.includes(' ') || dateString.includes('T')) {
+        date = new Date(dateString.replace(' ', 'T'));
+    } else {
+        date = new Date(`${dateString}T00:00:00`);
+    }
+
+    if (isNaN(date.getTime())) return '-';
+
+    return date.toLocaleDateString('es-AR', {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',

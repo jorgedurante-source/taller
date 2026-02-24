@@ -5,6 +5,7 @@ import React, { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import Link from 'next/link';
 import { Plus, Search, User, Phone, Mail, X, Car, Hash, Calendar, ArrowRight, MapPin, Notebook } from 'lucide-react';
+import { useNotification } from '@/lib/notification';
 
 export default function ClientsPage() {
     const { slug } = useSlug();
@@ -12,6 +13,7 @@ export default function ClientsPage() {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [search, setSearch] = useState('');
+    const { notify } = useNotification();
 
     const [formData, setFormData] = useState({
         first_name: '',
@@ -57,6 +59,7 @@ export default function ClientsPage() {
             await api.post('/clients', payload);
             setShowModal(false);
             fetchClients();
+            notify('success', 'Cliente registrado exitosamente');
             // Reset form
             setFormData({
                 first_name: '', last_name: '', nickname: '', phone: '', email: '', address: '', notes: '',
@@ -64,7 +67,7 @@ export default function ClientsPage() {
                 vehicle: { plate: '', brand: '', model: '', year: '', km: '' }
             });
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al crear el cliente');
+            notify('error', err.response?.data?.message || 'Error al crear el cliente');
         }
     };
 

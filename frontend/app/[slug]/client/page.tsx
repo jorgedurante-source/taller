@@ -21,12 +21,14 @@ import {
     Phone
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
+import { useNotification } from '@/lib/notification';
 
 export default function ClientDashboardPage() {
     const { clientUser, clientLogout, loading: authLoading } = useAuth();
     const [data, setData] = useState<any>(null);
     const [config, setConfig] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const { notify } = useNotification();
     const router = useRouter();
     const params = useParams();
     const slug = params?.slug as string;
@@ -79,15 +81,15 @@ export default function ClientDashboardPage() {
 
     const handleCreateOrder = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newOrder.vehicle_id) return alert('Seleccioná un vehículo');
+        if (!newOrder.vehicle_id) return notify('info', 'Seleccioná un vehículo');
         try {
             await clientApi.post('/client/orders', newOrder);
             setShowOrderModal(false);
             setNewOrder({ vehicle_id: '', description: '' });
             fetchPortalData();
-            alert('¡Turno solicitado! Te contactaremos a la brevedad.');
+            notify('success', '¡Turno solicitado! Te contactaremos a la brevedad.');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al solicitar turno');
+            notify('error', err.response?.data?.message || 'Error al solicitar turno');
         }
     };
 
@@ -98,8 +100,9 @@ export default function ClientDashboardPage() {
             setShowVehicleModal(false);
             setNewVehicle({ plate: '', brand: '', model: '', year: '', km: '' });
             fetchPortalData();
+            notify('success', 'Vehículo agregado correctamente');
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Error al agregar vehículo');
+            notify('error', err.response?.data?.message || 'Error al agregar vehículo');
         }
     };
 
@@ -116,7 +119,7 @@ export default function ClientDashboardPage() {
             link.remove();
         } catch (err) {
             console.error('Error downloading PDF:', err);
-            alert('Error al descargar el PDF');
+            notify('error', 'Error al descargar el PDF');
         }
     };
 
@@ -132,7 +135,7 @@ export default function ClientDashboardPage() {
             link.remove();
         } catch (err) {
             console.error('Error downloading History PDF:', err);
-            alert('Error al descargar el historial');
+            notify('error', 'Error al descargar el historial');
         }
     };
 
@@ -145,7 +148,7 @@ export default function ClientDashboardPage() {
             setSelectedOrderDetail(res.data);
         } catch (err) {
             console.error('Error fetching order detail', err);
-            alert('Error al cargar detalle de la orden');
+            notify('error', 'Error al cargar detalle de la orden');
             setShowOrderDetailModal(false);
         } finally {
             setLoadingOrderDetail(false);
