@@ -258,6 +258,7 @@ function initTenantDb(db, slug) {
     addColumn('orders', 'reminder_status', "TEXT DEFAULT 'pending'");
     addColumn('orders', 'reminder_sent_at', "DATETIME");
     addColumn('orders', 'share_token', "TEXT");
+    addColumn('orders', 'appointment_date', "DATETIME");
     addColumn('order_history', 'user_id', "INTEGER");
     addColumn('templates', 'send_whatsapp', "INTEGER DEFAULT 0");
     addColumn('templates', 'send_email', "INTEGER DEFAULT 1");
@@ -353,6 +354,14 @@ function initTenantDb(db, slug) {
                 include_pdf: 1,
                 send_email: 1,
                 send_whatsapp: 0
+            },
+            {
+                name: 'Turno Asignado',
+                content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos!\n\nSaludos,\n[usuario]',
+                trigger_status: 'En proceso',
+                include_pdf: 0,
+                send_email: 1,
+                send_whatsapp: 0
             }
         ];
 
@@ -375,6 +384,23 @@ function initTenantDb(db, slug) {
         `).run();
     } catch (e) {
         console.error(`[tenant:${slug}] Error migrating templates with [usuario] token:`, e.message);
+    }
+
+    // Migration to add 'Turno Asignado' template if missing
+    try {
+        const turnoTemplateExists = db.prepare("SELECT COUNT(*) as count FROM templates WHERE trigger_status = 'En proceso'").get().count;
+        if (turnoTemplateExists === 0) {
+            db.prepare(`
+                INSERT INTO templates (name, content, trigger_status, include_pdf, send_email, send_whatsapp) 
+                VALUES (?, ?, ?, 0, 1, 0)
+            `).run(
+                'Turno Asignado',
+                'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos!\n\nSaludos,\n[usuario]',
+                'En proceso'
+            );
+        }
+    } catch (e) {
+        console.error(`[tenant:${slug}] Error adding Turno Asignado template:`, e.message);
     }
 }
 

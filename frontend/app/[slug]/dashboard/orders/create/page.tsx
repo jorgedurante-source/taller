@@ -158,12 +158,21 @@ export default function CreateOrderPage() {
             notify('info', 'Seleccioná un cliente y un vehículo');
             return;
         }
+
+        const validItems = items.filter(i => i.description.trim() !== '' || i.labor_price !== '' || i.parts_price !== '');
+
+        const hasAppointments = config?.enabled_modules?.includes('appointments');
+        if (validItems.length === 0 && !hasAppointments) {
+            notify('error', 'Debés agregar al menos un ítem a la orden');
+            return;
+        }
+
         try {
             const res = await api.post('/orders', {
                 client_id: selectedClient.id,
                 vehicle_id: selectedVehicle.id,
                 description,
-                items
+                items: validItems
             });
             notify('success', 'Orden creada correctamente');
             router.push(`/${slug}/dashboard/orders/${res.data.id || ''}`);

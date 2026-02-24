@@ -816,7 +816,8 @@ export default function SuperAdminDashboard() {
                                     { key: 'settings', label: 'Configuración Interna' },
                                     { key: 'manage_users', label: 'Gestión de Usuarios' },
                                     { key: 'manage_roles', label: 'Gestión de Roles' },
-                                    { key: 'reminders', label: 'Seguimientos / Recordatorios' }
+                                    { key: 'reminders', label: 'Seguimientos / Recordatorios' },
+                                    { key: 'appointments', label: 'Turnos / Calendario' }
                                 ].map(module => {
                                     // Assume enabled_modules is an array, it might be a JSON string if not enriched properly but we enriched it
                                     const isEnabled = Array.isArray(showModulesModal.enabled_modules) && showModulesModal.enabled_modules.includes(module.key);

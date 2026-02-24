@@ -153,7 +153,7 @@ router.get('/:id', auth, hasPermission('orders'), (req, res) => {
 
 // @route   PUT api/orders/:id/status
 router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
-    const { status, notes, reminder_days } = req.body;
+    const { status, notes, reminder_days, appointment_date } = req.body;
     try {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
 
@@ -173,8 +173,16 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
             reminderAt = baseDate.toISOString().split('T')[0];
         }
 
-        req.db.prepare('UPDATE orders SET status = ?, modified_by_id = ?, updated_at = CURRENT_TIMESTAMP, reminder_at = ?, delivered_at = ?, reminder_days = ? WHERE id = ?')
-            .run(status, actingUserId, reminderAt, deliveredAt, reminder_days || null, req.params.id);
+        let queryArgs = [status, actingUserId, reminderAt, deliveredAt, reminder_days || null];
+        let dateQueryStr = '';
+        if (appointment_date !== undefined) {
+            dateQueryStr = ', appointment_date = ?';
+            queryArgs.push(appointment_date);
+        }
+        queryArgs.push(req.params.id);
+
+        req.db.prepare(`UPDATE orders SET status = ?, modified_by_id = ?, updated_at = CURRENT_TIMESTAMP, reminder_at = ?, delivered_at = ?, reminder_days = ? ${dateQueryStr} WHERE id = ?`)
+            .run(...queryArgs);
 
         // Log History
         let historyNotes = notes || `Cambio de estado a ${status}`;
@@ -219,6 +227,12 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
             const config = req.db.prepare('SELECT * FROM config LIMIT 1').get() || {};
             const workshopName = config.workshop_name || 'Nuestro Taller';
 
+            let appointmentDateFormatted = '---';
+            if (order.appointment_date) {
+                const d = new Date(order.appointment_date);
+                if (!isNaN(d)) appointmentDateFormatted = d.toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' });
+            }
+
             if (order && order.email && template.send_email === 1) {
                 let message = (template.content || '')
                     .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
@@ -229,6 +243,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                     .replace(/\[items\]/g, servicesStr || 'servicios realizados')
                     .replace(/\[km\]/g, order.km || '---')
                     .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
+                    .replace(/\[turno_fecha\]/g, appointmentDateFormatted)
                     .replace(/{orden_id}|\[orden_id\]/g, order.id);
 
                 let attachments = [];

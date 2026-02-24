@@ -21,7 +21,8 @@ import {
     ShieldCheck,
     ChevronDown,
     Building2,
-    Bell
+    Bell,
+    Calendar as CalendarIcon
 } from 'lucide-react';
 
 interface Workshop {
@@ -152,6 +153,7 @@ export default function DashboardLayout({
                             <NavItem href={`/${slug}/dashboard/orders/create`} icon={<Plus size={20} />} label="Nueva Orden" />
                         </>
                     )}
+                    {hasPermission('appointments') && <NavItem href={`/${slug}/dashboard/appointments`} icon={<CalendarIcon size={20} />} label="Turnos" />}
                     {hasPermission('income') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label="Ingresos" />}
                     {hasPermission('reminders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label="Recordatorios" />}
                     {hasPermission('settings') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label="Configuración" />}

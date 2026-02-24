@@ -28,6 +28,7 @@ import {
     Check,
     Share2,
     Copy,
+    Calendar as CalendarIcon,
     ExternalLink
 } from 'lucide-react';
 import Link from 'next/link';
@@ -49,6 +50,8 @@ export default function OrderDetailsPage() {
     const [statusNotes, setStatusNotes] = useState('');
     const [updating, setUpdating] = useState(false);
     const [reminderDays, setReminderDays] = useState('');
+    const [appointmentDate, setAppointmentDate] = useState('');
+    const [appointmentTime, setAppointmentTime] = useState('');
     const [showItemsModal, setShowItemsModal] = useState(false);
     const [sendingEmail, setSendingEmail] = useState(false);
     const [catalog, setCatalog] = useState<any[]>([]);
@@ -76,6 +79,13 @@ export default function OrderDetailsPage() {
             setPaymentStatus(orderRes.data.payment_status || 'sin_cobrar');
             setPaymentAmount(orderRes.data.payment_amount || 0);
             setReminderDays(orderRes.data.reminder_days ? String(orderRes.data.reminder_days) : '');
+            if (orderRes.data.appointment_date) {
+                const dateObj = new Date(orderRes.data.appointment_date);
+                if (!isNaN(dateObj.getTime())) {
+                    setAppointmentDate(orderRes.data.appointment_date.split('T')[0]);
+                    setAppointmentTime(dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                }
+            }
         } catch (err) {
             console.error('Error fetching order', err);
         } finally {
@@ -100,10 +110,16 @@ export default function OrderDetailsPage() {
     const handleStatusUpdate = async () => {
         setUpdating(true);
         try {
+            let finalAppointmentDate = null;
+            if (newStatus === 'En proceso' && appointmentDate && appointmentTime) {
+                finalAppointmentDate = `${appointmentDate}T${appointmentTime}:00`;
+            }
+
             await api.put(`/orders/${order.id}/status`, {
                 status: newStatus,
                 notes: statusNotes,
-                reminder_days: reminderDays || null
+                reminder_days: reminderDays || null,
+                appointment_date: finalAppointmentDate
             });
             setStatusNotes('');
             setReminderDays('');
@@ -590,6 +606,36 @@ export default function OrderDetailsPage() {
                                     </select>
                                 </div>
                             )}
+
+                            {newStatus === 'En proceso' && config?.enabled_modules?.includes('appointments') && (
+                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200 bg-white/5 p-4 rounded-xl border border-white/10">
+                                    <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1 flex items-center gap-2">
+                                        <CalendarIcon size={14} /> Asignar Turno al Cliente
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <span className="text-[9px] text-slate-400 font-bold uppercase ml-1">Fecha</span>
+                                            <input
+                                                type="date"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+                                                value={appointmentDate}
+                                                onChange={(e) => setAppointmentDate(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-[9px] text-slate-400 font-bold uppercase ml-1">Hora</span>
+                                            <input
+                                                type="time"
+                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+                                                value={appointmentTime}
+                                                onChange={(e) => setAppointmentTime(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-slate-400 font-medium">Al guardar, se le notificará al cliente automáticamente si la plantilla está activa.</p>
+                                </div>
+                            )}
+
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notas del Cambio</label>
                                 <textarea
