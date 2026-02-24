@@ -91,6 +91,9 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
             if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
                 console.warn('SMTP support is not fully configured. Email skipped.');
             } else if (order && order.email && template.send_email === 1) {
+                const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
+                const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
+
                 let message = template.content
                     .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
                     .replace(/\[cliente\]/g, order.first_name || 'Cliente')
@@ -98,6 +101,7 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
                     .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
                     .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
                     .replace(/\[turno_fecha\]/g, '---')
+                    .replace(/\[link\]/g, trackingLink)
                     .replace(/{orden_id}|\[orden_id\]/g, orderId);
 
                 let attachments = [];
@@ -238,6 +242,9 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
             }
 
             if (order && order.email && template.send_email === 1) {
+                const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
+                const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
+
                 let message = (template.content || '')
                     .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
                     .replace(/\[cliente\]/g, order.first_name || 'Cliente')
@@ -248,6 +255,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                     .replace(/\[km\]/g, order.km || '---')
                     .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
                     .replace(/\[turno_fecha\]/g, appointmentDateFormatted)
+                    .replace(/\[link\]/g, trackingLink)
                     .replace(/{orden_id}|\[orden_id\]/g, order.id);
 
                 let attachments = [];

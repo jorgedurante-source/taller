@@ -120,7 +120,7 @@ function reseedTemplates(db) {
     const defaultTemplates = [
         {
             name: 'Recepción de Vehículo',
-            content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id].',
+            content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id]. Seguí el estado acá: [link]',
             trigger_status: 'Pendiente',
             include_pdf: 0,
             send_email: 1,
@@ -128,7 +128,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Confirmación de Turno',
-            content: 'Hola [apodo], confirmamos tu turno en [taller] para tu [vehiculo] el día [turno_fecha]. ¡Te esperamos!',
+            content: 'Hola [apodo], confirmamos tu turno en [taller] para tu [vehiculo] el día [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]',
             trigger_status: 'Turno asignado',
             include_pdf: 0,
             send_email: 1,
@@ -136,7 +136,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Presupuesto para Revisión',
-            content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes. Avisanos si estás de acuerdo para comenzar con el trabajo.',
+            content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes aquí: [link]. Avisanos si estás de acuerdo para comenzar con el trabajo.',
             trigger_status: 'Presupuestado',
             include_pdf: 1,
             send_email: 1,
@@ -144,7 +144,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Trabajo en Marcha',
-            content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [items]. Te avisamos en cuanto esté finalizado.',
+            content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [items]. Seguí el avance en vivo: [link]',
             trigger_status: 'Aprobado',
             include_pdf: 0,
             send_email: 1,
