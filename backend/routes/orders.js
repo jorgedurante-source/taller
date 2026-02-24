@@ -9,10 +9,14 @@ const { auth, hasPermission } = require('../middleware/auth');
 const { sendEmail } = require('../lib/mailer');
 const { generateOrderPDF } = require('../lib/pdfGenerator');
 
-// Multer setup for photos
+// Multer setup for photos - using tenant-specific persistent storage
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+        const { getTenantDir } = require('../tenantManager');
+        const slug = req.slug || req.params.slug;
+        const dir = path.join(getTenantDir(slug), 'uploads');
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
     },
     filename: (req, file, cb) => {
         cb(null, Date.now() + path.extname(file.originalname));
@@ -107,7 +111,7 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
 
                 let message = template.content;
                 Object.keys(replacements).forEach(key => {
-                    const regex = new RegExp(`[\\\\{\\\\[]${key}[\\\\}\\\\]]`, 'gi');
+                    const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
                     message = message.replace(regex, replacements[key]);
                 });
 
@@ -268,7 +272,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
 
                 let message = (template.content || '');
                 Object.keys(replacements).forEach(key => {
-                    const regex = new RegExp(`[\\\\{\\\\[]${key}[\\\\}\\\\]]`, 'gi');
+                    const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
                     message = message.replace(regex, replacements[key]);
                 });
 
@@ -580,13 +584,24 @@ router.post('/send-manual-template', auth, hasPermission('orders'), async (req, 
             return res.status(400).json({ message: 'La plantilla seleccionada tiene el envío por correo deshabilitado.' });
         }
 
-        let message = template.content
-            .replace(/{apodo}|\[apodo\]/g, client.nickname || client.first_name || 'Cliente')
-            .replace(/\[cliente\]/g, client.first_name || 'Cliente')
-            .replace(/{vehiculo}|\[vehiculo\]/g, vehicle ? `${vehicle.brand} ${vehicle.model}` : 'vehículo')
-            .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
-            .replace(/\[usuario\]/g, `${userFirstName} ${userLastName}`.trim())
-            .replace(/{orden_id}|\[orden_id\]/g, orderId || '');
+        const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
+        const trackingLink = `${siteUrl}/${req.slug}/o/${orderId || 'error'}`; // Fallback if no order context
+
+        const replacements = {
+            'apodo': client.nickname || client.first_name || 'Cliente',
+            'cliente': client.first_name || 'Cliente',
+            'vehiculo': vehicle ? `${vehicle.brand} ${vehicle.model}` : 'vehículo',
+            'taller': config.workshop_name || 'Nuestro Taller',
+            'usuario': `${userFirstName} ${userLastName}`.trim(),
+            'orden_id': orderId || '',
+            'link': trackingLink
+        };
+
+        let message = template.content;
+        Object.keys(replacements).forEach(key => {
+            const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
+            message = message.replace(regex, replacements[key]);
+        });
 
         await sendEmail(req.db, client.email, template.name, message, []);
         res.json({ message: 'Mensaje enviado correctamente' });

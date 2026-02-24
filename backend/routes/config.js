@@ -87,10 +87,11 @@ router.post('/logo', auth, hasPermission('settings'), upload.single('logo'), (re
     if (!req.file) return res.status(400).json({ message: 'Logo file required' });
     try {
         const slug = req.user.slug || req.slug;
-        const targetDir = path.resolve(__dirname, `../tenants/${slug}/uploads/site`);
+        const { getTenantDir } = require('../tenantManager');
+        const targetDir = path.join(getTenantDir(slug), 'uploads', 'site');
         if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
 
-        const targetPath = path.resolve(targetDir, req.file.filename);
+        const targetPath = path.join(targetDir, req.file.filename);
         fs.renameSync(req.file.path, targetPath);
 
         const logoPath = `/uploads/${slug}/site/${req.file.filename}`;
