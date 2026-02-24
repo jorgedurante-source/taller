@@ -272,11 +272,31 @@ export default function ClientDashboardPage() {
                                                 <p className="font-bold text-slate-800 text-lg">{currentOrder.description}</p>
                                             </div>
                                             <div className="space-y-2">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Último Movimiento</p>
-                                                <p className="font-bold text-slate-800 flex items-center gap-2">
-                                                    <Clock size={16} className="text-slate-400" />
-                                                    {new Date(currentOrder.updated_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
-                                                </p>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{currentOrder.status === 'Turno asignado' ? 'Día de tu Turno' : 'Último Movimiento'}</p>
+                                                <div className="font-bold text-slate-800 flex items-center gap-2">
+                                                    {currentOrder.status === 'Turno asignado' ? (
+                                                        <>
+                                                            <Calendar size={16} className="text-indigo-500" />
+                                                            <span className="text-indigo-600">
+                                                                {(() => {
+                                                                    if (!currentOrder.appointment_date) return 'Pendiente de asignar';
+                                                                    const cleanDate = currentOrder.appointment_date.includes('T')
+                                                                        ? currentOrder.appointment_date
+                                                                        : currentOrder.appointment_date.replace(' ', 'T');
+                                                                    const d = new Date(cleanDate);
+                                                                    return !isNaN(d.getTime())
+                                                                        ? d.toLocaleString('es-AR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+                                                                        : 'Pendiente de asignar';
+                                                                })()} hs.
+                                                            </span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Clock size={16} className="text-slate-400" />
+                                                            {new Date(currentOrder.updated_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long' })}
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="space-y-2">
                                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Avance</p>

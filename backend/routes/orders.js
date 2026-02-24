@@ -97,6 +97,7 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
                     .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
                     .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
                     .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
+                    .replace(/\[turno_fecha\]/g, '---')
                     .replace(/{orden_id}|\[orden_id\]/g, orderId);
 
                 let attachments = [];
@@ -230,7 +231,10 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
             let appointmentDateFormatted = '---';
             if (order.appointment_date) {
                 const d = new Date(order.appointment_date);
-                if (!isNaN(d)) appointmentDateFormatted = d.toLocaleString('es-AR', { dateStyle: 'long', timeStyle: 'short' });
+                if (!isNaN(d.getTime())) {
+                    appointmentDateFormatted = d.toLocaleDateString('es-AR', { day: '2-digit', month: 'long', year: 'numeric' }) + ' a las ' +
+                        d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }) + ' hs';
+                }
             }
 
             if (order && order.email && template.send_email === 1) {

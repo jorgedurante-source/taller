@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useSlug } from '@/lib/slug';
 import api from '@/lib/api';
 import { useNotification } from '@/lib/notification';
-import { Calendar, ChevronLeft, ChevronRight, Clock, Plus, X } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Clock, Plus, X, ArrowRight, CalendarDays, Key } from 'lucide-react';
 import Link from 'next/link';
 
 export default function AppointmentsPage() {
@@ -17,6 +17,15 @@ export default function AppointmentsPage() {
 
     const [loading, setLoading] = useState(true);
     const [orders, setOrders] = useState<any[]>([]);
+    const [config, setConfig] = useState<any>({});
+    const [clients, setClients] = useState<any[]>([]);
+    const [vehicles, setVehicles] = useState<any[]>([]);
+    const [mode, setMode] = useState<'existing' | 'new'>('existing');
+
+    // New Order state
+    const [newClientId, setNewClientId] = useState('');
+    const [newVehicleId, setNewVehicleId] = useState('');
+    const [newDescription, setNewDescription] = useState('');
 
     // Calendar state
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -27,10 +36,40 @@ export default function AppointmentsPage() {
     const [appointmentTime, setAppointmentTime] = useState('09:00');
     const [saving, setSaving] = useState(false);
 
+    // Mover Turno State
+    const [movingOrder, setMovingOrder] = useState<any>(null);
+    const [moveDate, setMoveDate] = useState<string>('');
+    const [moveTime, setMoveTime] = useState<string>('09:00');
+
+    // Search state
+    const [clientSearch, setClientSearch] = useState('');
+
+    const handleClientChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const cid = e.target.value;
+        setNewClientId(cid);
+        setNewVehicleId('');
+        if (cid) {
+            try {
+                const res = await api.get(`/clients/${cid}/vehicles`);
+                setVehicles(res.data || []);
+            } catch (err) {
+                console.error(err);
+            }
+        } else {
+            setVehicles([]);
+        }
+    };
+
     const fetchOrders = async () => {
         try {
-            const res = await api.get('/orders');
-            setOrders(res.data || []);
+            const [ordersRes, configRes, clientsRes] = await Promise.all([
+                api.get('/orders'),
+                api.get('/config'),
+                api.get('/clients')
+            ]);
+            setOrders(ordersRes.data || []);
+            setConfig(configRes.data || {});
+            setClients(clientsRes.data || []);
         } catch (err) {
             console.error(err);
         } finally {
@@ -47,19 +86,46 @@ export default function AppointmentsPage() {
     }, [slug, hasPermission, router]);
 
     const handleAssignAppointment = async () => {
-        if (!selectedOrderId || !selectedDate || !appointmentTime) {
-            notify('info', 'Por favor, completá todos los campos.');
+        if (!appointmentTime) {
+            notify('info', 'Por favor, seleccioná un horario.');
             return;
         }
 
         setSaving(true);
         try {
-            const dateStr = selectedDate.toISOString().split('T')[0];
+            // Robust local date formatting YYYY-MM-DD
+            const y = selectedDate!.getFullYear();
+            const m = String(selectedDate!.getMonth() + 1).padStart(2, '0');
+            const d = String(selectedDate!.getDate()).padStart(2, '0');
+            const dateStr = `${y}-${m}-${d}`;
             const finalAppointmentDate = `${dateStr}T${appointmentTime}:00`;
 
-            await api.put(`/orders/${selectedOrderId}/status`, {
-                status: 'En proceso',
-                notes: 'Turno asignado',
+            let orderIdToUpdate = selectedOrderId;
+
+            if (mode === 'new') {
+                if (!newClientId || !newVehicleId) {
+                    notify('info', 'Seleccioná un cliente y un vehículo para el turn nuevo.');
+                    setSaving(false);
+                    return;
+                }
+                const res = await api.post('/orders', {
+                    client_id: newClientId,
+                    vehicle_id: newVehicleId,
+                    description: newDescription,
+                    items: []
+                });
+                orderIdToUpdate = res.data.id;
+            }
+
+            if (!orderIdToUpdate) {
+                notify('info', 'Seleccioná una orden existente o cambiá al modo Nuevo.');
+                setSaving(false);
+                return;
+            }
+
+            await api.put(`/orders/${orderIdToUpdate}/status`, {
+                status: 'Turno asignado',
+                notes: 'Turno asignado desde calendario',
                 appointment_date: finalAppointmentDate
             });
 
@@ -67,9 +133,32 @@ export default function AppointmentsPage() {
             fetchOrders();
             setSelectedDate(null);
             setSelectedOrderId('');
+            setNewClientId('');
+            setNewVehicleId('');
+            setNewDescription('');
         } catch (err) {
             console.error(err);
             notify('error', 'Error al asignar el turno');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleMoveAppointment = async () => {
+        if (!movingOrder || !moveDate || !moveTime) return;
+        setSaving(true);
+        try {
+            const finalDate = `${moveDate}T${moveTime}:00`;
+            await api.put(`/orders/${movingOrder.id}/status`, {
+                status: movingOrder.status,
+                notes: `Turno movido al ${moveDate.split('-').reverse().join('/')} desde el calendario`,
+                appointment_date: finalDate
+            });
+            notify('success', 'Turno movido correctamente');
+            setMovingOrder(null);
+            fetchOrders();
+        } catch (error) {
+            notify('error', 'Error al mover turno');
         } finally {
             setSaving(false);
         }
@@ -79,7 +168,49 @@ export default function AppointmentsPage() {
 
     // derived data
     const appointments = orders.filter(o => o.appointment_date);
-    const unassignedOrders = orders.filter(o => !o.appointment_date && (o.status === 'Pendiente' || o.status === 'En proceso'));
+    const unassignedOrders = orders.filter(o => !o.appointment_date && (o.status === 'Pendiente' || o.status === 'Turno asignado' || o.status === 'En proceso'));
+
+    const getTimeSlots = (date: Date | null) => {
+        if (!date || !config.business_hours) return [];
+        let hoursObj: any = {};
+        try {
+            hoursObj = typeof config.business_hours === 'string' ? JSON.parse(config.business_hours) : config.business_hours;
+        } catch (e) {
+            return [];
+        }
+
+        const day = date.getDay();
+        let rangeStr = '';
+        if (day >= 1 && day <= 5) rangeStr = hoursObj.mon_fri;
+        else if (day === 6) rangeStr = hoursObj.sat;
+        else if (day === 0) rangeStr = hoursObj.sun;
+
+        if (!rangeStr || rangeStr.toLowerCase() === 'cerrado') return [];
+
+        const parts = rangeStr.split('-').map((s: string) => s.trim());
+        if (parts.length !== 2) return [];
+
+        const [startH, startM] = parts[0].split(':').map(Number);
+        const [endH, endM] = parts[1].split(':').map(Number);
+        if (isNaN(startH) || isNaN(endH)) return [];
+
+        const slots = [];
+        let curr = new Date(date);
+        curr.setHours(startH, startM || 0, 0, 0);
+
+        const end = new Date(date);
+        end.setHours(endH, endM || 0, 0, 0);
+
+        while (curr <= end) {
+            const h = String(curr.getHours()).padStart(2, '0');
+            const mi = String(curr.getMinutes()).padStart(2, '0');
+            slots.push(`${h}:${mi}`);
+            curr.setMinutes(curr.getMinutes() + 30);
+        }
+        return slots;
+    };
+
+    const timeSlots = getTimeSlots(selectedDate);
 
     // Calendar functions
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -109,7 +240,7 @@ export default function AppointmentsPage() {
                 <div
                     key={d}
                     className={`min-h-[120px] p-3 rounded-2xl border border-slate-200 transition-all cursor-pointer hover:border-indigo-400 hover:shadow-lg hover:shadow-indigo-500/10 ${isToday ? 'bg-indigo-50 border-indigo-200' : 'bg-white'}`}
-                    onClick={() => setSelectedDate(cellDate)}
+                    onClick={() => { setSelectedDate(cellDate); setAppointmentTime(''); }}
                 >
                     <div className="flex justify-between items-start mb-2">
                         <span className={`text-sm font-black ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>{d}</span>
@@ -219,11 +350,24 @@ export default function AppointmentsPage() {
                                                     <p className="text-sm font-bold text-slate-800 truncate">{app.client_name}</p>
                                                     <p className="text-xs text-slate-500 font-medium truncate">{app.plate} • {app.brand} {app.model}</p>
                                                 </div>
-                                                <Link href={`/${slug}/dashboard/orders/${app.id}`}>
-                                                    <button className="text-[9px] font-black uppercase tracking-widest text-indigo-600 hover:text-white border-2 border-indigo-600 hover:bg-indigo-600 px-3 py-1.5 rounded-xl transition-all h-fit">
-                                                        Ver
+                                                <div className="flex flex-col gap-1 items-end shrink-0">
+                                                    <Link href={`/${slug}/dashboard/orders/${app.id}`}>
+                                                        <button className="text-[9px] w-full font-black uppercase tracking-widest text-indigo-600 hover:text-white border-2 border-indigo-600 hover:bg-indigo-600 px-3 py-1 rounded-lg transition-all">
+                                                            Ver
+                                                        </button>
+                                                    </Link>
+                                                    <button
+                                                        onClick={() => {
+                                                            setMovingOrder(app);
+                                                            const parts = app.appointment_date.split('T');
+                                                            setMoveDate(parts[0]);
+                                                            setMoveTime(parts[1].substring(0, 5));
+                                                        }}
+                                                        className="text-[9px] w-full font-black uppercase tracking-widest text-slate-500 hover:text-slate-800 border-2 border-slate-200 hover:border-slate-800 bg-white px-3 py-1 rounded-lg transition-all"
+                                                    >
+                                                        Mover
                                                     </button>
-                                                </Link>
+                                                </div>
                                             </div>
                                         ))}
                                 </div>
@@ -237,34 +381,133 @@ export default function AppointmentsPage() {
                         {/* Asignar Nuevo Turno */}
                         <div className="space-y-4">
                             <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 ml-1">Asignar Orden a este día</h4>
-                            {unassignedOrders.length > 0 ? (
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div className="col-span-2">
+
+                            <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit gap-1 border border-slate-200">
+                                <button
+                                    onClick={() => setMode('existing')}
+                                    className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'existing' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Orden Existente
+                                </button>
+                                <button
+                                    onClick={() => setMode('new')}
+                                    className={`px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === 'new' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                >
+                                    Nuevo Turno
+                                </button>
+                            </div>
+
+                            {mode === 'existing' ? (
+                                unassignedOrders.length > 0 ? (
+                                    <div className="space-y-2">
+                                        <input
+                                            type="text"
+                                            placeholder="🔍 Buscar por Nº orden, cliente o vehículo..."
+                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                            value={clientSearch}
+                                            onChange={(e) => setClientSearch(e.target.value)}
+                                        />
                                         <select
                                             className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
                                             value={selectedOrderId}
                                             onChange={e => setSelectedOrderId(e.target.value)}
                                         >
                                             <option value="">-- Seleccionar Orden --</option>
-                                            {unassignedOrders.map(o => (
-                                                <option key={o.id} value={o.id}>
-                                                    #{o.id} - {o.client_name} ({o.model})
-                                                </option>
-                                            ))}
+                                            {unassignedOrders
+                                                .filter(o =>
+                                                    !clientSearch ||
+                                                    o.id.toString().includes(clientSearch) ||
+                                                    o.client_name?.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                                                    o.model?.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                                                    o.plate?.toLowerCase().includes(clientSearch.toLowerCase())
+                                                )
+                                                .map(o => (
+                                                    <option key={o.id} value={o.id}>
+                                                        #{o.id} - {o.client_name} ({o.model})
+                                                    </option>
+                                                ))
+                                            }
                                         </select>
+                                        {selectedOrderId && (
+                                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mt-2">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Problema reportado:</p>
+                                                <p className="text-xs font-medium text-slate-700 italic">
+                                                    {unassignedOrders.find(o => o.id.toString() === selectedOrderId)?.description || 'Sin descripción detallada.'}
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className="col-span-1">
-                                        <input
-                                            type="time"
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
-                                            value={appointmentTime}
-                                            onChange={e => setAppointmentTime(e.target.value)}
+                                ) : (
+                                    <div className="text-xs text-slate-500 font-bold bg-amber-50 p-4 rounded-2xl border border-amber-200">
+                                        No hay órdenes pendientes para asignar.
+                                    </div>
+                                )
+                            ) : (
+                                <div className="space-y-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                                    <div>
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Cliente</label>
+                                        <div className="space-y-2 mt-1">
+                                            <input
+                                                type="text"
+                                                placeholder="🔍 Buscar cliente por nombre o apellido..."
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                                value={clientSearch}
+                                                onChange={(e) => setClientSearch(e.target.value)}
+                                            />
+                                            <select
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+                                                value={newClientId}
+                                                onChange={handleClientChange}
+                                            >
+                                                <option value="">-- Seleccionar Cliente --</option>
+                                                {clients
+                                                    .filter(c =>
+                                                        !clientSearch ||
+                                                        `${c.first_name} ${c.last_name}`.toLowerCase().includes(clientSearch.toLowerCase())
+                                                    )
+                                                    .map(c => <option key={c.id} value={c.id}>{c.first_name} {c.last_name}</option>)
+                                                }
+                                            </select>
+                                        </div>
+                                    </div>
+                                    {newClientId && (
+                                        <div className="animate-in slide-in-from-top-2 fade-in">
+                                            <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Vehículo</label>
+                                            <select
+                                                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none mt-1"
+                                                value={newVehicleId}
+                                                onChange={e => setNewVehicleId(e.target.value)}
+                                            >
+                                                <option value="">-- Seleccionar Vehículo --</option>
+                                                {vehicles.map(v => <option key={v.id} value={v.id}>{v.plate} - {v.brand} {v.model}</option>)}
+                                            </select>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest ml-1">Motivo / Problema</label>
+                                        <textarea
+                                            className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 mt-1 resize-none h-16"
+                                            placeholder="Problemas al frenar..."
+                                            value={newDescription}
+                                            onChange={e => setNewDescription(e.target.value)}
                                         />
                                     </div>
                                 </div>
-                            ) : (
-                                <div className="text-xs text-slate-500 font-bold bg-amber-50 p-4 rounded-2xl border border-amber-200">
-                                    No hay órdenes pendientes para asignar.
+                            )}
+
+                            {((mode === 'existing' && unassignedOrders.length > 0) || mode === 'new') && (
+                                <div>
+                                    <label className="text-[10px] font-black text-indigo-600 uppercase tracking-widest ml-1">Horario del Turno ({timeSlots.length > 0 ? 'Intervalos 30m' : 'Taller Cerrado'})</label>
+                                    <select
+                                        className="w-full mt-1 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-2xl px-4 py-3 text-sm font-black outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+                                        value={appointmentTime}
+                                        onChange={e => setAppointmentTime(e.target.value)}
+                                    >
+                                        <option value="">-- Elegir --</option>
+                                        {timeSlots.map(t => (
+                                            <option key={t} value={t}>{t} hs</option>
+                                        ))}
+                                    </select>
                                 </div>
                             )}
                         </div>
@@ -272,7 +515,7 @@ export default function AppointmentsPage() {
                         <div className="mt-8">
                             <button
                                 onClick={handleAssignAppointment}
-                                disabled={saving || !selectedOrderId || !appointmentTime}
+                                disabled={saving || !appointmentTime || (mode === 'existing' && !selectedOrderId) || (mode === 'new' && (!newClientId || !newVehicleId))}
                                 className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all"
                             >
                                 {saving ? 'Guardando...' : 'Confirmar Turno'}
@@ -281,6 +524,61 @@ export default function AppointmentsPage() {
                     </div>
                 </div>
             )}
+
+            {/* Modal para Mover Turno */}
+            {movingOrder && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-6 animate-in zoom-in duration-300">
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                    Re-agendar Turno
+                                </h3>
+                                <p className="text-xs text-slate-500 font-bold mt-1 max-w-[200px] truncate">
+                                    #{movingOrder.id} - {movingOrder.client_name}
+                                </p>
+                            </div>
+                            <button onClick={() => setMovingOrder(null)} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-600 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nueva Fecha</label>
+                                <input
+                                    type="date"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none mt-1"
+                                    value={moveDate}
+                                    onChange={e => setMoveDate(e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Nuevo Horario</label>
+                                <select
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none mt-1"
+                                    value={moveTime}
+                                    onChange={e => setMoveTime(e.target.value)}
+                                >
+                                    {getTimeSlots(moveDate ? new Date(moveDate + 'T12:00:00') : new Date()).map(t => (
+                                        <option key={t} value={t}>{t} hs</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={handleMoveAppointment}
+                            disabled={saving}
+                            className="w-full mt-6 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white px-4 py-3 rounded-xl font-black text-xs uppercase tracking-widest transition-all"
+                        >
+                            {saving ? 'Guardando...' : 'Confirmar'}
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+
+

@@ -739,6 +739,7 @@ export default function SettingsPage() {
                                                                 >
                                                                     <option value="">Manual</option>
                                                                     <option value="Pendiente">Al crear (Pendiente)</option>
+                                                                    <option value="Turno asignado">Turno asignado</option>
                                                                     <option value="En proceso">En proceso</option>
                                                                     <option value="Presupuestado">Presupuestado</option>
                                                                     <option value="Aprobado">Aprobado</option>
@@ -844,6 +845,17 @@ export default function SettingsPage() {
                                                     <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
                                                 </div>
                                                 <p className="text-slate-400 text-xs mt-1">Marca y modelo.</p>
+                                            </button>
+
+                                            <button
+                                                onClick={() => handleInsertToken('[turno_fecha]')}
+                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-indigo-500/30 group"
+                                            >
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-indigo-400 font-black tracking-wider">[turno_fecha]</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-indigo-400">Insertar</span>
+                                                </div>
+                                                <p className="text-slate-400 text-xs mt-1">Fecha y hora del turno.</p>
                                             </button>
 
                                             <button

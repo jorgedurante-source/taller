@@ -81,6 +81,7 @@ export default function OrdersPage() {
     const getStatusColor = (status: string) => {
         switch (status) {
             case 'Pendiente': return 'bg-slate-100 text-slate-600';
+            case 'Turno asignado': return 'bg-purple-100 text-purple-700';
             case 'Aprobado': return 'bg-emerald-100 text-emerald-700';
             case 'En proceso':
             case 'En reparación': return 'bg-amber-100 text-amber-700';

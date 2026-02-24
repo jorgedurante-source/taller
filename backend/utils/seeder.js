@@ -2,7 +2,7 @@ const firstNames = ['Juan', 'Maria', 'Pedro', 'Ana', 'Jose', 'Laura', 'Carlos', 
 const lastNames = ['Garcia', 'Rodriguez', 'Lopez', 'Martinez', 'Gonzalez', 'Perez', 'Sanchez', 'Romero', 'Torres', 'Fernandez', 'Ruiz', 'Diaz', 'Alvarez', 'Jimenez', 'Moreno', 'Munoz', 'Alonso', 'Gutierrez', 'Castillo', 'Blanco'];
 const brands = ['Toyota', 'Ford', 'Chevrolet', 'Volkswagen', 'Honda', 'Fiat', 'Renault', 'Peugeot', 'Nissan', 'Hyundai'];
 const models = ['Corolla', 'Fiesta', 'Cruze', 'Golf', 'Civic', 'Cronos', 'Clio', '208', 'Sentra', 'Tucson'];
-const orderStatuses = ['Pendiente', 'En proceso', 'Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'];
+const orderStatuses = ['Pendiente', 'Turno asignado', 'En proceso', 'Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'];
 const paymentStatuses = ['sin_cobrar', 'cobrado', 'parcial'];
 const descriptions = ['Cambio de aceite y filtro', 'Revisión técnica general', 'Frenos delanteros', 'Alineación y balanceo', 'Cambio de correa de distribución', 'Reparación de embrague', 'Check engine encendido', 'Ruidos en la suspensión', 'Carga de aire acondicionado', 'Cambio de batería'];
 

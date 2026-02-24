@@ -82,7 +82,7 @@ export default function PublicOrderPage() {
     );
 
     const getStatusStep = (currentStatus: string) => {
-        const steps = ['Pendiente', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'];
+        const steps = ['Turno asignado', 'Pendiente', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'];
         const currentIndex = steps.indexOf(currentStatus);
         return currentIndex;
     };
@@ -145,10 +145,38 @@ export default function PublicOrderPage() {
                         </div>
 
                         <div className="space-y-8">
+                            {order.appointment_date && (order.status === 'Turno asignado' || order.status === 'Pendiente') && (
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-[32px] p-6 flex items-center gap-6 animate-in zoom-in-95 duration-500">
+                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                                        <Calendar size={32} />
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1">Fecha de tu Turno</p>
+                                        <h3 className="text-xl font-black text-indigo-900 uppercase italic leading-tight">
+                                            {(() => {
+                                                if (!order?.appointment_date) return 'Fecha a confirmar';
+                                                try {
+                                                    const cleanDate = order.appointment_date.includes('T')
+                                                        ? order.appointment_date
+                                                        : order.appointment_date.replace(' ', 'T');
+                                                    const d = new Date(cleanDate);
+                                                    return !isNaN(d.getTime())
+                                                        ? d.toLocaleString('es-AR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
+                                                        : 'Fecha a confirmar';
+                                                } catch (e) {
+                                                    return 'Fecha a confirmar';
+                                                }
+                                            })()} hs.
+                                        </h3>
+                                        <p className="text-indigo-500 font-bold text-xs mt-1">¡Te esperamos en el taller!</p>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="relative">
                                 <div className="absolute top-5 left-0 w-full h-[2px] bg-slate-100 -z-0" />
                                 <div className="flex justify-between relative z-10 overflow-x-auto pb-4 scrollbar-hide">
-                                    {['Recibido', 'Aprobado', 'Reparando', 'Listo'].map((step, idx) => {
+                                    {(order.enabled_modules?.includes('appointments') && order.appointment_date ? ['Turno', 'Recibido', 'Aprobado', 'Reparando', 'Listo'] : ['Recibido', 'Aprobado', 'Reparando', 'Listo']).map((step, idx) => {
                                         const currentStepIdx = getStatusStep(order.status);
                                         const isCompleted = currentStepIdx > idx || order.status === 'Entregado';
                                         const isActive = currentStepIdx === idx && order.status !== 'Entregado';

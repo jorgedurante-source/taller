@@ -80,10 +80,16 @@ export default function OrderDetailsPage() {
             setPaymentAmount(orderRes.data.payment_amount || 0);
             setReminderDays(orderRes.data.reminder_days ? String(orderRes.data.reminder_days) : '');
             if (orderRes.data.appointment_date) {
-                const dateObj = new Date(orderRes.data.appointment_date);
+                // SQLite might use space or T
+                const cleanDate = orderRes.data.appointment_date.includes('T')
+                    ? orderRes.data.appointment_date
+                    : orderRes.data.appointment_date.replace(' ', 'T');
+                const dateObj = new Date(cleanDate);
                 if (!isNaN(dateObj.getTime())) {
-                    setAppointmentDate(orderRes.data.appointment_date.split('T')[0]);
-                    setAppointmentTime(dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+                    setAppointmentDate(cleanDate.split('T')[0]);
+                    const hours = String(dateObj.getHours()).padStart(2, '0');
+                    const minutes = String(dateObj.getMinutes()).padStart(2, '0');
+                    setAppointmentTime(`${hours}:${minutes}`);
                 }
             }
         } catch (err) {
@@ -98,10 +104,56 @@ export default function OrderDetailsPage() {
             const res = await api.get('/services');
             setCatalog(res.data);
         } catch (err) {
-            console.error(err);
+            console.error('Error fetching catalog', err);
         }
     };
 
+    const getTimeSlots = (dateStr: string) => {
+        if (!dateStr || !config?.business_hours) return [];
+        let hoursObj: any = {};
+        try {
+            hoursObj = typeof config.business_hours === 'string' ? JSON.parse(config.business_hours) : config.business_hours;
+        } catch (e) {
+            return [];
+        }
+
+        const date = new Date(dateStr + 'T12:00:00'); // Use mid-day to avoid TZ issues
+        const day = date.getDay();
+        let rangeStr = '';
+        if (day >= 1 && day <= 5) rangeStr = hoursObj.mon_fri;
+        else if (day === 6) rangeStr = hoursObj.sat;
+        else if (day === 0) rangeStr = hoursObj.sun;
+
+        if (!rangeStr || rangeStr.toLowerCase() === 'cerrado') return [];
+
+        const parts = rangeStr.split('-').map((s: string) => s.trim());
+        if (parts.length !== 2) return [];
+
+        const [startH, startM] = parts[0].split(':').map(Number);
+        const [endH, endM] = parts[1].split(':').map(Number);
+        if (isNaN(startH) || isNaN(endH)) return [];
+
+        const slots = [];
+        let curr = new Date(date);
+        curr.setHours(startH, startM || 0, 0, 0);
+
+        const end = new Date(date);
+        end.setHours(endH, endM || 0, 0, 0);
+
+        while (curr <= end) {
+            const h = String(curr.getHours()).padStart(2, '0');
+            const m = String(curr.getMinutes()).padStart(2, '0');
+            slots.push(`${h}:${m}`);
+            curr.setMinutes(curr.getMinutes() + 30);
+        }
+
+        // Ensure current assigned time is always in the list
+        if (appointmentTime && !slots.includes(appointmentTime)) {
+            slots.push(appointmentTime);
+            slots.sort();
+        }
+        return slots;
+    };
     useEffect(() => {
         fetchOrder();
         fetchCatalog();
@@ -111,7 +163,7 @@ export default function OrderDetailsPage() {
         setUpdating(true);
         try {
             let finalAppointmentDate = null;
-            if (newStatus === 'En proceso' && appointmentDate && appointmentTime) {
+            if (newStatus === 'Turno asignado' && appointmentDate && appointmentTime) {
                 finalAppointmentDate = `${appointmentDate}T${appointmentTime}:00`;
             }
 
@@ -259,6 +311,7 @@ export default function OrderDetailsPage() {
     const getStatusStyle = (status: string) => {
         switch (status) {
             case 'Pendiente': return 'bg-slate-100 text-slate-600 border-slate-200';
+            case 'Turno asignado': return 'bg-purple-50 text-purple-600 border-purple-100';
             case 'Aprobado': return 'bg-emerald-50 text-emerald-600 border-emerald-100';
             case 'En proceso':
             case 'En reparación': return 'bg-blue-50 text-blue-600 border-blue-100';
@@ -550,6 +603,9 @@ export default function OrderDetailsPage() {
                                     onChange={(e) => setNewStatus(e.target.value)}
                                 >
                                     <option value="Pendiente" className="text-slate-900">Pendiente</option>
+                                    {config?.enabled_modules?.includes('appointments') && hasPermission('appointments') && (
+                                        <option value="Turno asignado" className="text-slate-900">Turno asignado</option>
+                                    )}
                                     <option value="En proceso" className="text-slate-900">En proceso</option>
                                     <option value="Presupuestado" className="text-slate-900">Presupuestado</option>
                                     <option value="Aprobado" className="text-slate-900">Aprobado</option>
@@ -607,7 +663,7 @@ export default function OrderDetailsPage() {
                                 </div>
                             )}
 
-                            {newStatus === 'En proceso' && config?.enabled_modules?.includes('appointments') && (
+                            {newStatus === 'Turno asignado' && config?.enabled_modules?.includes('appointments') && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200 bg-white/5 p-4 rounded-xl border border-white/10">
                                     <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                         <CalendarIcon size={14} /> Asignar Turno al Cliente
@@ -624,12 +680,16 @@ export default function OrderDetailsPage() {
                                         </div>
                                         <div className="space-y-1">
                                             <span className="text-[9px] text-slate-400 font-bold uppercase ml-1">Hora</span>
-                                            <input
-                                                type="time"
-                                                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
+                                            <select
+                                                className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-indigo-500/50 appearance-none"
                                                 value={appointmentTime}
                                                 onChange={(e) => setAppointmentTime(e.target.value)}
-                                            />
+                                            >
+                                                <option value="">Seleccionar hora</option>
+                                                {getTimeSlots(appointmentDate).map(slot => (
+                                                    <option key={slot} value={slot}>{slot} hs</option>
+                                                ))}
+                                            </select>
                                         </div>
                                     </div>
                                     <p className="text-xs text-slate-400 font-medium">Al guardar, se le notificará al cliente automáticamente si la plantilla está activa.</p>
@@ -647,7 +707,17 @@ export default function OrderDetailsPage() {
                             </div>
                             <button
                                 onClick={handleStatusUpdate}
-                                disabled={updating || newStatus === order.status && !statusNotes}
+                                disabled={updating || (() => {
+                                    const hasStatusChanged = newStatus !== order.status;
+                                    const hasNotesChanged = !!statusNotes;
+                                    let hasAppointmentChanged = false;
+                                    if (newStatus === 'Turno asignado') {
+                                        const currentD = order.appointment_date ? (order.appointment_date.includes('T') ? order.appointment_date : order.appointment_date.replace(' ', 'T')).split('T')[0] : '';
+                                        const currentT = order.appointment_date ? (order.appointment_date.includes('T') ? order.appointment_date : order.appointment_date.replace(' ', 'T')).split('T')[1].substring(0, 5) : '';
+                                        hasAppointmentChanged = appointmentDate !== currentD || appointmentTime !== currentT;
+                                    }
+                                    return !hasStatusChanged && !hasNotesChanged && !hasAppointmentChanged;
+                                })()}
                                 className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:hover:bg-blue-600 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest transition-all shadow-lg shadow-blue-500/20"
                             >
                                 {updating ? 'Actualizando...' : 'Actualizar Estado'}

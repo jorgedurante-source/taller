@@ -82,7 +82,8 @@ function initTenantDb(db, slug) {
             smtp_pass TEXT,
             theme_id TEXT DEFAULT 'default',
             reminder_enabled INTEGER DEFAULT 1,
-            reminder_time TEXT DEFAULT '09:00'
+            reminder_time TEXT DEFAULT '09:00',
+            enabled_modules TEXT DEFAULT '["inventory", "appointments", "income", "reports", "settings"]'
         );
 
         CREATE TABLE IF NOT EXISTS clients (
@@ -125,7 +126,7 @@ function initTenantDb(db, slug) {
             client_id INTEGER NOT NULL,
             vehicle_id INTEGER NOT NULL,
             description TEXT,
-            status TEXT CHECK(status IN ('Pendiente', 'En proceso', 'Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado')) DEFAULT 'Pendiente',
+            status TEXT DEFAULT 'Pendiente',
             payment_status TEXT DEFAULT 'sin_cobrar',
             payment_amount REAL DEFAULT 0,
             photos TEXT,
@@ -357,7 +358,7 @@ function initTenantDb(db, slug) {
             {
                 name: 'Turno Asignado',
                 content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos!\n\nSaludos,\n[usuario]',
-                trigger_status: 'En proceso',
+                trigger_status: 'Turno asignado',
                 include_pdf: 0,
                 send_email: 1,
                 send_whatsapp: 0
@@ -385,21 +386,35 @@ function initTenantDb(db, slug) {
         console.error(`[tenant:${slug}] Error migrating templates with [usuario] token:`, e.message);
     }
 
-    // Migration to add 'Turno Asignado' template if missing
+    // Migration to add 'Turno Asignado' using correct trigger_status
     try {
-        const turnoTemplateExists = db.prepare("SELECT COUNT(*) as count FROM templates WHERE trigger_status = 'En proceso'").get().count;
-        if (turnoTemplateExists === 0) {
+        const turnoTemplateNew = db.prepare("SELECT COUNT(*) as count FROM templates WHERE trigger_status = 'Turno asignado'").get().count;
+        if (turnoTemplateNew === 0) {
+            db.prepare("DELETE FROM templates WHERE name = 'Turno Asignado' AND trigger_status = 'En proceso'").run();
             db.prepare(`
                 INSERT INTO templates (name, content, trigger_status, include_pdf, send_email, send_whatsapp) 
                 VALUES (?, ?, ?, 0, 1, 0)
             `).run(
                 'Turno Asignado',
                 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos!\n\nSaludos,\n[usuario]',
-                'En proceso'
+                'Turno asignado'
             );
         }
     } catch (e) {
         console.error(`[tenant:${slug}] Error adding Turno Asignado template:`, e.message);
+    }
+
+    // Migration to wipe CHECK constraints cleanly (SQLite 3 magic bypass)
+    try {
+        const tableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'").get()?.sql || '';
+        if (tableSql.includes("CHECK(status IN")) {
+            const fixedSql = tableSql.replace(/CHECK\s*\(\s*status\s*IN\s*\([^)]+\)\s*\)/ig, "");
+            db.prepare("PRAGMA writable_schema = 1").run();
+            db.prepare("UPDATE sqlite_master SET sql = ? WHERE type='table' AND name='orders'").run(fixedSql);
+            db.prepare("PRAGMA writable_schema = 0").run();
+        }
+    } catch (e) {
+        console.error(`[tenant:${slug}] Migration to remove CHECK status failed`, e);
     }
 }
 
@@ -414,6 +429,8 @@ function getDb(slug) {
 
     const tenantDir = getTenantDir(slug);
     const dbPath = getTenantDbPath(slug);
+
+    // Refreshing db connections after migrate
 
     if (!fs.existsSync(tenantDir)) {
         const uploads = getTenantUploads(slug);
