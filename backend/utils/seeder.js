@@ -127,6 +127,14 @@ function reseedTemplates(db) {
             send_whatsapp: 0
         },
         {
+            name: 'Confirmación de Turno',
+            content: 'Hola [apodo], confirmamos tu turno en [taller] para tu [vehiculo] el día [turno_fecha]. ¡Te esperamos!',
+            trigger_status: 'Turno asignado',
+            include_pdf: 0,
+            send_email: 1,
+            send_whatsapp: 0
+        },
+        {
             name: 'Presupuesto para Revisión',
             content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes. Avisanos si estás de acuerdo para comenzar con el trabajo.',
             trigger_status: 'Presupuestado',
