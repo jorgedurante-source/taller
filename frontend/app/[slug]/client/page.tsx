@@ -116,6 +116,22 @@ export default function ClientDashboardPage() {
         }
     };
 
+    const handleDownloadHistory = async (vehicle: any) => {
+        try {
+            const response = await clientApi.get(`/history-pdf/${vehicle.id}`, { responseType: 'blob' });
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `Historial_${vehicle.brand}_${vehicle.model}_${vehicle.plate}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (err) {
+            console.error('Error downloading History PDF:', err);
+            alert('Error al descargar el historial');
+        }
+    };
+
     if (loading) return (
         <div className="flex flex-col items-center justify-center min-h-screen gap-4">
             <div className="w-12 h-12 border-4 border-[var(--accent)] border-t-transparent rounded-full animate-spin"></div>
@@ -371,6 +387,15 @@ export default function ClientDashboardPage() {
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">KMs</p>
                                             <p className="text-sm font-bold text-slate-800">{v.km ? `${v.km.toLocaleString()} km` : '---'}</p>
                                         </div>
+                                    </div>
+                                    <div className="mt-6 pt-6 border-t border-[var(--border)]">
+                                        <button
+                                            onClick={() => handleDownloadHistory(v)}
+                                            className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-colors"
+                                            title={`Descargar Historial Mantenimiento - ${v.plate}`}
+                                        >
+                                            <FileText size={16} className="text-blue-500" /> Historial Clínico
+                                        </button>
                                     </div>
                                 </div>
                             ))}

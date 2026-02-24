@@ -5,6 +5,7 @@ const router = express.Router();
 function getDb(req) { return req.db; }
 const { auth } = require('../middleware/auth');
 const bcrypt = require('bcrypt');
+const { generateVehicleHistoryPDF } = require('../lib/pdfGenerator');
 
 // @route   GET api/client/me
 // Get logged in client profile and their vehicles/orders
@@ -140,6 +141,28 @@ router.post('/orders', auth, (req, res) => {
     } catch (err) {
         console.error('CLIENT ORDER ERROR:', err);
         res.status(500).send('Server error');
+    }
+});
+
+// @route   GET api/client/history-pdf/:vehicle_id
+// Allow logged in client to download history of their vehicle
+router.get('/history-pdf/:vehicle_id', auth, async (req, res) => {
+    try {
+        const client = req.db.prepare('SELECT id FROM clients WHERE email = ?').get(req.user.username);
+        if (!client) return res.status(404).json({ message: 'Client profile not found' });
+
+        // Verify vehicle belongs to client
+        const vehicle = req.db.prepare('SELECT id FROM vehicles WHERE id = ? AND client_id = ?').get(req.params.vehicle_id, client.id);
+        if (!vehicle) return res.status(403).json({ message: 'Vehicle does not belong to you' });
+
+        const pdfBuffer = await generateVehicleHistoryPDF(req.db, req.params.vehicle_id);
+        if (!pdfBuffer) return res.status(404).send('Error generating History PDF');
+
+        res.contentType("application/pdf");
+        res.send(pdfBuffer);
+    } catch (err) {
+        console.error('CLIENT HISTORY PDF ERROR:', err);
+        res.status(500).send('Error generating PDF');
     }
 });
 
