@@ -13,7 +13,6 @@ async function sendOrderReminder(db, orderId, slug, config) {
     `).get(orderId);
 
     if (!order) throw new Error('Order not found');
-    if (!order.email) throw new Error('Client has no email');
 
     const workshopName = config.workshop_name || 'Nuestro Taller';
     let template = db.prepare("SELECT * FROM templates WHERE name LIKE '%Seguimiento%' OR name LIKE '%Recordatorio%'").get();
@@ -60,7 +59,9 @@ async function sendOrderReminder(db, orderId, slug, config) {
         }
     }
 
-    await sendEmail(db, order.email, `Recordatorio: Seguimiento de tu vehículo - ${workshopName}`, messageText, attachments, messageHtml);
+    if (template.send_email === 1 && order.email) {
+        await sendEmail(db, order.email, `Recordatorio: Seguimiento de tu vehículo - ${workshopName}`, messageText, attachments, messageHtml);
+    }
 
     // Mark as sent
     db.prepare(`

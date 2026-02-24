@@ -90,7 +90,7 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
 
             if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
                 console.warn('SMTP support is not fully configured. Email skipped.');
-            } else if (order && order.email) {
+            } else if (order && order.email && template.send_email === 1) {
                 let message = template.content
                     .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
                     .replace(/\[cliente\]/g, order.first_name || 'Cliente')
@@ -219,7 +219,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
             const config = req.db.prepare('SELECT * FROM config LIMIT 1').get() || {};
             const workshopName = config.workshop_name || 'Nuestro Taller';
 
-            if (order && order.email) {
+            if (order && order.email && template.send_email === 1) {
                 let message = (template.content || '')
                     .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
                     .replace(/\[cliente\]/g, order.first_name || 'Cliente')
@@ -317,7 +317,7 @@ router.post('/:id/budget', auth, hasPermission('orders'), (req, res) => {
 
                 const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
 
-                if (order && order.email) {
+                if (order && order.email && template.send_email === 1) {
                     let message = template.content
                         .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
                         .replace(/\[cliente\]/g, order.first_name || 'Cliente')
@@ -444,6 +444,10 @@ router.post('/:id/send-email', auth, hasPermission('orders'), async (req, res) =
             template = req.db.prepare("SELECT * FROM templates WHERE name = 'Presupuesto Listo'").get();
         }
 
+        if (template && template.send_email !== 1) {
+            return res.json({ message: 'La plantilla no tiene habilitado el envío por email. Ignorado.' });
+        }
+
         const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
 
         // Dynamic SITE_URL detection
@@ -530,6 +534,10 @@ router.post('/send-manual-template', auth, hasPermission('orders'), async (req, 
         }
 
         if (!client || !template) return res.status(404).json({ message: 'Client or Template not found' });
+
+        if (template.send_email !== 1) {
+            return res.status(400).json({ message: 'La plantilla seleccionada tiene el envío por correo deshabilitado.' });
+        }
 
         let message = template.content
             .replace(/{apodo}|\[apodo\]/g, client.nickname || client.first_name || 'Cliente')

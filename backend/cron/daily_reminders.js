@@ -43,8 +43,7 @@ async function processReminders() {
             }
 
             // Query logic:
-            // 1. Reminders for today
-            // 2. If Monday, also reminders from yesterday (Sunday)
+            // Fetch any reminder scheduled for today OR in the past that is still 'pending'
             let query = `
                 SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand
                 FROM orders o
@@ -53,15 +52,8 @@ async function processReminders() {
                 WHERE o.reminder_at IS NOT NULL 
                 AND o.status = 'Entregado'
                 AND o.reminder_status = 'pending'
-                AND (
-                    date(o.reminder_at) = date('now', 'localtime')
+                AND date(o.reminder_at) <= date('now', 'localtime')
             `;
-
-            if (currentDay === 1) { // Monday
-                query += ` OR date(o.reminder_at) = date('now', '-1 day', 'localtime')`;
-            }
-
-            query += `)`;
 
             const dueReminders = db.prepare(query).all();
 
