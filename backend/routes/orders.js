@@ -95,7 +95,7 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
             if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
                 console.warn('SMTP support is not fully configured. Email skipped.');
             } else if (order && order.email && template.send_email === 1) {
-                const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
+                let siteUrl = (process.env.SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
                 const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
 
                 const replacements = {
@@ -253,7 +253,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
             }
 
             if (order && order.email && template.send_email === 1) {
-                const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
+                let siteUrl = (process.env.SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
                 const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
 
                 const replacements = {
@@ -584,8 +584,15 @@ router.post('/send-manual-template', auth, hasPermission('orders'), async (req, 
             return res.status(400).json({ message: 'La plantilla seleccionada tiene el envío por correo deshabilitado.' });
         }
 
-        const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
-        const trackingLink = `${siteUrl}/${req.slug}/o/${orderId || 'error'}`; // Fallback if no order context
+        let siteUrl = (process.env.SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
+        let trackingLink = `${siteUrl}/${req.slug}/o/${orderId || 'error'}`;
+
+        if (orderId) {
+            const order = req.db.prepare('SELECT share_token FROM orders WHERE id = ?').get(orderId);
+            if (order && order.share_token) {
+                trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
+            }
+        }
 
         const replacements = {
             'apodo': client.nickname || client.first_name || 'Cliente',

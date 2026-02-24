@@ -21,7 +21,7 @@ async function sendOrderReminder(db, orderId, slug, config) {
         throw new Error('No reminder template found');
     }
 
-    const siteUrl = process.env.SITE_URL || 'http://localhost:3000';
+    const siteUrl = (process.env.SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
     const trackingLink = `${siteUrl}/${slug}/o/${order.share_token}`;
 
     const replacements = {
