@@ -7,10 +7,13 @@ const fs = require('fs');
 // Auth middlewares
 const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 
-// Multer storage for logo
+// Multer storage for logo - directly to tenant persistent path
+const { getTenantDir } = require('../tenantManager');
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const dir = path.resolve(__dirname, `../temp_uploads`);
+        // req.slug is provided by tenantMiddleware
+        const slug = req.slug || req.params.slug;
+        const dir = path.join(getTenantDir(slug), 'uploads', 'site');
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         cb(null, dir);
     },
@@ -87,13 +90,6 @@ router.post('/logo', auth, hasPermission('settings'), upload.single('logo'), (re
     if (!req.file) return res.status(400).json({ message: 'Logo file required' });
     try {
         const slug = req.user.slug || req.slug;
-        const { getTenantDir } = require('../tenantManager');
-        const targetDir = path.join(getTenantDir(slug), 'uploads', 'site');
-        if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-
-        const targetPath = path.join(targetDir, req.file.filename);
-        fs.renameSync(req.file.path, targetPath);
-
         const logoPath = `/uploads/${slug}/site/${req.file.filename}`;
 
         req.db.prepare("UPDATE config SET logo_path = ? WHERE id = 1").run(logoPath);

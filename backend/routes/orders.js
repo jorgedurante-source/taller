@@ -10,9 +10,9 @@ const { sendEmail } = require('../lib/mailer');
 const { generateOrderPDF } = require('../lib/pdfGenerator');
 
 // Multer setup for photos - using tenant-specific persistent storage
+const { getTenantDir } = require('../tenantManager');
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
-        const { getTenantDir } = require('../tenantManager');
         const slug = req.slug || req.params.slug;
         const dir = path.join(getTenantDir(slug), 'uploads');
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
