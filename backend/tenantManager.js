@@ -231,6 +231,7 @@ function initTenantDb(db, slug) {
     addColumn('orders', 'reminder_days', "INTEGER");
     addColumn('orders', 'reminder_status', "TEXT DEFAULT 'pending'");
     addColumn('orders', 'reminder_sent_at', "DATETIME");
+    addColumn('orders', 'share_token', "TEXT");
     addColumn('order_history', 'user_id', "INTEGER");
     addColumn('templates', 'send_whatsapp', "INTEGER DEFAULT 0");
     addColumn('templates', 'send_email', "INTEGER DEFAULT 1");

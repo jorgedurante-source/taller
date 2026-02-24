@@ -129,13 +129,16 @@ router.post('/orders', auth, (req, res) => {
         const vehicle = req.db.prepare('SELECT id FROM vehicles WHERE id = ? AND client_id = ?').get(vehicle_id, client.id);
         if (!vehicle) return res.status(403).json({ message: 'Vehicle does not belong to you' });
 
-        const result = req.db.prepare(`
-            INSERT INTO orders (client_id, vehicle_id, description, status, created_by_id) 
-            VALUES (?, ?, ?, 'Pendiente', ?)
-        `).run(client.id, vehicle_id, description || '', req.user.id);
+        const crypto = require('crypto');
+        const share_token = crypto.randomBytes(6).toString('hex');
 
-        req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
-            .run(result.lastInsertRowid, 'Pendiente', 'Turno solicitado por el cliente desde el portal', req.user.id);
+        const result = req.db.prepare(`
+            INSERT INTO orders (client_id, vehicle_id, description, status, created_by_id, share_token) 
+            VALUES (?, ?, ?, 'Pendiente', NULL, ?)
+        `).run(client.id, vehicle_id, description || '', share_token);
+
+        req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, NULL)')
+            .run(result.lastInsertRowid, 'Pendiente', 'Turno solicitado por el cliente desde el portal');
 
         res.json({ id: result.lastInsertRowid, message: 'Turno solicitado correctamente' });
     } catch (err) {
