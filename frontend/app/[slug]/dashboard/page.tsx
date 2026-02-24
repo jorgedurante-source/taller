@@ -103,7 +103,7 @@ export default function DashboardPage() {
             </header>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 <StatCard
                     title="Órdenes Activas"
                     value={data?.ordersByStatus
@@ -112,19 +112,6 @@ export default function DashboardPage() {
                     icon={<ClipboardList className="text-blue-500" />}
                     accent="#3b82f6"
                 />
-                {hasPermission('income') && (
-                    <StatCard
-                        title="Ingresos (Mes)"
-                        value={showTotals ? (() => {
-                            const month = data?.incomeByMonth[0];
-                            const labor = month?.labor_income || 0;
-                            const profit = (month?.parts_price || 0) * ((data?.parts_profit_percentage || 0) / 100);
-                            return formatCurrency(labor + profit);
-                        })() : '***'}
-                        icon={<TrendingUp className="text-emerald-500" />}
-                        accent="#10b981"
-                    />
-                )}
                 <StatCard
                     title="Clientes Nuevos (Mes)"
                     value={data?.newClientsThisMonth || 0}
@@ -140,40 +127,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Charts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-                {hasPermission('income') && (
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-                        <h3 className="text-lg font-semibold mb-6" style={{ color: 'var(--text-primary)' }}>
-                            Ingresos Mensuales
-                        </h3>
-                        <div className="h-[300px]">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={data?.incomeByMonth.slice().reverse().map((m: any) => ({
-                                    ...m,
-                                    total_calculated: (m.labor_income || 0) + ((m.parts_price || 0) * ((data?.parts_profit_percentage || 0) / 100))
-                                }))}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={gridColor} />
-                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={tickStyle} />
-                                    <YAxis axisLine={false} tickLine={false} tick={tickStyle} />
-                                    <Tooltip
-                                        contentStyle={{
-                                            borderRadius: '12px',
-                                            border: '1px solid var(--border)',
-                                            boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.2)',
-                                            backgroundColor: 'var(--bg-surface)',
-                                            color: 'var(--text-primary)'
-                                        }}
-                                        formatter={(val: any) => formatCurrency(val)}
-                                        labelStyle={{ color: 'var(--text-primary)' }}
-                                        itemStyle={{ color: 'var(--text-muted)' }}
-                                    />
-                                    <Bar dataKey="total_calculated" name="Ingresos" fill="var(--accent)" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                    </div>
-                )}
-
+            <div className="grid grid-cols-1 gap-8 mb-8">
                 <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
                     <h3 className="text-lg font-semibold mb-6" style={{ color: 'var(--text-primary)' }}>
                         Órdenes por Estado

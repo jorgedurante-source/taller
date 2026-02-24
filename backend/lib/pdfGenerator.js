@@ -1,4 +1,6 @@
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+const fs = require('fs');
+const path = require('path');
 
 async function generateOrderPDF(db, orderId) {
     const order = db.prepare("SELECT o.*, (c.first_name || ' ' || c.last_name) as client_name, v.brand, v.model, v.plate FROM orders o JOIN clients c ON o.client_id = c.id JOIN vehicles v ON o.vehicle_id = v.id WHERE o.id = ?").get(orderId);
@@ -23,7 +25,45 @@ async function generateOrderPDF(db, orderId) {
     const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
     const wName = (workshop.workshop_name || 'TALLER').toUpperCase();
-    page.drawText(wName, { x: 50, y: 750, size: 24, font: bold });
+
+    // Draw Logo if exists
+    let logoOffset = 0;
+    if (workshop.logo_path) {
+        try {
+            const parts = workshop.logo_path.split('/');
+            if (parts.length >= 4 && parts[1] === 'uploads') {
+                const slug = parts[2];
+                const file = parts.slice(3).join('/');
+                const localPath = path.join(__dirname, '..', 'tenants', slug, 'uploads', file);
+
+                if (fs.existsSync(localPath)) {
+                    const logoBytes = fs.readFileSync(localPath);
+                    let logoImage;
+                    const ext = localPath.toLowerCase().split('.').pop();
+                    if (ext === 'png') {
+                        logoImage = await pdfDoc.embedPng(logoBytes);
+                    } else if (['jpg', 'jpeg'].includes(ext)) {
+                        logoImage = await pdfDoc.embedJpg(logoBytes);
+                    }
+
+                    if (logoImage) {
+                        const dims = logoImage.scaleToFit(50, 50);
+                        page.drawImage(logoImage, {
+                            x: 50,
+                            y: 735,
+                            width: dims.width,
+                            height: dims.height,
+                        });
+                        logoOffset = dims.width + 10;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to embed logo in PDF:', e);
+        }
+    }
+
+    page.drawText(wName, { x: 50 + logoOffset, y: 750, size: 24, font: bold });
     page.drawText(isBudget ? 'PRESUPUESTO DE SERVICIO' : 'ORDEN DE TRABAJO', { x: 300, y: 750, size: 14, font: bold, color: rgb(0.2, 0.4, 0.8) });
 
     page.drawText(`Cliente: ${order.client_name || 'Cliente'}`, { x: 50, y: 700, size: 12, font });
@@ -101,6 +141,8 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
+    let y = 620;
+
     const checkPage = () => {
         if (y < 80) {
             page = pdfDoc.addPage([600, 800]);
@@ -109,14 +151,50 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
     };
 
     const wName = sanitize((workshop.workshop_name || 'TALLER').toUpperCase());
-    page.drawText(wName, { x: 50, y: 750, size: 24, font: bold });
+
+    // Draw Logo if exists
+    let logoOffset = 0;
+    if (workshop.logo_path) {
+        try {
+            const parts = workshop.logo_path.split('/');
+            if (parts.length >= 4 && parts[1] === 'uploads') {
+                const slug = parts[2];
+                const file = parts.slice(3).join('/');
+                const localPath = path.join(__dirname, '..', 'tenants', slug, 'uploads', file);
+
+                if (fs.existsSync(localPath)) {
+                    const logoBytes = fs.readFileSync(localPath);
+                    let logoImage;
+                    const ext = localPath.toLowerCase().split('.').pop();
+                    if (ext === 'png') {
+                        logoImage = await pdfDoc.embedPng(logoBytes);
+                    } else if (['jpg', 'jpeg'].includes(ext)) {
+                        logoImage = await pdfDoc.embedJpg(logoBytes);
+                    }
+
+                    if (logoImage) {
+                        const dims = logoImage.scaleToFit(50, 50);
+                        page.drawImage(logoImage, {
+                            x: 50,
+                            y: 735,
+                            width: dims.width,
+                            height: dims.height,
+                        });
+                        logoOffset = dims.width + 10;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Failed to embed logo in PDF:', e);
+        }
+    }
+
+    page.drawText(wName, { x: 50 + logoOffset, y: 750, size: 24, font: bold });
     page.drawText('HISTORIAL DE MANTENIMIENTO', { x: 300, y: 750, size: 14, font: bold, color: rgb(0.2, 0.4, 0.8) });
 
     page.drawText(`Cliente: ${sanitize(vehicle.first_name)} ${sanitize(vehicle.last_name)}`, { x: 50, y: 700, size: 12, font });
     page.drawText(`Vehiculo: ${sanitize(vehicle.brand)} ${sanitize(vehicle.model)}`, { x: 50, y: 680, size: 12, font });
     page.drawText(`Patente: ${sanitize(vehicle.plate)} | Kilometraje: ${sanitize(vehicle.km)}`, { x: 50, y: 660, size: 12, font });
-
-    let y = 620;
 
     if (orders.length === 0) {
         page.drawText('No hay registros de ordenes para este vehiculo.', { x: 50, y, size: 10, font });
@@ -140,6 +218,38 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
             page.drawText(`Servicio: ${sanitize(svcDesc).substring(0, 100)}`, { x: 50, y, size: 10, font });
             y -= 20;
             checkPage();
+
+            // Fetch pricing and items if status is Entregado
+            if (order.status === 'Entregado') {
+                const items = db.prepare('SELECT description, labor_price, parts_price FROM order_items WHERE order_id = ?').all(order.id);
+                if (items && items.length > 0) {
+                    page.drawText('Detalle de Tareas y Repuestos:', { x: 50, y, size: 9, font: bold });
+                    y -= 15;
+                    checkPage();
+
+                    let totalLabor = 0;
+                    let totalParts = 0;
+                    items.forEach(i => {
+                        const itemDesc = sanitize(i.description || 'Item').substring(0, 70);
+                        const labor = i.labor_price || 0;
+                        const parts = i.parts_price || 0;
+
+                        page.drawText(`- ${itemDesc}`, { x: 60, y, size: 8, font });
+                        page.drawText(`M.O: $${labor} | Rep: $${parts}`, { x: 400, y, size: 8, font });
+                        y -= 12;
+                        checkPage();
+
+                        totalLabor += labor;
+                        totalParts += parts;
+                    });
+
+                    if (totalLabor > 0 || totalParts > 0) {
+                        page.drawText(`TOTALES FACTURADOS - Mano de Obra: $${totalLabor} | Repuestos: $${totalParts}`, { x: 50, y, size: 9, font: bold, color: rgb(0.1, 0.4, 0.1) });
+                        y -= 20;
+                        checkPage();
+                    }
+                }
+            }
 
             // Fetch last note if exists
             const lastNote = db.prepare('SELECT notes FROM order_history WHERE order_id = ? ORDER BY created_at DESC LIMIT 1').get(order.id);

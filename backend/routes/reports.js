@@ -209,4 +209,30 @@ router.get('/top-customers', auth, (req, res) => {
 });
 
 
+// @route   GET api/reports/reminders
+router.get('/reminders', auth, (req, res) => {
+    const showHistory = req.query.history === 'true';
+    try {
+        const reminders = req.db.prepare(`
+            SELECT o.id as order_id, o.reminder_at, o.status,
+                   c.first_name || ' ' || c.last_name as client_name, c.phone as client_phone,
+                   v.plate, v.brand, v.model, v.km as vehicle_km,
+                   (SELECT GROUP_CONCAT(description, ', ') FROM order_items WHERE order_id = o.id) as services_done
+            FROM orders o
+            JOIN clients c ON o.client_id = c.id
+            JOIN vehicles v ON o.vehicle_id = v.id
+            WHERE o.reminder_at IS NOT NULL
+            ${showHistory
+                ? "AND o.reminder_at < date('now', 'start of day')"
+                : "AND o.reminder_at >= date('now', 'start of day')"}
+            ORDER BY o.reminder_at ${showHistory ? 'DESC' : 'ASC'}
+        `).all();
+        res.json(reminders);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+
 module.exports = router;

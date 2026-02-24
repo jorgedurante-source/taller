@@ -247,7 +247,6 @@ export default function IncomePage() {
                                     </button>
                                 </div>
                             </div>
-
                             <div className="h-[380px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={fullDailyData} margin={{ left: 0, right: 0 }}>
@@ -280,6 +279,43 @@ export default function IncomePage() {
                                         />
                                         <Bar dataKey="labor_income" stackId="a" fill="#3b82f6" radius={[6, 6, 0, 0]} />
                                         <Bar dataKey="parts_profit" stackId="a" fill="#82ca9d" radius={[6, 6, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </section>
+
+                        {/* Monthly Income History */}
+                        <section className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm mt-8">
+                            <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3 italic mb-6">
+                                <TrendingUp className="text-emerald-600" size={32} /> HISTÓRICO MENSUAL
+                            </h3>
+                            <div className="h-[380px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={summary?.incomeByMonth.slice().reverse().map((m: any) => ({
+                                        ...m,
+                                        total_calculated: (m.labor_income || 0) + ((m.parts_price || 0) * (partsProfitPercentage / 100))
+                                    }))} margin={{ left: 0, right: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis
+                                            dataKey="month"
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 900 }}
+                                        />
+                                        <YAxis
+                                            axisLine={false}
+                                            tickLine={false}
+                                            tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 900 }}
+                                            tickFormatter={(val) => showTotals ? (val >= 1000 ? `$${val / 1000}k` : `$${val}`) : '***'}
+                                            width={55}
+                                        />
+                                        <Tooltip
+                                            cursor={{ fill: '#f8fafc' }}
+                                            contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 50px -12px rgb(0 0 0 / 0.1)', padding: '15px' }}
+                                            itemStyle={{ fontWeight: 900, color: '#0f172a' }}
+                                            formatter={(val: any) => [showTotals ? `$${Number(val).toLocaleString('es-AR')}` : '***', 'Ingreso']}
+                                        />
+                                        <Bar dataKey="total_calculated" fill="#10b981" radius={[8, 8, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
                             </div>
@@ -320,11 +356,36 @@ export default function IncomePage() {
                                     <h4 className="text-lg font-bold text-slate-900 mb-4">Top Clientes</h4>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart data={topCustomers} layout="vertical" margin={{ left: 50 }}>
-                                            <CartesianGrid strokeDasharray="3 3" />
-                                            <XAxis type="number" />
-                                            <YAxis dataKey="name" type="category" />
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
+                                            <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700 }} />
                                             <Tooltip />
-                                            <Bar dataKey="total" fill="#82ca9d" />
+                                            <Bar dataKey="total" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* Most Frequent Services */}
+                                <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm md:col-span-2">
+                                    <h4 className="text-lg font-bold text-slate-900 mb-4">Servicios más realizados</h4>
+                                    <ResponsiveContainer width="100%" height={300}>
+                                        <BarChart data={summary?.commonServices} margin={{ bottom: 30 }}>
+                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                            <XAxis
+                                                dataKey="description"
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fontSize: 9, fontWeight: 900 }}
+                                                interval={0}
+                                                angle={-15}
+                                                textAnchor="end"
+                                                dy={10}
+                                            />
+                                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 900 }} />
+                                            <Tooltip
+                                                contentStyle={{ borderRadius: '15px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.1)' }}
+                                            />
+                                            <Bar dataKey="count" name="Frecuencia" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
                                         </BarChart>
                                     </ResponsiveContainer>
                                 </div>

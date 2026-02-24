@@ -148,19 +148,40 @@ router.get('/:id', auth, (req, res) => {
 
 // @route   PUT api/orders/:id/status
 router.put('/:id/status', auth, async (req, res) => {
-    const { status, notes } = req.body;
+    const { status, notes, reminder_days } = req.body;
     try {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
-        req.db.prepare('UPDATE orders SET status = ?, modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-            .run(status, actingUserId, req.params.id);
+
+        // Fetch current order to check delivery date
+        const currentOrder = req.db.prepare('SELECT status, delivered_at, payment_status, payment_amount FROM orders WHERE id = ?').get(req.params.id);
+
+        let deliveredAt = currentOrder.delivered_at;
+        // If changing to 'Entregado' or already 'Entregado', ensure we have a delivery date
+        if (status === 'Entregado' && !deliveredAt) {
+            deliveredAt = new Date().toISOString();
+        }
+
+        let reminderAt = null;
+        if (status === 'Entregado' && reminder_days) {
+            const baseDate = new Date(deliveredAt || new Date());
+            baseDate.setDate(baseDate.getDate() + parseInt(reminder_days));
+            reminderAt = baseDate.toISOString();
+        }
+
+        req.db.prepare('UPDATE orders SET status = ?, modified_by_id = ?, updated_at = CURRENT_TIMESTAMP, reminder_at = ?, delivered_at = ?, reminder_days = ? WHERE id = ?')
+            .run(status, actingUserId, reminderAt, deliveredAt, reminder_days || null, req.params.id);
 
         // Log History
+        let historyNotes = notes || `Cambio de estado a ${status}`;
+        if (reminderAt) {
+            historyNotes += ` (Recordatorio programado para el ${new Date(reminderAt).toLocaleDateString()})`;
+        }
+
         req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
-            .run(req.params.id, status, notes || `Cambio de estado a ${status}`, actingUserId);
+            .run(req.params.id, status, historyNotes, actingUserId);
 
         // Auto-set payment to 'cobrado' when delivered
         if (status === 'Entregado') {
-            const currentOrder = req.db.prepare('SELECT payment_status, payment_amount FROM orders WHERE id = ?').get(req.params.id);
             if (!currentOrder.payment_status || currentOrder.payment_status === 'sin_cobrar') {
                 const config = req.db.prepare('SELECT * FROM config LIMIT 1').get() || {};
                 const includeParts = config.income_include_parts ?? 1;
@@ -179,12 +200,15 @@ router.put('/:id/status', auth, async (req, res) => {
         const template = req.db.prepare('SELECT * FROM templates WHERE trigger_status = ?').get(status);
         if (template) {
             const order = req.db.prepare(`
-                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand
+                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km
                 FROM orders o
                 JOIN clients c ON o.client_id = c.id
                 JOIN vehicles v ON o.vehicle_id = v.id
                 WHERE o.id = ?
             `).get(req.params.id);
+
+            const items = req.db.prepare('SELECT description FROM order_items WHERE order_id = ?').all(req.params.id);
+            const servicesStr = items.map(i => i.description).join(', ');
 
             const config = req.db.prepare('SELECT * FROM config LIMIT 1').get() || {};
             const workshopName = config.workshop_name || 'Nuestro Taller';
@@ -195,6 +219,8 @@ router.put('/:id/status', auth, async (req, res) => {
                     .replace(/\[cliente\]/g, order.first_name || 'Cliente')
                     .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
                     .replace(/{taller}|\[taller\]/g, workshopName)
+                    .replace(/\[servicios\]/g, servicesStr || 'Mantenimiento General')
+                    .replace(/\[km\]/g, order.km || '---')
                     .replace(/{orden_id}|\[orden_id\]/g, order.id);
 
                 let attachments = [];
@@ -245,7 +271,9 @@ router.post('/:id/photos', auth, upload.array('photos', 5), (req, res) => {
     const existingPhotos = JSON.parse(order.photos || '[]');
     const updatedPhotos = [...existingPhotos, ...filenames];
 
-    req.db.prepare('UPDATE orders SET photos = ? WHERE id = ?').run(JSON.stringify(updatedPhotos), req.params.id);
+    const actingUserId = req.user.id === 0 ? null : req.user.id;
+    req.db.prepare('UPDATE orders SET photos = ?, modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(JSON.stringify(updatedPhotos), actingUserId, req.params.id);
     res.json({ photos: updatedPhotos });
 });
 
@@ -268,12 +296,15 @@ router.post('/:id/budget', auth, (req, res) => {
             const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'Presupuestado'").get();
             if (template) {
                 const order = req.db.prepare(`
-                    SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand
+                    SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km
                     FROM orders o
                     JOIN clients c ON o.client_id = c.id
                     JOIN vehicles v ON o.vehicle_id = v.id
                     WHERE o.id = ?
                 `).get(req.params.id);
+
+                const items = req.db.prepare('SELECT description FROM order_items WHERE order_id = ?').all(req.params.id);
+                const servicesStr = items.map(i => i.description).join(', ');
 
                 const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
 
@@ -283,6 +314,8 @@ router.post('/:id/budget', auth, (req, res) => {
                         .replace(/\[cliente\]/g, order.first_name || 'Cliente')
                         .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
                         .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
+                        .replace(/\[servicios\]/g, servicesStr || 'Mantenimiento General')
+                        .replace(/\[km\]/g, order.km || '---')
                         .replace(/{orden_id}|\[orden_id\]/g, req.params.id);
 
                     let attachments = [];
@@ -326,6 +359,9 @@ router.post('/:id/items', auth, (req, res) => {
 
     try {
         transaction(items);
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
+        req.db.prepare('UPDATE orders SET modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .run(actingUserId, req.params.id);
         res.json({ message: 'Items agregados correctamente' });
     } catch (err) {
         console.error(err);
@@ -338,11 +374,19 @@ router.put('/items/:itemId', auth, (req, res) => {
     const { description, labor_price, parts_price } = req.body;
     const subtotal = (parseFloat(labor_price) || 0) + (parseFloat(parts_price) || 0);
     try {
+        const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
+        if (!item) return res.status(404).json({ message: 'Item no encontrado' });
+
         req.db.prepare(`
             UPDATE order_items 
             SET description = ?, labor_price = ?, parts_price = ?, subtotal = ? 
             WHERE id = ?
         `).run(description, labor_price, parts_price, subtotal, req.params.itemId);
+
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
+        req.db.prepare('UPDATE orders SET modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .run(actingUserId, item.order_id);
+
         res.json({ message: 'Item actualizado' });
     } catch (err) {
         res.status(500).json({ message: 'Error actualizando item' });
@@ -352,7 +396,15 @@ router.put('/items/:itemId', auth, (req, res) => {
 // @route   DELETE api/orders/items/:itemId
 router.delete('/items/:itemId', auth, (req, res) => {
     try {
+        const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
+        if (!item) return res.status(404).json({ message: 'Item no encontrado' });
+
         req.db.prepare('DELETE FROM order_items WHERE id = ?').run(req.params.itemId);
+
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
+        req.db.prepare('UPDATE orders SET modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+            .run(actingUserId, item.order_id);
+
         res.json({ message: 'Item eliminado' });
     } catch (err) {
         res.status(500).json({ message: 'Error eliminando item' });
@@ -363,12 +415,15 @@ router.delete('/items/:itemId', auth, (req, res) => {
 router.post('/:id/send-email', auth, async (req, res) => {
     try {
         const order = req.db.prepare(`
-            SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand
+            SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km
             FROM orders o
             JOIN clients c ON o.client_id = c.id
             JOIN vehicles v ON o.vehicle_id = v.id
             WHERE o.id = ?
         `).get(req.params.id);
+
+        const orderItems = req.db.prepare('SELECT description FROM order_items WHERE order_id = ?').all(req.params.id);
+        const servicesStr = orderItems.map(i => i.description).join(', ');
 
         if (!order || !order.email) return res.status(404).json({ message: 'Order or client email not found' });
 
@@ -384,6 +439,8 @@ router.post('/:id/send-email', auth, async (req, res) => {
             .replace(/\[cliente\]/g, order.first_name || 'Cliente')
             .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
             .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
+            .replace(/\[servicios\]/g, servicesStr || 'Mantenimiento General')
+            .replace(/\[km\]/g, order.km || '---')
             .replace(/{orden_id}|\[orden_id\]/g, order.id);
 
         let attachments = [];

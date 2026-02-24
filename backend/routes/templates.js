@@ -17,7 +17,7 @@ router.get('/', auth, (req, res) => {
 
 // @route   POST api/templates
 router.post('/', auth, isAdmin, (req, res) => {
-    const { name, content, trigger_status, include_pdf } = req.body;
+    const { name, content, trigger_status, include_pdf, send_whatsapp, send_email } = req.body;
     try {
         if (trigger_status) {
             const existing = req.db.prepare('SELECT id FROM templates WHERE trigger_status = ?').get(trigger_status);
@@ -27,9 +27,9 @@ router.post('/', auth, isAdmin, (req, res) => {
         }
 
         req.db.prepare(`
-            INSERT INTO templates (name, content, trigger_status, include_pdf) 
-            VALUES (?, ?, ?, ?)
-        `).run(name, content, trigger_status || null, include_pdf ? 1 : 0);
+            INSERT INTO templates (name, content, trigger_status, include_pdf, send_whatsapp, send_email) 
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(name, content, trigger_status || null, include_pdf ? 1 : 0, send_whatsapp ? 1 : 0, send_email ?? 1);
         res.json({ message: 'Template created' });
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
@@ -41,7 +41,7 @@ router.post('/', auth, isAdmin, (req, res) => {
 
 // @route   PUT api/templates/:id
 router.put('/:id', auth, isAdmin, (req, res) => {
-    const { name, content, trigger_status, include_pdf } = req.body;
+    const { name, content, trigger_status, include_pdf, send_whatsapp, send_email } = req.body;
     try {
         if (trigger_status) {
             const existing = req.db.prepare('SELECT id FROM templates WHERE trigger_status = ? AND id != ?').get(trigger_status, req.params.id);
@@ -52,9 +52,9 @@ router.put('/:id', auth, isAdmin, (req, res) => {
 
         req.db.prepare(`
             UPDATE templates 
-            SET name = ?, content = ?, trigger_status = ?, include_pdf = ? 
+            SET name = ?, content = ?, trigger_status = ?, include_pdf = ?, send_whatsapp = ?, send_email = ? 
             WHERE id = ?
-        `).run(name, content, trigger_status || null, include_pdf ? 1 : 0, req.params.id);
+        `).run(name, content, trigger_status || null, include_pdf ? 1 : 0, send_whatsapp ? 1 : 0, send_email ? 1 : 0, req.params.id);
         res.json({ message: 'Template updated' });
     } catch (err) {
         res.status(500).send('Server error');

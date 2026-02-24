@@ -145,6 +145,20 @@ router.post('/workshops/:slug/clear', superAuth, (req, res) => {
     }
 });
 
+// ─── POST /api/super/workshops/:slug/reseed-templates ────────────────────────
+router.post('/workshops/:slug/reseed-templates', superAuth, (req, res) => {
+    const { slug } = req.params;
+    try {
+        const db = getDb(slug);
+        const { reseedTemplates } = require('../utils/seeder');
+        reseedTemplates(db);
+        res.json({ message: 'Plantillas de mensajes restauradas' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al restaurar plantillas' });
+    }
+});
+
 // ─── POST /api/super/workshops/:slug/token ───────────────────────────────────
 router.post('/workshops/:slug/token', superAuth, (req, res) => {
     const { slug } = req.params;

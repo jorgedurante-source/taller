@@ -23,6 +23,7 @@ import {
     RefreshCw,
     Image as ImageIcon,
     AlertCircle,
+    MessageSquare,
     X,
     Eye,
     EyeOff,
@@ -219,6 +220,17 @@ export default function SuperAdminDashboard() {
             fetchData();
         } catch (err) {
             alert('Error al limpiar base de datos');
+        }
+    };
+
+    const handleReseedTemplates = async (slug: string) => {
+        if (!confirm('¿RESETEAR PLANTILLAS? Esto borrará todos los mensajes actuales del taller y restaurará las plantillas maestras por defecto.')) return;
+        try {
+            await superApi.post(`/workshops/${slug}/reseed-templates`);
+            alert('Plantillas restauradas correctamente');
+            fetchData();
+        } catch (err) {
+            alert('Error al restaurar plantillas');
         }
     };
 
@@ -616,13 +628,22 @@ export default function SuperAdminDashboard() {
                                         </div>
                                         <div className="space-y-3">
                                             <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Mantenimiento</label>
-                                            <button
-                                                onClick={() => handleClearData(showManageModal.slug)}
-                                                className="w-full bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 p-5 rounded-3xl font-black text-sm transition-all flex items-center justify-center gap-2 border border-slate-100"
-                                            >
-                                                <RefreshCw size={18} />
-                                                Limpiar DB
-                                            </button>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <button
+                                                    onClick={() => handleClearData(showManageModal.slug)}
+                                                    className="w-full bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 p-5 rounded-3xl font-black text-[10px] transition-all flex flex-col items-center justify-center gap-2 border border-slate-100"
+                                                >
+                                                    <RefreshCw size={18} />
+                                                    LIMPIAR DB
+                                                </button>
+                                                <button
+                                                    onClick={() => handleReseedTemplates(showManageModal.slug)}
+                                                    className="w-full bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-600 p-5 rounded-3xl font-black text-[10px] transition-all flex flex-col items-center justify-center gap-2 border border-slate-100 uppercase italic"
+                                                >
+                                                    <MessageSquare size={18} />
+                                                    Reseed Mensajes
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 )}

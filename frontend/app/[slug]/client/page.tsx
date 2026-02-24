@@ -45,6 +45,10 @@ export default function ClientDashboardPage() {
         description: ''
     });
 
+    const [selectedOrderDetail, setSelectedOrderDetail] = useState<any>(null);
+    const [showOrderDetailModal, setShowOrderDetailModal] = useState(false);
+    const [loadingOrderDetail, setLoadingOrderDetail] = useState(false);
+
     const fetchPortalData = async () => {
         try {
             const configRes = await api.get('/config');
@@ -129,6 +133,22 @@ export default function ClientDashboardPage() {
         } catch (err) {
             console.error('Error downloading History PDF:', err);
             alert('Error al descargar el historial');
+        }
+    };
+
+    const handleViewOrder = async (orderId: number) => {
+        setLoadingOrderDetail(true);
+        setShowOrderDetailModal(true);
+        setSelectedOrderDetail(null);
+        try {
+            const res = await clientApi.get(`/client/orders/${orderId}`);
+            setSelectedOrderDetail(res.data);
+        } catch (err) {
+            console.error('Error fetching order detail', err);
+            alert('Error al cargar detalle de la orden');
+            setShowOrderDetailModal(false);
+        } finally {
+            setLoadingOrderDetail(false);
         }
     };
 
@@ -319,14 +339,18 @@ export default function ClientDashboardPage() {
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {pastOrders.map((order: any) => (
-                                                <tr key={order.id} className="hover:bg-slate-50/50 transition-colors group">
+                                                <tr
+                                                    key={order.id}
+                                                    className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
+                                                    onClick={() => handleViewOrder(order.id)}
+                                                >
                                                     <td className="px-8 py-6">
                                                         <div className="font-bold text-[var(--text-primary)] uppercase truncate">{order.model}</div>
                                                         <div className="text-[10px] font-black italic tracking-widest font-mono" style={{ color: 'var(--accent)' }}>{order.plate}</div>
                                                     </td>
                                                     <td className="px-8 py-6 font-bold text-slate-600 text-sm">{order.description}</td>
                                                     <td className="px-8 py-6 text-sm font-bold text-slate-500 uppercase">{new Date(order.updated_at).toLocaleDateString()}</td>
-                                                    <td className="px-8 py-6 text-right flex items-center justify-end gap-3">
+                                                    <td className="px-8 py-6 text-right flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
                                                         {(order.has_budget > 0 || ['Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'].includes(order.status)) && (
                                                             <button
                                                                 onClick={() => handleDownloadPDF(order)}
@@ -545,6 +569,87 @@ export default function ClientDashboardPage() {
                                 <Calendar size={20} /> ENVIAR SOLICITUD
                             </button>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Modal Detalle de Orden */}
+            {showOrderDetailModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[40px] w-full max-w-2xl shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="p-10 pb-6 flex justify-between items-center border-b border-slate-50">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Detalle de Visita</h3>
+                                <p className="text-slate-400 text-xs font-black uppercase tracking-[0.2em]">{selectedOrderDetail?.order?.brand} {selectedOrderDetail?.order?.model} - {selectedOrderDetail?.order?.plate}</p>
+                            </div>
+                            <button onClick={() => setShowOrderDetailModal(false)} className="text-slate-400 hover:text-slate-900 p-2">
+                                <Plus size={24} className="rotate-45" />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-10 space-y-8">
+                            {loadingOrderDetail ? (
+                                <div className="flex flex-col items-center py-12 gap-4">
+                                    <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargando detalles...</p>
+                                </div>
+                            ) : selectedOrderDetail && (
+                                <>
+                                    <div className="space-y-4">
+                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Problema Reportado</h4>
+                                        <div className="p-6 bg-slate-50 rounded-3xl font-bold text-slate-700 leading-relaxed border border-slate-100">
+                                            {selectedOrderDetail.order.description}
+                                        </div>
+                                    </div>
+
+                                    {selectedOrderDetail.items?.length > 0 && (
+                                        <div className="space-y-4">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Tareas Realizadas</h4>
+                                            <div className="space-y-3">
+                                                {selectedOrderDetail.items.map((item: any, idx: number) => (
+                                                    <div key={idx} className="flex items-start gap-4 p-5 bg-white border border-slate-100 rounded-2xl shadow-sm">
+                                                        <div className="bg-emerald-50 text-emerald-600 p-2 rounded-lg mt-0.5">
+                                                            <CheckCircle2 size={16} />
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="font-bold text-slate-800 leading-snug">{item.description}</p>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {selectedOrderDetail.history?.length > 0 && (
+                                        <div className="space-y-4">
+                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Línea de Tiempo</h4>
+                                            <div className="space-y-6 relative ml-3 before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-100">
+                                                {selectedOrderDetail.history.map((h: any, idx: number) => (
+                                                    <div key={idx} className="relative pl-8">
+                                                        <div className="absolute left-[-5px] top-1.5 w-[12px] h-[12px] rounded-full bg-white border-[3px] border-slate-200"></div>
+                                                        <div className="flex justify-between items-start mb-1">
+                                                            <span className="text-[10px] font-black text-slate-900 uppercase tracking-widest">{h.status}</span>
+                                                            <span className="text-[10px] font-bold text-slate-400">{new Date(h.created_at).toLocaleDateString()}</span>
+                                                        </div>
+                                                        {h.notes && (
+                                                            <p className="text-sm font-bold text-slate-500 leading-relaxed italic">"{h.notes}"</p>
+                                                        )}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </>
+                            )}
+                        </div>
+
+                        <div className="p-8 border-t border-slate-50 bg-slate-50/50">
+                            <button
+                                onClick={() => setShowOrderDetailModal(false)}
+                                className="w-full bg-white border border-slate-200 text-slate-900 font-black py-4 rounded-2xl shadow-sm hover:bg-slate-900 hover:text-white hover:border-slate-900 transition-all uppercase tracking-widest text-xs"
+                            >
+                                Entendido
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

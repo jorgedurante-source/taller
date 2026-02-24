@@ -42,6 +42,7 @@ export default function OrderDetailsPage() {
     const [newStatus, setNewStatus] = useState('');
     const [statusNotes, setStatusNotes] = useState('');
     const [updating, setUpdating] = useState(false);
+    const [reminderDays, setReminderDays] = useState('');
     const [showItemsModal, setShowItemsModal] = useState(false);
     const [sendingEmail, setSendingEmail] = useState(false);
     const [catalog, setCatalog] = useState<any[]>([]);
@@ -59,6 +60,7 @@ export default function OrderDetailsPage() {
             setNewStatus(res.data.status);
             setPaymentStatus(res.data.payment_status || 'sin_cobrar');
             setPaymentAmount(res.data.payment_amount || 0);
+            setReminderDays(res.data.reminder_days ? String(res.data.reminder_days) : '');
         } catch (err) {
             console.error('Error fetching order', err);
         } finally {
@@ -85,9 +87,11 @@ export default function OrderDetailsPage() {
         try {
             await api.put(`/orders/${order.id}/status`, {
                 status: newStatus,
-                notes: statusNotes
+                notes: statusNotes,
+                reminder_days: reminderDays || null
             });
             setStatusNotes('');
+            setReminderDays('');
             fetchOrder();
         } catch (err: any) {
             alert('Error al actualizar estado: ' + (err.response?.data?.message || err.message));
@@ -203,28 +207,50 @@ export default function OrderDetailsPage() {
                                 {order.status}
                             </span>
                         </div>
-                        <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">
-                            Creada el {new Date(order.created_at).toLocaleDateString()} a las {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            {order.created_by_name && <span className="text-indigo-600 ml-2">por {order.created_by_name}</span>}
-                        </p>
+                        <div className="flex flex-col gap-2 mt-1">
+                            <p className="text-slate-400 font-bold tracking-wider uppercase text-[10px]">
+                                {new Date(order.created_at).toLocaleDateString()} - {new Date(order.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                {order.created_by_name && <span className="text-blue-500 ml-2">por {order.created_by_name}</span>}
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={sendEmailClient}
+                                    disabled={sendingEmail}
+                                    className="bg-slate-900 hover:bg-black text-white px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    <Mail size={14} /> {sendingEmail ? '...' : 'Notificar Email'}
+                                </button>
+                                <button
+                                    className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all flex items-center gap-2"
+                                    onClick={() => alert('Próximamente: Notificación WA automática')}
+                                >
+                                    <MessageSquare size={14} /> Notificar WA
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div className="flex items-center gap-3 w-full md:w-auto">
+                    <a
+                        href={`https://wa.me/${order.client_phone?.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 md:flex-none bg-emerald-50 text-emerald-600 border border-emerald-100 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                        <MessageSquare size={16} /> WA Directo
+                    </a>
+                    <a
+                        href={`mailto:${order.client_email}`}
+                        className="flex-1 md:flex-none bg-blue-50 text-blue-600 border border-blue-100 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                        <Mail size={16} /> Mail Directo
+                    </a>
+                    <div className="w-[1px] h-10 bg-slate-100 mx-1 hidden md:block" />
                     <button
                         onClick={downloadPDF}
-                        className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-900 px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
+                        className="flex-1 md:flex-none bg-white border border-slate-200 text-slate-400 hover:text-slate-900 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2"
                     >
-                        <Download size={18} /> Descargar PDF
-                    </button>
-                    <button
-                        onClick={sendEmailClient}
-                        disabled={sendingEmail}
-                        className="flex-1 md:flex-none bg-blue-600 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-200 hover:bg-blue-700 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                        <Mail size={18} /> {sendingEmail ? 'Enviando...' : 'Enviar Email'}
-                    </button>
-                    <button className="flex-1 md:flex-none bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-200 hover:bg-emerald-700 transition-all flex items-center justify-center gap-2">
-                        <MessageSquare size={18} /> Enviar WA
+                        <Download size={16} /> PDF
                     </button>
                 </div>
             </header>
@@ -378,6 +404,54 @@ export default function OrderDetailsPage() {
                                     <option value="Entregado" className="text-slate-900">Entregado</option>
                                 </select>
                             </div>
+                            {newStatus === 'Entregado' && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">Recordar en...</label>
+                                    <select
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-blue-500/50 appearance-none"
+                                        value={reminderDays}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setReminderDays(val);
+                                            // Auto-save only if already delivered
+                                            if (order.status === 'Entregado') {
+                                                (async () => {
+                                                    try {
+                                                        await api.put(`/orders/${order.id}/status`, {
+                                                            status: 'Entregado',
+                                                            notes: val ? `Seguimiento reprogramado (${val} días)` : 'Recordatorio eliminado',
+                                                            reminder_days: val || null
+                                                        });
+                                                        fetchOrder();
+                                                    } catch (err) {
+                                                        alert('Error al guardar recordatorio');
+                                                    }
+                                                })();
+                                            }
+                                        }}
+                                    >
+                                        <option value="" className="text-slate-900">Sin recordatorio</option>
+                                        <option value="1" className="text-slate-900">1 día</option>
+                                        <option value="15" className="text-slate-900">15 días</option>
+                                        <option value="30" className="text-slate-900">1 mes</option>
+                                        <option value="60" className="text-slate-900">2 meses</option>
+                                        <option value="90" className="text-slate-900">3 meses</option>
+                                        <option value="120" className="text-slate-900">4 meses</option>
+                                        <option value="150" className="text-slate-900">5 meses</option>
+                                        <option value="180" className="text-slate-900">6 meses</option>
+                                        <option value="210" className="text-slate-900">7 meses</option>
+                                        <option value="240" className="text-slate-900">8 meses</option>
+                                        <option value="270" className="text-slate-900">9 meses</option>
+                                        <option value="300" className="text-slate-900">10 meses</option>
+                                        <option value="330" className="text-slate-900">11 meses</option>
+                                        <option value="365" className="text-slate-900">1 año</option>
+                                        <option value="730" className="text-slate-900">2 años</option>
+                                        <option value="1095" className="text-slate-900">3 años</option>
+                                        <option value="1460" className="text-slate-900">4 años</option>
+                                        <option value="1825" className="text-slate-900">5 años</option>
+                                    </select>
+                                </div>
+                            )}
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notas del Cambio</label>
                                 <textarea
@@ -485,8 +559,20 @@ export default function OrderDetailsPage() {
                             </div>
                             <div>
                                 <h5 className="text-lg font-black text-slate-900 uppercase italic tracking-tight">{order.client_name}</h5>
-                                <p className="text-blue-600 font-bold text-sm">{order.client_phone}</p>
-                                <p className="text-slate-500 text-xs font-bold">{order.client_email}</p>
+                                <a
+                                    href={`https://wa.me/${order.client_phone?.replace(/\D/g, '')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-blue-600 font-bold text-sm block hover:text-emerald-700 transition-colors"
+                                >
+                                    {order.client_phone}
+                                </a>
+                                <a
+                                    href={`mailto:${order.client_email}`}
+                                    className="text-slate-500 text-xs font-bold block hover:text-blue-600 transition-colors"
+                                >
+                                    {order.client_email}
+                                </a>
                             </div>
                         </section>
 

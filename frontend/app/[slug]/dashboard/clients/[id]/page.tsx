@@ -211,14 +211,22 @@ export default function ClientDetailsPage() {
                         {client.nickname && <span className="bg-amber-100 text-amber-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest">{client.nickname}</span>}
 
                         <div className="mt-8 space-y-4">
-                            <div className="flex items-center gap-4 text-slate-600 font-bold">
+                            <a
+                                href={`https://wa.me/${client.phone.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-4 text-slate-600 font-bold hover:text-emerald-600 transition-colors"
+                            >
                                 <Phone size={18} className="text-slate-300" />
                                 <span>{client.phone}</span>
-                            </div>
-                            <div className="flex items-center gap-4 text-slate-600 font-bold">
+                            </a>
+                            <a
+                                href={`mailto:${client.email}`}
+                                className="flex items-center gap-4 text-slate-600 font-bold hover:text-blue-600 transition-colors"
+                            >
                                 <Mail size={18} className="text-slate-300" />
                                 <span>{client.email}</span>
-                            </div>
+                            </a>
                             {client.address && (
                                 <div className="flex items-center gap-4 text-slate-600 font-bold">
                                     <MapPin size={18} className="text-slate-300" />

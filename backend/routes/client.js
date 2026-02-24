@@ -144,6 +144,31 @@ router.post('/orders', auth, (req, res) => {
     }
 });
 
+// @route   GET api/client/orders/:id
+router.get('/orders/:id', auth, (req, res) => {
+    try {
+        const client = req.db.prepare('SELECT id FROM clients WHERE email = ?').get(req.user.username);
+        if (!client) return res.status(404).json({ message: 'Client profile not found' });
+
+        const order = req.db.prepare(`
+            SELECT o.*, v.plate, v.model, v.brand
+            FROM orders o
+            JOIN vehicles v ON o.vehicle_id = v.id
+            WHERE o.id = ? AND o.client_id = ?
+        `).get(req.params.id, client.id);
+
+        if (!order) return res.status(404).json({ message: 'Order not found' });
+
+        const items = req.db.prepare('SELECT description, labor_price, parts_price FROM order_items WHERE order_id = ?').all(order.id);
+        const history = req.db.prepare('SELECT status, notes, created_at FROM order_history WHERE order_id = ? ORDER BY created_at DESC').all(order.id);
+
+        res.json({ order, items, history });
+    } catch (err) {
+        console.error('CLIENT ORDER DETAIL ERROR:', err);
+        res.status(500).send('Server error');
+    }
+});
+
 // @route   GET api/client/history-pdf/:vehicle_id
 // Allow logged in client to download history of their vehicle
 router.get('/history-pdf/:vehicle_id', auth, async (req, res) => {

@@ -328,7 +328,7 @@ export default function SettingsPage() {
     if (loading) return <div className="p-8 text-slate-500 font-medium">Cargando Ajustes del Sistema...</div>;
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 pb-12">
+        <div className="max-w-7xl mx-auto space-y-8 pb-12 transition-all">
             <header>
                 <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Panel de Configuración</h2>
                 <p className="text-slate-500 mt-1">Personalizá todos los aspectos de tu sistema taller.</p>
@@ -540,9 +540,9 @@ export default function SettingsPage() {
                 )}
 
                 {activeTab === 'messages' && (
-                    <div className="bg-white p-10 rounded-3xl border border-slate-100 shadow-sm space-y-12">
-                        <div className="flex flex-col md:flex-row gap-10">
-                            <div className="flex-1 space-y-8">
+                    <div className="bg-white p-6 md:p-10 rounded-3xl border border-slate-100 shadow-sm space-y-12">
+                        <div className="flex flex-col xl:flex-row gap-10 items-start">
+                            <div className="flex-grow w-full space-y-8">
                                 <div className="max-w-2xl flex justify-between items-end">
                                     <div>
                                         <h3 className="text-2xl font-bold text-slate-800">Plantillas de Mensajes</h3>
@@ -558,8 +558,8 @@ export default function SettingsPage() {
 
                                 <div className="grid grid-cols-1 gap-8">
                                     {templates.map((template) => (
-                                        <div key={template.id} className="p-8 bg-slate-50 rounded-[32px] border border-slate-100 space-y-6 shadow-sm">
-                                            <div className="flex justify-between items-start">
+                                        <div key={template.id} className="p-6 md:p-8 bg-slate-50 rounded-[32px] border border-slate-100 space-y-6 shadow-sm">
+                                            <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
                                                 <div className="flex items-center gap-3">
                                                     <input
                                                         className="font-black text-slate-800 uppercase tracking-tighter italic text-lg bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-100 rounded px-1"
@@ -571,7 +571,7 @@ export default function SettingsPage() {
                                                         <Trash2 size={16} />
                                                     </button>
                                                 </div>
-                                                <div className="flex gap-4">
+                                                <div className="flex flex-wrap items-center gap-4">
                                                     <div className="space-y-1">
                                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Disparador</label>
                                                         <select
@@ -587,22 +587,49 @@ export default function SettingsPage() {
                                                             <option value="En reparación">En reparación</option>
                                                             <option value="Listo para entrega">Listo para entrega</option>
                                                             <option value="Entregado">Entregado</option>
+                                                            <option value="Recordatorio">Recordatorio</option>
                                                         </select>
                                                     </div>
-                                                    {template.trigger_status && (
-                                                        <div className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-slate-100 mt-4">
+                                                    <div className="flex flex-wrap items-center gap-4 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm shrink-0">
+                                                        <div className="flex items-center gap-2">
                                                             <input
                                                                 type="checkbox"
-                                                                id={`pdf-${template.id}`}
-                                                                checked={template.include_pdf === 1}
-                                                                onChange={(e) => handleUpdateTemplate(template.id, { ...template, include_pdf: e.target.checked ? 1 : 0 })}
+                                                                id={`email-${template.id}`}
+                                                                checked={template.send_email !== 0}
+                                                                onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_email: e.target.checked ? 1 : 0 })}
                                                                 className="w-4 h-4 rounded text-blue-600 border-slate-300"
                                                             />
-                                                            <label htmlFor={`pdf-${template.id}`} className="text-xs font-black text-slate-600 uppercase tracking-widest flex items-center gap-2 cursor-pointer">
-                                                                <FileText size={14} className="text-blue-500" /> Adjuntar PDF
+                                                            <label htmlFor={`email-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                <Mail size={12} className="text-blue-500" /> Email
                                                             </label>
                                                         </div>
-                                                    )}
+                                                        <div className="flex items-center gap-2">
+                                                            <input
+                                                                type="checkbox"
+                                                                id={`wa-${template.id}`}
+                                                                checked={template.send_whatsapp === 1}
+                                                                onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_whatsapp: e.target.checked ? 1 : 0 })}
+                                                                className="w-4 h-4 rounded text-emerald-600 border-slate-300"
+                                                            />
+                                                            <label htmlFor={`wa-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                <MessageSquare size={12} className="text-emerald-500" /> WhatsApp
+                                                            </label>
+                                                        </div>
+                                                        {template.trigger_status && (
+                                                            <div className="flex items-center gap-2 pl-4 border-l border-slate-100">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    id={`pdf-${template.id}`}
+                                                                    checked={template.include_pdf === 1}
+                                                                    onChange={(e) => handleUpdateTemplate(template.id, { ...template, include_pdf: e.target.checked ? 1 : 0 })}
+                                                                    className="w-4 h-4 rounded text-indigo-600 border-slate-300"
+                                                                />
+                                                                <label htmlFor={`pdf-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                    <FileText size={12} className="text-indigo-500" /> PDF
+                                                                </label>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <textarea
@@ -623,7 +650,7 @@ export default function SettingsPage() {
                                 </div>
                             </div>
 
-                            <div className="md:w-1/3 bg-slate-900 p-8 rounded-3xl text-white space-y-6">
+                            <div className="xl:w-80 xl:sticky xl:top-24 bg-slate-900 p-8 rounded-3xl text-white space-y-6 shrink-0">
                                 <h4 className="text-lg font-bold flex items-center gap-2 text-blue-400">
                                     <ShieldCheck size={20} /> Tokens Disponibles
                                 </h4>
@@ -681,6 +708,28 @@ export default function SettingsPage() {
                                             <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-indigo-400">Insertar</span>
                                         </div>
                                         <p className="text-slate-400 text-xs mt-1">Número de orden.</p>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleInsertToken('[servicios]')}
+                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-cyan-500/30 group"
+                                    >
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-cyan-400 font-black tracking-wider">[servicios]</span>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-cyan-400">Insertar</span>
+                                        </div>
+                                        <p className="text-slate-400 text-xs mt-1">Lista de trabajos realizados.</p>
+                                    </button>
+
+                                    <button
+                                        onClick={() => handleInsertToken('[km]')}
+                                        className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-violet-500/30 group"
+                                    >
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-violet-400 font-black tracking-wider">[km]</span>
+                                            <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-violet-400">Insertar</span>
+                                        </div>
+                                        <p className="text-slate-400 text-xs mt-1">Kilometraje del vehículo.</p>
                                     </button>
                                 </div>
                             </div>

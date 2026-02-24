@@ -15,7 +15,12 @@
 backend/super.db*
 backend/tenants/
 backend/database.sqlite
+backend/*.sqlite
 backend/nodemon.log
+
+# Media/System artifacts
+frontend/SystemImages/
+frontend/public/uploads/
 
 # Environment secrets
 .env

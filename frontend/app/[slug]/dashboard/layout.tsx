@@ -19,7 +19,8 @@ import {
     Plus,
     ShieldCheck,
     ChevronDown,
-    Building2
+    Building2,
+    Bell
 } from 'lucide-react';
 
 interface Workshop {
@@ -150,6 +151,7 @@ export default function DashboardLayout({
                         </>
                     )}
                     {hasPermission('income') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label="Ingresos" />}
+                    {hasPermission('orders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label="Recordatorios" />}
                     {hasPermission('settings') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label="Configuración" />}
                 </nav>
 

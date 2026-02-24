@@ -214,12 +214,17 @@ export default function VehicleDetailsPage() {
                                 </div>
                                 <span className="font-black text-[var(--text-primary)] uppercase tracking-tight">{vehicle.first_name} {vehicle.last_name}</span>
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className="bg-slate-50 p-2.5 rounded-xl text-emerald-600 border border-slate-100">
+                            <a
+                                href={`https://wa.me/${vehicle.client_phone?.replace(/\D/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-4 hover:text-emerald-600 transition-colors group/phone"
+                            >
+                                <div className="bg-slate-50 p-2.5 rounded-xl text-emerald-600 border border-slate-100 group-hover/phone:bg-emerald-50 transition-colors">
                                     <Phone size={18} />
                                 </div>
                                 <span className="font-bold text-slate-600">{vehicle.client_phone}</span>
-                            </div>
+                            </a>
                         </div>
                         <Link
                             href={`/${slug}/dashboard/clients/${vehicle.client_id}`}
