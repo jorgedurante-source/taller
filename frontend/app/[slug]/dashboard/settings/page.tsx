@@ -29,7 +29,8 @@ import {
     Link2,
     Bell,
     AlertCircle,
-    RefreshCw
+    RefreshCw,
+    X
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { THEMES, applyTheme, getStoredTheme } from '@/lib/theme';
@@ -46,6 +47,7 @@ export default function SettingsPage() {
     const { slug } = useSlug();
     const [copiedPortal, setCopiedPortal] = useState(false);
     const { notify } = useNotification();
+    const [isLogoOpen, setIsLogoOpen] = useState(false);
 
     // Load stored theme on mount
     React.useEffect(() => {
@@ -558,7 +560,12 @@ export default function SettingsPage() {
                             {config.logo_path && (
                                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center justify-center gap-4">
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vista Previa Logo</p>
-                                    <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + config.logo_path} alt="Workshop Logo" className="max-h-32 object-contain" />
+                                    <img
+                                        src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + config.logo_path}
+                                        alt="Workshop Logo"
+                                        className="max-h-32 object-contain cursor-zoom-in hover:scale-105 transition-all duration-300"
+                                        onClick={() => setIsLogoOpen(true)}
+                                    />
                                 </div>
                             )}
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
@@ -1182,6 +1189,30 @@ export default function SettingsPage() {
                     )
                 }
             </div>
+
+            {isLogoOpen && config.logo_path && (
+                <div
+                    className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-md animate-in fade-in duration-300"
+                    onClick={() => setIsLogoOpen(false)}
+                >
+                    <div
+                        className="relative max-w-5xl w-full flex items-center justify-center animate-in zoom-in duration-300"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            onClick={() => setIsLogoOpen(false)}
+                            className="absolute -top-16 right-0 text-white/70 hover:text-white transition-all p-2 hover:bg-white/10 rounded-full"
+                        >
+                            <X size={40} strokeWidth={1.5} />
+                        </button>
+                        <img
+                            src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + config.logo_path}
+                            alt="Logo Extendido"
+                            className="max-h-[85vh] max-w-full object-contain rounded-[40px] shadow-2xl bg-white p-12"
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
