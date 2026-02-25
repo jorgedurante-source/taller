@@ -127,15 +127,16 @@ export default function DashboardPage() {
             </header>
 
             {/* Main Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${hasPermission('appointments') ? 'xl:grid-cols-5' : ''} gap-6`}>
                 <StatCard
                     title="Órdenes Activas"
                     value={data?.ordersByStatus
-                        .filter((item: any) => !['Pendiente', 'Entregado', 'Entregada'].includes(item.status))
+                        .filter((item: any) => !['Pendiente', 'Entregado', 'Entregada', 'Turno asignado'].includes(item.status))
                         .reduce((acc: number, item: any) => acc + item.count, 0) || 0}
                     icon={<ClipboardList size={24} />}
                     color="blue"
                     description="Trabajos en curso"
+                    onClick={() => router.push(`/${slug}/dashboard/orders`)}
                 />
                 <StatCard
                     title="Clientes Nuevos"
@@ -143,6 +144,7 @@ export default function DashboardPage() {
                     icon={<Users size={24} />}
                     color="amber"
                     description="Registrados este mes"
+                    onClick={() => router.push(`/${slug}/dashboard/clients`)}
                 />
                 <StatCard
                     title="Esperando Presupuesto"
@@ -150,13 +152,25 @@ export default function DashboardPage() {
                     icon={<Clock size={24} />}
                     color="indigo"
                     description="Nuevos presupuestos"
+                    onClick={() => router.push(`/${slug}/dashboard/orders?status=Pendiente`)}
                 />
+                {hasPermission('appointments') && (
+                    <StatCard
+                        title="Turnos Asignados"
+                        value={data?.assignedAppointmentsCount || 0}
+                        icon={<Bell size={24} />}
+                        color="purple"
+                        description="Citas programadas"
+                        onClick={() => router.push(`/${slug}/dashboard/appointments`)}
+                    />
+                )}
                 <StatCard
                     title="Listos para entrega"
                     value={data?.ordersByStatus.find((s: any) => s.status === 'Listo para entrega')?.count || 0}
                     icon={<Car size={24} />}
                     color="emerald"
                     description="Vehículos terminados"
+                    onClick={() => router.push(`/${slug}/dashboard/orders?status=Listo para entrega`)}
                 />
             </div>
 
@@ -218,14 +232,14 @@ export default function DashboardPage() {
                                     <tr key={i} className="hover:bg-slate-50/80 transition-all rounded-2xl group">
                                         <td className="px-6 py-4">
                                             <div className="flex items-center gap-4">
-                                                <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                                <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-[10px] font-black text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
                                                     {i + 1}
                                                 </div>
                                                 <span className="font-bold text-slate-600 uppercase text-xs">{service.description}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-right">
-                                            <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-black group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-all">
+                                            <span className="bg-slate-50 border border-slate-100 text-slate-800 px-3 py-1 rounded-lg text-xs font-black group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-all">
                                                 {service.count} <span className="text-[10px] ml-0.5 opacity-60">VEH.</span>
                                             </span>
                                         </td>
@@ -275,22 +289,29 @@ export default function DashboardPage() {
     );
 }
 
-function StatCard({ title, value, icon, color, description }: { title: string, value: string | number, icon: React.ReactNode, color: string, description: string }) {
+function StatCard({ title, value, icon, color, description, onClick }: { title: string, value: string | number, icon: React.ReactNode, color: string, description: string, onClick?: () => void }) {
     const colorClasses: Record<string, string> = {
         blue: 'bg-blue-50 text-blue-600 border-blue-100',
         amber: 'bg-amber-50 text-amber-600 border-amber-100',
         emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
-        indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100'
+        indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+        purple: 'bg-purple-50 text-purple-600 border-purple-100'
     };
 
     return (
-        <div className="bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 transition-all">
+        <div
+            onClick={onClick}
+            className={`bg-white p-8 rounded-[40px] shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-xl hover:-translate-y-1 transition-all ${onClick ? 'cursor-pointer' : ''}`}
+        >
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-6 border ${colorClasses[color]}`}>
                 {icon}
             </div>
             <div>
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{title}</p>
-                <p className="text-2xl font-black text-slate-900 tracking-tighter">{value}</p>
+                <div className="flex items-center justify-between group-hover:pr-2 transition-all">
+                    <p className="text-2xl font-black text-slate-900 tracking-tighter">{value}</p>
+                    {onClick && <ChevronRight size={16} className="text-slate-300 opacity-0 group-hover:opacity-100 transition-all" />}
+                </div>
                 <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-tight">{description}</p>
             </div>
         </div>

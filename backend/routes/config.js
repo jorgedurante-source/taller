@@ -52,7 +52,8 @@ router.put('/', auth, hasPermission('settings'), (req, res) => {
         address, phone, email, whatsapp, instagram, business_hours,
         tax_percentage, income_include_parts, parts_profit_percentage,
         smtp_host, smtp_port, smtp_user, smtp_pass, theme_id,
-        reminder_enabled, reminder_time, mail_provider, resend_api_key
+        reminder_enabled, reminder_time, mail_provider, resend_api_key,
+        messages_enabled
     } = req.body;
 
     try {
@@ -65,7 +66,8 @@ router.put('/', auth, hasPermission('settings'), (req, res) => {
                 business_hours = ?, tax_percentage = ?, income_include_parts = ?, 
                 parts_profit_percentage = ?, smtp_host = ?, smtp_port = ?, 
                 smtp_user = ?, smtp_pass = ?, theme_id = ?,
-                reminder_enabled = ?, reminder_time = ?, mail_provider = ?, resend_api_key = ?
+                reminder_enabled = ?, reminder_time = ?, mail_provider = ?, resend_api_key = ?,
+                messages_enabled = ?
             WHERE id = 1
         `).run(
             workshop_name, footer_text, logo_path,
@@ -76,7 +78,8 @@ router.put('/', auth, hasPermission('settings'), (req, res) => {
             reminder_enabled === undefined ? 1 : reminder_enabled,
             reminder_time || '09:00',
             mail_provider || 'smtp',
-            resend_api_key || null
+            resend_api_key || null,
+            messages_enabled === undefined ? 1 : messages_enabled
         );
         res.json({ message: 'Configuration updated successfully' });
     } catch (err) {

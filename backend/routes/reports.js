@@ -127,6 +127,10 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
           WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
         `).get().count;
 
+        const assignedAppointmentsCount = req.db.prepare(`
+          SELECT COUNT(*) as count FROM orders WHERE status = 'Turno asignado'
+        `).get().count;
+
         res.json({
             incomeByMonth,
             historicalStats,
@@ -136,7 +140,8 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
             commonServices,
             vehiclesByMonth,
             newClientsThisMonth,
-            readyToDeliverTotal
+            readyToDeliverTotal,
+            assignedAppointmentsCount
         });
     } catch (err) {
         console.error(err);

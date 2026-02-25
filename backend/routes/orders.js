@@ -92,7 +92,9 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
 
             const config = req.db.prepare('SELECT * FROM config LIMIT 1').get() || {};
 
-            if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
+            if (config.messages_enabled === 0) {
+                console.log('[Automation] Messages disabled in config. Skipping notification.');
+            } else if (!config.smtp_host || !config.smtp_user || !config.smtp_pass) {
                 console.warn('SMTP support is not fully configured. Email skipped.');
             } else if (order && order.email && template.send_email === 1) {
                 let siteUrl = (process.env.SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -252,7 +254,9 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                 }
             }
 
-            if (order && order.email && template.send_email === 1) {
+            if (config.messages_enabled === 0) {
+                console.log('[Automation] Messages disabled in config. Skipping status notification.');
+            } else if (order && order.email && template.send_email === 1) {
                 let siteUrl = (process.env.SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
                 const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
 
@@ -362,7 +366,9 @@ router.post('/:id/budget', auth, hasPermission('orders'), (req, res) => {
 
                 const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
 
-                if (order && order.email && template.send_email === 1) {
+                if (config && config.messages_enabled === 0) {
+                    console.log('[Automation] Messages disabled in config. Skipping budget notification.');
+                } else if (order && order.email && template.send_email === 1) {
                     let message = template.content
                         .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
                         .replace(/\[cliente\]/g, order.first_name || 'Cliente')

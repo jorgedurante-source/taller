@@ -83,6 +83,7 @@ function initTenantDb(db, slug) {
             theme_id TEXT DEFAULT 'default',
             reminder_enabled INTEGER DEFAULT 1,
             reminder_time TEXT DEFAULT '09:00',
+            messages_enabled INTEGER DEFAULT 1,
             enabled_modules TEXT DEFAULT '["inventory", "appointments", "income", "reports", "settings"]'
         );
 
@@ -266,6 +267,7 @@ function initTenantDb(db, slug) {
     addColumn('config', 'reminder_time', "TEXT DEFAULT '09:00'");
     addColumn('config', 'mail_provider', "TEXT DEFAULT 'smtp'");
     addColumn('config', 'resend_api_key', "TEXT");
+    addColumn('config', 'messages_enabled', "INTEGER DEFAULT 1");
     addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
     addColumn('users', 'first_name', "TEXT");
     addColumn('users', 'last_name', "TEXT");

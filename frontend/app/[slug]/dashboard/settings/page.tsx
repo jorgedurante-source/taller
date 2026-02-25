@@ -98,7 +98,8 @@ export default function SettingsPage() {
         smtp_port: '',
         smtp_user: '',
         smtp_pass: '',
-        theme_id: 'default'
+        theme_id: 'default',
+        messages_enabled: 1
     });
 
     // Services Catalog State
@@ -698,220 +699,269 @@ export default function SettingsPage() {
                         )}
 
                         {commsTab === 'messages' && (
-                            <div className="bg-white p-6 md:p-10 rounded-3xl border border-slate-100 shadow-sm space-y-8">
-                                <div className="flex justify-between items-end gap-4 border-b border-slate-100 pb-8">
-                                    <div>
-                                        <h3 className="text-2xl font-bold text-slate-800">Plantillas de Mensajes</h3>
-                                        <p className="text-slate-500 mt-1">Personaliza los mensajes que se envían por cada estado de la reparación.</p>
+                            <div className="space-y-8">
+                                <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-indigo-500 p-3 rounded-2xl shadow-lg shadow-indigo-200 text-white">
+                                                <MessageSquare size={24} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-xl font-black uppercase italic tracking-tight text-slate-800">Mensajes Automáticos</h3>
+                                                <p className="text-slate-500 text-sm font-bold opacity-80 mt-1">Controlá el envío automático por cambio de estado.</p>
+                                            </div>
+                                        </div>
+                                        <label className="flex items-center gap-4 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-inner">
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    className="sr-only"
+                                                    checked={config.messages_enabled === 1}
+                                                    onChange={(e) => setConfig((prev: any) => ({ ...prev, messages_enabled: e.target.checked ? 1 : 0 }))}
+                                                />
+                                                <div className={`w-14 h-7 rounded-full transition-colors ${config.messages_enabled === 1 ? 'bg-indigo-500' : 'bg-slate-300'}`}></div>
+                                                <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${config.messages_enabled === 1 ? 'translate-x-7' : ''}`}></div>
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="text-xs font-black uppercase tracking-widest text-slate-700">Estado: {config.messages_enabled === 1 ? 'Habilitados' : 'Deshabilitados'}</span>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Automáticos por estado</p>
+                                            </div>
+                                        </label>
                                     </div>
-                                    <button
-                                        onClick={handleCreateTemplate}
-                                        className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-100 flex items-center gap-2 shrink-0"
-                                    >
-                                        <Plus size={16} /> Nueva Plantilla
-                                    </button>
+
+                                    <div className="flex items-start gap-4 bg-amber-50 border border-amber-100 p-5 rounded-2xl">
+                                        <AlertCircle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+                                        <p className="text-xs font-bold text-amber-700 uppercase leading-relaxed">
+                                            Desactivar esta opción evitará que se envíen mensajes automáticos cuando cambies el estado de una orden (ej: de Pendiente a Presupuestado). <span className="bg-amber-200/50 px-1 rounded">Esto no afecta a los recordatorios de mantenimiento programados</span>, los cuales tienen su propia configuración un paso más arriba.
+                                        </p>
+                                    </div>
+
+                                    <div className="flex justify-end pt-2">
+                                        <button
+                                            onClick={handleSaveConfig}
+                                            disabled={saving}
+                                            className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2 disabled:opacity-50"
+                                        >
+                                            {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} />}
+                                            Guardar Ajuste de Mensajes
+                                        </button>
+                                    </div>
                                 </div>
 
-                                <div className="flex flex-col xl:flex-row gap-10 items-start">
-                                    <div className="flex-grow w-full space-y-8">
-                                        <div className="grid grid-cols-1 gap-8">
-                                            {templates.map((template) => (
-                                                <div key={template.id} className="p-6 md:p-8 bg-slate-50 rounded-[32px] border border-slate-100 space-y-6 shadow-sm">
-                                                    <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
-                                                        <div className="flex items-center gap-3">
-                                                            <input
-                                                                className="font-black text-slate-800 uppercase tracking-tighter italic text-lg bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-100 rounded px-1"
-                                                                value={template.name}
-                                                                onChange={(e) => setTemplates(templates.map(t => t.id === template.id ? { ...t, name: e.target.value } : t))}
-                                                                onBlur={(e) => handleUpdateTemplate(template.id, { ...template, name: e.target.value })}
-                                                            />
-                                                            <button onClick={() => handleDeleteTemplate(template.id)} className="text-slate-300 hover:text-red-500 transition-colors">
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        </div>
-                                                        <div className="flex flex-wrap items-center gap-4">
-                                                            <div className="space-y-1">
-                                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Disparador</label>
-                                                                <select
-                                                                    className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                                                                    value={template.trigger_status || ''}
-                                                                    onChange={(e) => handleUpdateTemplate(template.id, { ...template, trigger_status: e.target.value, include_pdf: e.target.value ? template.include_pdf : 0 })}
-                                                                >
-                                                                    <option value="">Manual</option>
-                                                                    <option value="Pendiente">Al crear (Pendiente)</option>
-                                                                    <option value="Turno asignado">Turno asignado</option>
-                                                                    <option value="En proceso">En proceso</option>
-                                                                    <option value="Presupuestado">Presupuestado</option>
-                                                                    <option value="Aprobado">Aprobado</option>
-                                                                    <option value="En reparación">En reparación</option>
-                                                                    <option value="Listo para entrega">Listo para entrega</option>
-                                                                    <option value="Entregado">Entregado</option>
-                                                                    <option value="Recordatorio">Recordatorio</option>
-                                                                </select>
-                                                            </div>
-                                                            <div className="flex flex-wrap items-center gap-4 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm shrink-0">
-                                                                <div className="flex items-center gap-2">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        id={`email-${template.id}`}
-                                                                        checked={template.send_email !== 0}
-                                                                        onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_email: e.target.checked ? 1 : 0 })}
-                                                                        className="w-4 h-4 rounded text-blue-600 border-slate-300"
-                                                                    />
-                                                                    <label htmlFor={`email-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
-                                                                        <Mail size={12} className="text-blue-500" /> Email
-                                                                    </label>
-                                                                </div>
-                                                                <div className="flex items-center gap-2">
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        id={`wa-${template.id}`}
-                                                                        checked={template.send_whatsapp === 1}
-                                                                        onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_whatsapp: e.target.checked ? 1 : 0 })}
-                                                                        className="w-4 h-4 rounded text-emerald-600 border-slate-300"
-                                                                    />
-                                                                    <label htmlFor={`wa-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
-                                                                        <MessageSquare size={12} className="text-emerald-500" /> WhatsApp
-                                                                    </label>
-                                                                </div>
-                                                                {template.trigger_status && (
-                                                                    <div className="flex items-center gap-2 pl-4 border-l border-slate-100">
-                                                                        <input
-                                                                            type="checkbox"
-                                                                            id={`pdf-${template.id}`}
-                                                                            checked={template.include_pdf === 1}
-                                                                            onChange={(e) => handleUpdateTemplate(template.id, { ...template, include_pdf: e.target.checked ? 1 : 0 })}
-                                                                            className="w-4 h-4 rounded text-indigo-600 border-slate-300"
-                                                                        />
-                                                                        <label htmlFor={`pdf-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
-                                                                            <FileText size={12} className="text-indigo-500" /> PDF
-                                                                        </label>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <textarea
-                                                        className="w-full h-32 p-6 rounded-2xl border border-slate-200 outline-none shadow-inner text-slate-900 font-bold text-sm bg-white/50 focus:bg-white transition-all placeholder:text-slate-300"
-                                                        value={template.content}
-                                                        onFocus={() => {
-                                                            setLastFocusedId(template.id);
-                                                        }}
-                                                        onSelect={(e: any) => setCursorPos(e.target.selectionStart)}
-                                                        onChange={(e) => {
-                                                            setCursorPos(e.target.selectionStart);
-                                                            setTemplates(templates.map(t => t.id === template.id ? { ...t, content: e.target.value } : t));
-                                                        }}
-                                                        onBlur={(e) => handleUpdateTemplate(template.id, { ...template, content: e.target.value })}
-                                                    />
-                                                </div>
-                                            ))}
+                                <div className="bg-white p-6 md:p-10 rounded-3xl border border-slate-100 shadow-sm space-y-8">
+                                    <div className="flex justify-between items-end gap-4 border-b border-slate-100 pb-8">
+                                        <div>
+                                            <h3 className="text-2xl font-bold text-slate-800">Plantillas de Mensajes</h3>
+                                            <p className="text-slate-500 mt-1">Personaliza los mensajes que se envían por cada estado de la reparación.</p>
                                         </div>
+                                        <button
+                                            onClick={handleCreateTemplate}
+                                            className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-100 flex items-center gap-2 shrink-0"
+                                        >
+                                            <Plus size={16} /> Nueva Plantilla
+                                        </button>
                                     </div>
 
-                                    <div className="xl:w-80 xl:sticky xl:top-24 bg-slate-900 p-8 rounded-3xl text-white space-y-6 shrink-0 shadow-xl">
-                                        <h4 className="text-lg font-bold flex items-center gap-2 text-blue-400">
-                                            <ShieldCheck size={20} /> Tokens Disponibles
-                                        </h4>
-                                        <div className="space-y-4 text-sm font-medium">
-                                            <button
-                                                onClick={() => handleInsertToken('[apodo]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-pink-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-pink-400 font-black tracking-wider">[apodo]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-pink-400">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Usa el apodo o el primer nombre.</p>
-                                            </button>
+                                    <div className="flex flex-col xl:flex-row gap-10 items-start">
+                                        <div className="flex-grow w-full space-y-8">
+                                            <div className="grid grid-cols-1 gap-8">
+                                                {templates.map((template) => (
+                                                    <div key={template.id} className="p-6 md:p-8 bg-slate-50 rounded-[32px] border border-slate-100 space-y-6 shadow-sm">
+                                                        <div className="flex flex-col lg:flex-row justify-between lg:items-center gap-6">
+                                                            <div className="flex items-center gap-3">
+                                                                <input
+                                                                    className="font-black text-slate-800 uppercase tracking-tighter italic text-lg bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-100 rounded px-1"
+                                                                    value={template.name}
+                                                                    onChange={(e) => setTemplates(templates.map(t => t.id === template.id ? { ...t, name: e.target.value } : t))}
+                                                                    onBlur={(e) => handleUpdateTemplate(template.id, { ...template, name: e.target.value })}
+                                                                />
+                                                                <button onClick={() => handleDeleteTemplate(template.id)} className="text-slate-300 hover:text-red-500 transition-colors">
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </div>
+                                                            <div className="flex flex-wrap items-center gap-4">
+                                                                <div className="space-y-1">
+                                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Disparador</label>
+                                                                    <select
+                                                                        className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                                                                        value={template.trigger_status || ''}
+                                                                        onChange={(e) => handleUpdateTemplate(template.id, { ...template, trigger_status: e.target.value, include_pdf: e.target.value ? template.include_pdf : 0 })}
+                                                                    >
+                                                                        <option value="">Manual</option>
+                                                                        <option value="Pendiente">Al crear (Pendiente)</option>
+                                                                        <option value="Turno asignado">Turno asignado</option>
+                                                                        <option value="En proceso">En proceso</option>
+                                                                        <option value="Presupuestado">Presupuestado</option>
+                                                                        <option value="Aprobado">Aprobado</option>
+                                                                        <option value="En reparación">En reparación</option>
+                                                                        <option value="Listo para entrega">Listo para entrega</option>
+                                                                        <option value="Entregado">Entregado</option>
+                                                                        <option value="Recordatorio">Recordatorio</option>
+                                                                    </select>
+                                                                </div>
+                                                                <div className="flex flex-wrap items-center gap-4 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm shrink-0">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            id={`email-${template.id}`}
+                                                                            checked={template.send_email !== 0}
+                                                                            onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_email: e.target.checked ? 1 : 0 })}
+                                                                            className="w-4 h-4 rounded text-blue-600 border-slate-300"
+                                                                        />
+                                                                        <label htmlFor={`email-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                            <Mail size={12} className="text-blue-500" /> Email
+                                                                        </label>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            id={`wa-${template.id}`}
+                                                                            checked={template.send_whatsapp === 1}
+                                                                            onChange={(e) => handleUpdateTemplate(template.id, { ...template, send_whatsapp: e.target.checked ? 1 : 0 })}
+                                                                            className="w-4 h-4 rounded text-emerald-600 border-slate-300"
+                                                                        />
+                                                                        <label htmlFor={`wa-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                            <MessageSquare size={12} className="text-emerald-500" /> WhatsApp
+                                                                        </label>
+                                                                    </div>
+                                                                    {template.trigger_status && (
+                                                                        <div className="flex items-center gap-2 pl-4 border-l border-slate-100">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                id={`pdf-${template.id}`}
+                                                                                checked={template.include_pdf === 1}
+                                                                                onChange={(e) => handleUpdateTemplate(template.id, { ...template, include_pdf: e.target.checked ? 1 : 0 })}
+                                                                                className="w-4 h-4 rounded text-indigo-600 border-slate-300"
+                                                                            />
+                                                                            <label htmlFor={`pdf-${template.id}`} className="text-[10px] font-black text-slate-600 uppercase tracking-widest cursor-pointer flex items-center gap-1">
+                                                                                <FileText size={12} className="text-indigo-500" /> PDF
+                                                                            </label>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <textarea
+                                                            className="w-full h-32 p-6 rounded-2xl border border-slate-200 outline-none shadow-inner text-slate-900 font-bold text-sm bg-white/50 focus:bg-white transition-all placeholder:text-slate-300"
+                                                            value={template.content}
+                                                            onFocus={() => {
+                                                                setLastFocusedId(template.id);
+                                                            }}
+                                                            onSelect={(e: any) => setCursorPos(e.target.selectionStart)}
+                                                            onChange={(e) => {
+                                                                setCursorPos(e.target.selectionStart);
+                                                                setTemplates(templates.map(t => t.id === template.id ? { ...t, content: e.target.value } : t));
+                                                            }}
+                                                            onBlur={(e) => handleUpdateTemplate(template.id, { ...template, content: e.target.value })}
+                                                        />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
 
-                                            <button
-                                                onClick={() => handleInsertToken('[cliente]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-blue-400 font-black tracking-wider">[cliente]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Nombre completo del cliente.</p>
-                                            </button>
+                                        <div className="xl:w-80 xl:sticky xl:top-24 bg-slate-900 p-8 rounded-3xl text-white space-y-6 shrink-0 shadow-xl">
+                                            <h4 className="text-lg font-bold flex items-center gap-2 text-blue-400">
+                                                <ShieldCheck size={20} /> Tokens Disponibles
+                                            </h4>
+                                            <div className="space-y-4 text-sm font-medium">
+                                                <button
+                                                    onClick={() => handleInsertToken('[apodo]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-pink-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-pink-400 font-black tracking-wider">[apodo]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-pink-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Usa el apodo o el primer nombre.</p>
+                                                </button>
 
-                                            <button
-                                                onClick={() => handleInsertToken('[vehiculo]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-emerald-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-emerald-400 font-black tracking-wider">[vehiculo]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Marca y modelo.</p>
-                                            </button>
+                                                <button
+                                                    onClick={() => handleInsertToken('[cliente]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-blue-400 font-black tracking-wider">[cliente]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Nombre completo del cliente.</p>
+                                                </button>
 
-                                            <button
-                                                onClick={() => handleInsertToken('[turno_fecha]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-indigo-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-indigo-400 font-black tracking-wider">[turno_fecha]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-indigo-400">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Fecha y hora del turno.</p>
-                                            </button>
+                                                <button
+                                                    onClick={() => handleInsertToken('[vehiculo]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-emerald-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-emerald-400 font-black tracking-wider">[vehiculo]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Marca y modelo.</p>
+                                                </button>
 
-                                            <button
-                                                onClick={() => handleInsertToken('[link]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-blue-400 font-black tracking-wider">[link]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Link de seguimiento.</p>
-                                            </button>
+                                                <button
+                                                    onClick={() => handleInsertToken('[turno_fecha]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-indigo-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-indigo-400 font-black tracking-wider">[turno_fecha]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-indigo-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Fecha y hora del turno.</p>
+                                                </button>
 
-                                            <button
-                                                onClick={() => handleInsertToken('[items]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-amber-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-amber-400 font-black tracking-wider">[items]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-amber-400">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Lista de trabajos realizados.</p>
-                                            </button>
+                                                <button
+                                                    onClick={() => handleInsertToken('[link]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-blue-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-blue-400 font-black tracking-wider">[link]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Link de seguimiento.</p>
+                                                </button>
 
-                                            <button
-                                                onClick={() => handleInsertToken('[total]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-emerald-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-emerald-400 font-black tracking-wider">[total]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Total de la orden.</p>
-                                            </button>
+                                                <button
+                                                    onClick={() => handleInsertToken('[items]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-amber-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-amber-400 font-black tracking-wider">[items]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-amber-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Lista de trabajos realizados.</p>
+                                                </button>
 
-                                            <button
-                                                onClick={() => handleInsertToken('[usuario]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-purple-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-purple-400 font-black tracking-wider">[usuario]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-purple-400">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Nombre y apellido del empleado o mecánico.</p>
-                                            </button>
+                                                <button
+                                                    onClick={() => handleInsertToken('[total]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-emerald-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-emerald-400 font-black tracking-wider">[total]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Total de la orden.</p>
+                                                </button>
 
-                                            <button
-                                                onClick={() => handleInsertToken('[taller]')}
-                                                className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-slate-500/30 group"
-                                            >
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-slate-200 font-black tracking-wider">[taller]</span>
-                                                    <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-slate-200">Insertar</span>
-                                                </div>
-                                                <p className="text-slate-400 text-xs mt-1">Nombre de tu taller.</p>
-                                            </button>
+                                                <button
+                                                    onClick={() => handleInsertToken('[usuario]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-purple-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-purple-400 font-black tracking-wider">[usuario]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-purple-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Nombre y apellido del empleado o mecánico.</p>
+                                                </button>
+
+                                                <button
+                                                    onClick={() => handleInsertToken('[taller]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-slate-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-slate-200 font-black tracking-wider">[taller]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-slate-200">Insertar</span>
+                                                    </div>
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1131,8 +1181,8 @@ export default function SettingsPage() {
                         </div>
                     )
                 }
-            </div >
-        </div >
+            </div>
+        </div>
     );
 }
 
