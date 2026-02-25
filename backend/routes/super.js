@@ -27,7 +27,7 @@ function superAuth(req, res, next) {
     try {
         const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const decoded = jwt.verify(token, secret);
-        if (decoded.role !== 'superuser') return res.status(403).json({ message: 'Acceso restringido a superadministradores' });
+        if (decoded.role !== 'superusuario' && decoded.role !== 'superuser') return res.status(403).json({ message: 'Acceso restringido a superadministradores' });
         req.superUser = decoded;
         next();
     } catch (err) {
@@ -48,12 +48,12 @@ router.post('/login', async (req, res) => {
 
         const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: 'superuser' },
+            { id: user.id, username: user.username, role: 'superusuario' },
             secret,
             { expiresIn: '12h' }
         );
 
-        res.json({ token, user: { id: user.id, username: user.username, role: 'superuser' } });
+        res.json({ token, user: { id: user.id, username: user.username, role: 'superusuario' } });
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');

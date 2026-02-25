@@ -42,7 +42,11 @@ router.post('/login', async (req, res) => {
                     permissions = permissions.filter(p => req.enabledModules.includes(p));
                 }
 
-                const roleName = user.role_name || user.role || 'staff';
+                let roleName = user.role_name || user.role || 'empleado';
+                // Normalización de roles legacy
+                if (roleName === 'admin') roleName = 'administrador';
+                if (roleName === 'mechanic') roleName = 'mecanico';
+                if (roleName === 'staff') roleName = 'empleado';
 
                 const secret = req.tenantSecret || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
                 const token = jwt.sign(
@@ -55,7 +59,7 @@ router.post('/login', async (req, res) => {
             // If staff password doesn't match, fall through to try client login
             // if the username looks like an email
             if (!user.client_id && !username.includes('@')) {
-                return res.status(400).json({ message: 'Invalid credentials' });
+                return res.status(400).json({ message: 'Credenciales inválidas' });
             }
         }
 
@@ -67,15 +71,15 @@ router.post('/login', async (req, res) => {
         `).get(username);
 
         if (!client || !client.password) {
-            return res.status(400).json({ message: 'Invalid credentials' });
+            return res.status(400).json({ message: 'Credenciales inválidas' });
         }
 
         const isClientMatch = await bcrypt.compare(password, client.password);
-        if (!isClientMatch) return res.status(400).json({ message: 'Invalid credentials' });
+        if (!isClientMatch) return res.status(400).json({ message: 'Credenciales inválidas' });
 
         const secret = req.tenantSecret || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const clientToken = jwt.sign(
-            { id: client.id, username: client.email, role: 'client', permissions: [], clientId: client.id, slug: req.slug },
+            { id: client.id, username: client.email, role: 'cliente', permissions: [], clientId: client.id, slug: req.slug },
             secret,
             { expiresIn: '8h' }
         );
@@ -85,7 +89,7 @@ router.post('/login', async (req, res) => {
             user: {
                 id: client.id,
                 username: client.email,
-                role: 'client',
+                role: 'cliente',
                 permissions: [],
                 slug: req.slug,
                 name: `${client.first_name} ${client.last_name}`.trim()
@@ -106,7 +110,7 @@ router.post('/register', auth, isAdmin, async (req, res) => {
     try {
         const userExists = req.db.prepare('SELECT * FROM users WHERE username = ?').get(username);
         if (userExists) {
-            return res.status(400).json({ message: 'User already exists' });
+            return res.status(400).json({ message: 'El usuario ya existe' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
@@ -114,9 +118,10 @@ router.post('/register', auth, isAdmin, async (req, res) => {
         const role = req.db.prepare('SELECT name FROM roles WHERE id = ?').get(role_id);
         const roleName = role ? role.name.toLowerCase() : 'mecánico';
 
-        let legacyRole = 'mechanic';
-        if (roleName === 'admin') legacyRole = 'admin';
-        else if (roleName === 'mecánico' || roleName === 'mechanic') legacyRole = 'mechanic';
+        let legacyRole = 'mecanico';
+        if (roleName === 'admin' || roleName === 'administrador') legacyRole = 'administrador';
+        else if (roleName === 'mecánico' || roleName === 'mecanico' || roleName === 'mechanic') legacyRole = 'mecanico';
+        else if (roleName === 'empleado' || roleName === 'staff') legacyRole = 'empleado';
 
         const result = req.db.prepare('INSERT INTO users (username, password, role_id, role) VALUES (?, ?, ?, ?)').run(
             username,

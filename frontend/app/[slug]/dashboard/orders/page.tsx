@@ -26,12 +26,22 @@ export default function OrdersPage() {
     const [search, setSearch] = useState('');
     const [showAll, setShowAll] = useState(false);
     const { hasPermission } = useAuth();
-    const canSeeIncome = hasPermission('income');
+    const canSeeIncome = hasPermission('ingresos');
 
     const searchParams = useSearchParams();
     const statusParam = searchParams.get('status');
     const historyParam = searchParams.get('showHistory');
     const filterParam = searchParams.get('filter');
+
+    if (!hasPermission('ordenes')) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
+                <ClipboardList size={48} className="mb-4 opacity-20" />
+                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
+                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+            </div>
+        );
+    }
 
     useEffect(() => {
         if (historyParam === 'true') setShowAll(true);

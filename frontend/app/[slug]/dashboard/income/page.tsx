@@ -16,6 +16,7 @@ import {
     ChevronRight,
     Search
 } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 import {
     BarChart,
     Bar,
@@ -35,7 +36,18 @@ import { Tab } from '@headlessui/react';
 
 export default function IncomePage() {
     const { slug } = useSlug();
+    const { hasPermission } = useAuth();
     const router = useRouter();
+
+    if (!hasPermission('ingresos')) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
+                <DollarSign size={48} className="mb-4 opacity-20" />
+                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
+                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+            </div>
+        );
+    }
     const [summary, setSummary] = useState<any>(null);
     const [dailyData, setDailyData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);

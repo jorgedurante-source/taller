@@ -84,7 +84,7 @@ function initTenantDb(db, slug) {
             reminder_enabled INTEGER DEFAULT 1,
             reminder_time TEXT DEFAULT '09:00',
             messages_enabled INTEGER DEFAULT 1,
-            enabled_modules TEXT DEFAULT '["inventory", "appointments", "income", "reports", "settings"]'
+            enabled_modules TEXT DEFAULT '["clientes", "vehiculos", "ordenes", "ingresos", "configuracion", "dashboard", "recordatorios", "turnos"]'
         );
 
         CREATE TABLE IF NOT EXISTS clients (
@@ -204,15 +204,15 @@ function initTenantDb(db, slug) {
     if (adminRole) {
         let perms = JSON.parse(adminRole.permissions || '[]');
         let modified = false;
-        if (!perms.includes('reminders')) { perms.push('reminders'); modified = true; }
-        if (!perms.includes('appointments')) { perms.push('appointments'); modified = true; }
+        if (!perms.includes('recordatorios')) { perms.push('recordatorios'); modified = true; }
+        if (!perms.includes('turnos')) { perms.push('turnos'); modified = true; }
 
         if (modified) {
             db.prepare("UPDATE roles SET permissions = ? WHERE name = 'Admin'").run(JSON.stringify(perms));
         }
     } else {
         db.prepare("INSERT INTO roles (name, permissions) VALUES ('Admin', ?)").run(
-            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles', 'reminders', 'appointments'])
+            JSON.stringify(['dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos'])
         );
     }
 
@@ -220,23 +220,114 @@ function initTenantDb(db, slug) {
     if (mecanicoRole) {
         let perms = JSON.parse(mecanicoRole.permissions || '[]');
         let modified = false;
-        if (!perms.includes('reminders')) { perms.push('reminders'); modified = true; }
-        if (!perms.includes('appointments')) { perms.push('appointments'); modified = true; }
+        if (!perms.includes('recordatorios')) { perms.push('recordatorios'); modified = true; }
+        if (!perms.includes('turnos')) { perms.push('turnos'); modified = true; }
 
         if (modified) {
             db.prepare("UPDATE roles SET permissions = ? WHERE name = 'Mecánico'").run(JSON.stringify(perms));
         }
     } else {
         db.prepare("INSERT INTO roles (name, permissions) VALUES ('Mecánico', ?)").run(
-            JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'reminders', 'appointments'])
+            JSON.stringify(['dashboard', 'clientes', 'vehiculos', 'ordenes', 'recordatorios', 'turnos'])
         );
+    }
+
+    // --- DATA MIGRATION: Normalize enabled_modules and role permissions to Spanish ---
+    try {
+        const config = db.prepare('SELECT id, enabled_modules FROM config LIMIT 1').get();
+        if (config && config.enabled_modules) {
+            let modules = JSON.parse(config.enabled_modules || '[]');
+            let migrated = false;
+            const mapping = {
+                'inventory': ['clientes', 'vehiculos'],
+                'appointments': ['turnos'],
+                'income': ['ingresos'],
+                'reports': ['recordatorios'],
+                'settings': ['configuracion', 'usuarios', 'roles'],
+                'clients': ['clientes'],
+                'vehicles': ['vehiculos'],
+                'orders': ['ordenes'],
+                'reminders': ['recordatorios']
+            };
+
+            // Add 'dashboard' if missing
+            if (!modules.includes('dashboard')) {
+                modules.push('dashboard');
+                migrated = true;
+            }
+
+            let newModules = [];
+            modules.forEach(m => {
+                if (mapping[m]) {
+                    newModules.push(...mapping[m]);
+                    migrated = true;
+                } else if (!newModules.includes(m)) {
+                    newModules.push(m);
+                }
+            });
+
+            // Extra check: if 'configuracion' is enabled, ensure 'usuarios' and 'roles' are too
+            if (newModules.includes('configuracion')) {
+                if (!newModules.includes('usuarios')) { newModules.push('usuarios'); migrated = true; }
+                if (!newModules.includes('roles')) { newModules.push('roles'); migrated = true; }
+            }
+
+            if (migrated) {
+                // Deduplicate
+                const finalModules = Array.from(new Set(newModules));
+                db.prepare('UPDATE config SET enabled_modules = ? WHERE id = ?').run(JSON.stringify(finalModules), config.id);
+                console.log(`[tenant:${slug}] Migrated enabled_modules to Spanish`);
+            }
+        }
+    } catch (e) {
+        console.error(`[tenant:${slug}] Error migrating enabled_modules:`, e.message);
+    }
+
+    try {
+        const roles = db.prepare('SELECT id, permissions FROM roles').all();
+        const permMapping = {
+            'inventory': ['clientes', 'vehiculos'],
+            'appointments': ['turnos'],
+            'income': ['ingresos'],
+            'reports': ['recordatorios'],
+            'settings': ['configuracion', 'usuarios', 'roles'],
+            'manage_users': ['usuarios'],
+            'manage_roles': ['roles'],
+            'clients': ['clientes'],
+            'vehicles': ['vehiculos'],
+            'orders': ['ordenes'],
+            'reminders': ['recordatorios']
+        };
+
+        roles.forEach(role => {
+            let perms = JSON.parse(role.permissions || '[]');
+            let migrated = false;
+            let newPerms = [];
+
+            perms.forEach(p => {
+                if (permMapping[p]) {
+                    newPerms.push(...permMapping[p]);
+                    migrated = true;
+                } else {
+                    newPerms.push(p);
+                }
+            });
+
+            if (migrated) {
+                const finalPerms = Array.from(new Set(newPerms));
+                db.prepare('UPDATE roles SET permissions = ? WHERE id = ?').run(JSON.stringify(finalPerms), role.id);
+                console.log(`[tenant:${slug}] Migrated role '${role.id}' permissions to Spanish`);
+            }
+        });
+    } catch (e) {
+        console.error(`[tenant:${slug}] Error migrating role permissions:`, e.message);
     }
 
     const adminRoleId = db.prepare("SELECT id FROM roles WHERE name = 'Admin'").get()?.id;
     const admin = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
     if (!admin && adminRoleId) {
         const hashed = bcrypt.hashSync('admin123', 10);
-        db.prepare("INSERT INTO users (username, password, role_id, role) VALUES (?, ?, ?, 'admin')").run('admin', hashed, adminRoleId);
+        db.prepare("INSERT INTO users (username, password, role_id, role) VALUES (?, ?, ?, 'administrador')").run('admin', hashed, adminRoleId);
         console.log(`[${slug}] Seeded admin user: admin / admin123`);
     }
 
@@ -461,7 +552,8 @@ function createTenant(slug, name) {
     }
     const superDb = require('./superDb');
     const apiToken = superDb.generateApiToken();
-    superDb.prepare("INSERT OR IGNORE INTO workshops (slug, name, api_token) VALUES (?, ?, ?)").run(slug, name || slug, apiToken);
+    const defaultModules = JSON.stringify(['dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos']);
+    superDb.prepare("INSERT OR IGNORE INTO workshops (slug, name, api_token, enabled_modules) VALUES (?, ?, ?, ?)").run(slug, name || slug, apiToken, defaultModules);
 
     getDb(slug);
     console.log(`[tenant] Created tenant: ${slug}`);

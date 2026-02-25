@@ -176,7 +176,7 @@ export default function PublicOrderPage() {
                             <div className="relative">
                                 <div className="absolute top-5 left-0 w-full h-[2px] bg-slate-100 -z-0" />
                                 <div className="flex justify-between relative z-10 overflow-x-auto pb-4 scrollbar-hide">
-                                    {(order.enabled_modules?.includes('appointments') && order.appointment_date ? ['Turno', 'Recibido', 'Aprobado', 'Reparando', 'Listo'] : ['Recibido', 'Aprobado', 'Reparando', 'Listo']).map((step, idx) => {
+                                    {(order.enabled_modules?.includes('turnos') && order.appointment_date ? ['Turno', 'Recibido', 'Aprobado', 'Reparando', 'Listo'] : ['Recibido', 'Aprobado', 'Reparando', 'Listo']).map((step, idx) => {
                                         const currentStepIdx = getStatusStep(order.status);
                                         const isCompleted = currentStepIdx > idx || order.status === 'Entregado';
                                         const isActive = currentStepIdx === idx && order.status !== 'Entregado';

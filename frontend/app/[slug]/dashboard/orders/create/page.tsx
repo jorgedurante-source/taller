@@ -18,6 +18,7 @@ import {
     ChevronLeft
 } from 'lucide-react';
 import { useNotification } from '@/lib/notification';
+import { useAuth } from '@/lib/auth';
 
 export default function CreateOrderPage() {
     const { slug } = useSlug();
@@ -26,6 +27,17 @@ export default function CreateOrderPage() {
     const preClientId = searchParams.get('clientId');
     const preVehicleId = searchParams.get('vehicleId');
     const { notify } = useNotification();
+    const { hasPermission } = useAuth();
+
+    if (!hasPermission('ordenes')) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
+                <ClipboardList size={48} className="mb-4 opacity-20" />
+                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
+                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+            </div>
+        );
+    }
 
     const [clients, setClients] = useState<any[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]);
@@ -161,7 +173,7 @@ export default function CreateOrderPage() {
 
         const validItems = items.filter(i => i.description.trim() !== '' || i.labor_price !== '' || i.parts_price !== '');
 
-        const hasAppointments = config?.enabled_modules?.includes('appointments');
+        const hasAppointments = config?.enabled_modules?.includes('turnos');
         if (validItems.length === 0 && !hasAppointments) {
             notify('error', 'Debés agregar al menos un ítem a la orden');
             return;

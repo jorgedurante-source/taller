@@ -145,18 +145,18 @@ export default function DashboardLayout({
 
                 <nav className="flex-grow p-4 space-y-2">
                     {hasPermission('dashboard') && <NavItem href={`/${slug}/dashboard`} icon={<LayoutDashboard size={20} />} label="Dashboard" />}
-                    {hasPermission('clients') && <NavItem href={`/${slug}/dashboard/clients`} icon={<Users size={20} />} label="Clientes" />}
-                    {hasPermission('vehicles') && <NavItem href={`/${slug}/dashboard/vehicles`} icon={<Car size={20} />} label="Vehículos" />}
-                    {hasPermission('orders') && (
+                    {hasPermission('clientes') && <NavItem href={`/${slug}/dashboard/clients`} icon={<Users size={20} />} label="Clientes" />}
+                    {hasPermission('vehiculos') && <NavItem href={`/${slug}/dashboard/vehicles`} icon={<Car size={20} />} label="Vehículos" />}
+                    {hasPermission('ordenes') && (
                         <>
                             <NavItem href={`/${slug}/dashboard/orders`} icon={<ClipboardList size={20} />} label="Órdenes" />
                             <NavItem href={`/${slug}/dashboard/orders/create`} icon={<Plus size={20} />} label="Nueva Orden" />
                         </>
                     )}
-                    {hasPermission('appointments') && <NavItem href={`/${slug}/dashboard/appointments`} icon={<CalendarIcon size={20} />} label="Turnos" />}
-                    {hasPermission('income') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label="Ingresos" />}
-                    {hasPermission('reminders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label="Recordatorios" />}
-                    {hasPermission('settings') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label="Configuración" />}
+                    {hasPermission('turnos') && <NavItem href={`/${slug}/dashboard/appointments`} icon={<CalendarIcon size={20} />} label="Turnos" />}
+                    {hasPermission('ingresos') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label="Ingresos" />}
+                    {hasPermission('recordatorios') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label="Recordatorios" />}
+                    {hasPermission('configuracion') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label="Configuración" />}
                 </nav>
 
                 <div className="p-4 border-t border-slate-800">

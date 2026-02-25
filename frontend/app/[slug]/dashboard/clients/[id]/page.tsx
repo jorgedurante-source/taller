@@ -25,12 +25,24 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useNotification } from '@/lib/notification';
+import { useAuth } from '@/lib/auth';
 
 export default function ClientDetailsPage() {
     const { slug } = useSlug();
     const params = useParams();
     const router = useRouter();
     const { notify } = useNotification();
+    const { hasPermission } = useAuth();
+
+    if (!hasPermission('clientes')) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
+                <User size={48} className="mb-4 opacity-20" />
+                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
+                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+            </div>
+        );
+    }
     const [client, setClient] = useState<any>(null);
     const [vehicles, setVehicles] = useState<any[]>([]);
     const [orders, setOrders] = useState<any[]>([]);

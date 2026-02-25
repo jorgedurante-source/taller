@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
         const slug = localStorage.getItem('current_slug') || 'demo';
 
-        if (user.isSuperuser || user.role === 'superuser') {
+        if (user.isSuperuser || user.role === 'superusuario' || user.role === 'superuser') {
             router.push('/superadmin/dashboard');
         } else {
             router.push(`/${slug}/dashboard`);

@@ -25,7 +25,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // @route   GET api/orders
-router.get('/', auth, hasPermission('orders'), (req, res) => {
+router.get('/', auth, hasPermission('ordenes'), (req, res) => {
     const orders = req.db.prepare(`
         SELECT o.*, 
             (c.first_name || ' ' || c.last_name) as client_name, 
@@ -40,7 +40,7 @@ router.get('/', auth, hasPermission('orders'), (req, res) => {
 });
 
 // @route   POST api/orders
-router.post('/', auth, hasPermission('orders'), async (req, res) => {
+router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
     const { client_id, vehicle_id, description, items } = req.body;
 
     const crypto = require('crypto');
@@ -185,7 +185,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
         }
 
         let reminderAt = null;
-        if (status === 'Entregado' && reminder_days && req.enabledModules.includes('reminders')) {
+        if (status === 'Entregado' && reminder_days && req.enabledModules.includes('recordatorios')) {
             const baseDate = new Date(deliveredAt || new Date());
             baseDate.setDate(baseDate.getDate() + parseInt(reminder_days));
             reminderAt = baseDate.toISOString().split('T')[0];
@@ -400,7 +400,7 @@ router.post('/:id/budget', auth, hasPermission('orders'), (req, res) => {
 router.use('/photos', express.static('uploads'));
 
 // @route   POST api/orders/:id/items
-router.post('/:id/items', auth, hasPermission('orders'), (req, res) => {
+router.post('/:id/items', auth, hasPermission('ordenes'), (req, res) => {
     const { items } = req.body;
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
@@ -432,7 +432,7 @@ router.post('/:id/items', auth, hasPermission('orders'), (req, res) => {
 });
 
 // @route   PUT api/orders/items/:itemId
-router.put('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
+router.put('/items/:itemId', auth, hasPermission('ordenes'), (req, res) => {
     const { description, labor_price, parts_price, parts_profit } = req.body;
     const subtotal = (parseFloat(labor_price) || 0) + (parseFloat(parts_price) || 0);
     try {
@@ -456,7 +456,7 @@ router.put('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
 });
 
 // @route   DELETE api/orders/items/:itemId
-router.delete('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
+router.delete('/items/:itemId', auth, hasPermission('ordenes'), (req, res) => {
     try {
         const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
         if (!item) return res.status(404).json({ message: 'Item no encontrado' });
@@ -474,7 +474,7 @@ router.delete('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
 });
 
 // @route   POST api/orders/:id/send-email
-router.post('/:id/send-email', auth, hasPermission('orders'), async (req, res) => {
+router.post('/:id/send-email', auth, hasPermission('ordenes'), async (req, res) => {
     try {
         const order = req.db.prepare(`
             SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km, u.first_name as user_first_name, u.last_name as user_last_name
@@ -567,7 +567,7 @@ router.post('/:id/send-email', auth, hasPermission('orders'), async (req, res) =
 });
 
 // @route   POST api/orders/send-manual-template
-router.post('/send-manual-template', auth, hasPermission('orders'), async (req, res) => {
+router.post('/send-manual-template', auth, hasPermission('ordenes'), async (req, res) => {
     const { clientId, vehicleId, orderId, templateId } = req.body;
     try {
         const client = req.db.prepare('SELECT first_name, nickname, email FROM clients WHERE id = ?').get(clientId);
@@ -625,7 +625,7 @@ router.post('/send-manual-template', auth, hasPermission('orders'), async (req, 
 });
 
 // @route   PUT api/orders/:id/reminder-status
-router.put('/:id/reminder-status', auth, hasPermission('reminders'), (req, res) => {
+router.put('/:id/reminder-status', auth, hasPermission('recordatorios'), (req, res) => {
     const { status } = req.body; // 'pending', 'skipped', 'sent'
     try {
         req.db.prepare('UPDATE orders SET reminder_status = ? WHERE id = ?').run(status, req.params.id);

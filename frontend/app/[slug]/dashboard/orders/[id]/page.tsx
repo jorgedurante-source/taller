@@ -41,7 +41,7 @@ export default function OrderDetailsPage() {
     const params = useParams();
     const router = useRouter();
     const { hasPermission } = useAuth();
-    const canSeeIncome = hasPermission('income');
+    const canSeeIncome = hasPermission('ingresos');
     const { notify } = useNotification();
 
     const [order, setOrder] = useState<any>(null);
@@ -603,7 +603,7 @@ export default function OrderDetailsPage() {
                                     onChange={(e) => setNewStatus(e.target.value)}
                                 >
                                     <option value="Pendiente" className="text-slate-900">Pendiente</option>
-                                    {config?.enabled_modules?.includes('appointments') && hasPermission('appointments') && (
+                                    {config?.enabled_modules?.includes('turnos') && hasPermission('turnos') && (
                                         <option value="Turno asignado" className="text-slate-900">Turno asignado</option>
                                     )}
                                     <option value="En proceso" className="text-slate-900">En proceso</option>
@@ -614,7 +614,7 @@ export default function OrderDetailsPage() {
                                     <option value="Entregado" className="text-slate-900">Entregado</option>
                                 </select>
                             </div>
-                            {newStatus === 'Entregado' && hasPermission('reminders') && (
+                            {newStatus === 'Entregado' && hasPermission('recordatorios') && (
                                 <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
                                     <label className="text-[10px] font-black text-blue-400 uppercase tracking-widest ml-1">Recordar en...</label>
                                     <select
@@ -663,7 +663,7 @@ export default function OrderDetailsPage() {
                                 </div>
                             )}
 
-                            {newStatus === 'Turno asignado' && config?.enabled_modules?.includes('appointments') && (
+                            {newStatus === 'Turno asignado' && config?.enabled_modules?.includes('turnos') && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200 bg-white/5 p-4 rounded-xl border border-white/10">
                                     <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1 flex items-center gap-2">
                                         <CalendarIcon size={14} /> Asignar Turno al Cliente

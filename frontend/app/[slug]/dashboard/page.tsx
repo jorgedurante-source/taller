@@ -109,7 +109,7 @@ export default function DashboardPage() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3 w-full md:w-auto">
-                    {hasPermission('income') && (
+                    {hasPermission('ingresos') && (
                         <button
                             onClick={togglePrivacy}
                             className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all text-slate-400 hover:text-slate-900"
@@ -127,7 +127,7 @@ export default function DashboardPage() {
             </header>
 
             {/* Main Stats Grid */}
-            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${hasPermission('appointments') ? 'xl:grid-cols-5' : ''} gap-6`}>
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${hasPermission('turnos') ? 'xl:grid-cols-5' : ''} gap-6`}>
                 <StatCard
                     title="Órdenes Activas"
                     value={data?.ordersByStatus
@@ -154,7 +154,7 @@ export default function DashboardPage() {
                     description="Nuevos presupuestos"
                     onClick={() => router.push(`/${slug}/dashboard/orders?status=Pendiente`)}
                 />
-                {hasPermission('appointments') && (
+                {hasPermission('turnos') && (
                     <StatCard
                         title="Turnos Asignados"
                         value={data?.assignedAppointmentsCount || 0}

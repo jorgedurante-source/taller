@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import Link from 'next/link';
 import { Plus, Search, User, Phone, Mail, X, Car, Hash, Calendar, ArrowRight, MapPin, Notebook } from 'lucide-react';
 import { useNotification } from '@/lib/notification';
+import { useAuth } from '@/lib/auth';
 
 export default function ClientsPage() {
     const { slug } = useSlug();
@@ -14,6 +15,17 @@ export default function ClientsPage() {
     const [showModal, setShowModal] = useState(false);
     const [search, setSearch] = useState('');
     const { notify } = useNotification();
+    const { hasPermission } = useAuth();
+
+    if (!hasPermission('clientes')) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
+                <User size={48} className="mb-4 opacity-20" />
+                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
+                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+            </div>
+        );
+    }
 
     const [formData, setFormData] = useState({
         first_name: '',

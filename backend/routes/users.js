@@ -7,7 +7,7 @@ function getDb(req) { return req.db; }
 const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 
 // @route   GET api/users
-router.get('/', auth, hasPermission('manage_users'), (req, res) => {
+router.get('/', auth, hasPermission('usuarios'), (req, res) => {
     try {
         // Hide the master 'admin' user from the list
         const users = req.db.prepare(`
@@ -23,7 +23,7 @@ router.get('/', auth, hasPermission('manage_users'), (req, res) => {
 });
 
 // @route   POST api/users
-router.post('/', auth, hasPermission('manage_users'), async (req, res) => {
+router.post('/', auth, hasPermission('usuarios'), async (req, res) => {
 
     const { username, password, role_id, first_name, last_name } = req.body;
     if (!username || !password || !role_id) {
@@ -38,11 +38,11 @@ router.post('/', auth, hasPermission('manage_users'), async (req, res) => {
 
     try {
         const normalizedRoleId = role_id === '' ? null : Number(role_id);
-        const isAdminUser = req.user.isSuperuser || (req.user.role && req.user.role.toLowerCase() === 'admin');
+        const isAdminUser = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'administrador'));
 
         // Enforce: Only Admin (or Superuser) can create another Admin
         const targetRole = req.db.prepare('SELECT name FROM roles WHERE id = ?').get(normalizedRoleId);
-        if (targetRole && targetRole.name.toLowerCase() === 'admin' && !isAdminUser) {
+        if (targetRole && (targetRole.name.toLowerCase() === 'admin' || targetRole.name.toLowerCase() === 'administrador') && !isAdminUser) {
             return res.status(403).json({ message: 'Solo un Administrador puede crear otros usuarios Administradores' });
         }
 
@@ -52,11 +52,12 @@ router.post('/', auth, hasPermission('manage_users'), async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
         const roleName = targetRole ? targetRole.name.toLowerCase() : 'mecánico';
 
-        // Map to legacy role names to satisfy CHECK constraint (admin, mechanic, client)
-        let legacyRole = 'mechanic';
-        if (roleName === 'admin') legacyRole = 'admin';
-        else if (roleName === 'mecánico' || roleName === 'mechanic') legacyRole = 'mechanic';
-        else if (roleName === 'cliente' || roleName === 'client') legacyRole = 'client';
+        // Map to legacy role names (now in Spanish)
+        let legacyRole = 'mecanico';
+        if (roleName === 'admin' || roleName === 'administrador') legacyRole = 'administrador';
+        else if (roleName === 'mecánico' || roleName === 'mecanico' || roleName === 'mechanic') legacyRole = 'mecanico';
+        else if (roleName === 'cliente' || roleName === 'client') legacyRole = 'cliente';
+        else if (roleName === 'empleado' || roleName === 'staff') legacyRole = 'empleado';
 
         const result = req.db.prepare('INSERT INTO users (username, password, first_name, last_name, role_id, role) VALUES (?, ?, ?, ?, ?, ?)').run(
             username, hashedPassword, first_name || null, last_name || null, normalizedRoleId, legacyRole
@@ -69,7 +70,7 @@ router.post('/', auth, hasPermission('manage_users'), async (req, res) => {
 });
 
 // @route   PUT api/users/:id
-router.put('/:id', auth, hasPermission('manage_users'), async (req, res) => {
+router.put('/:id', auth, hasPermission('usuarios'), async (req, res) => {
 
     const { role_id, username, password, first_name, last_name } = req.body;
     try {
@@ -91,11 +92,12 @@ router.put('/:id', auth, hasPermission('manage_users'), async (req, res) => {
 
         const roleName = targetRole ? targetRole.name.toLowerCase() : 'mecánico';
 
-        // Map to legacy role names to satisfy CHECK constraint (admin, mechanic, client)
-        let legacyRole = 'mechanic';
-        if (roleName === 'admin') legacyRole = 'admin';
-        else if (roleName === 'mecánico' || roleName === 'mechanic') legacyRole = 'mechanic';
-        else if (roleName === 'cliente' || roleName === 'client') legacyRole = 'client';
+        // Map to legacy role names (now in Spanish)
+        let legacyRole = 'mecanico';
+        if (roleName === 'admin' || roleName === 'administrador') legacyRole = 'administrador';
+        else if (roleName === 'mecánico' || roleName === 'mecanico' || roleName === 'mechanic') legacyRole = 'mecanico';
+        else if (roleName === 'cliente' || roleName === 'client') legacyRole = 'cliente';
+        else if (roleName === 'empleado' || roleName === 'staff') legacyRole = 'empleado';
 
         let query = 'UPDATE users SET role_id = ?, username = ?, first_name = ?, last_name = ?, role = ?';
         let params = [
@@ -124,7 +126,7 @@ router.put('/:id', auth, hasPermission('manage_users'), async (req, res) => {
 });
 
 // @route   DELETE api/users/:id
-router.delete('/:id', auth, hasPermission('manage_users'), (req, res) => {
+router.delete('/:id', auth, hasPermission('usuarios'), (req, res) => {
 
     try {
         const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);

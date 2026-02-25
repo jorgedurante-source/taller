@@ -809,15 +809,15 @@ export default function SuperAdminDashboard() {
                             <div className="space-y-4 mb-10">
                                 {[
                                     { key: 'dashboard', label: 'Dashboard / Estadísticas' },
-                                    { key: 'clients', label: 'Gestión de Clientes' },
-                                    { key: 'vehicles', label: 'Gestión de Vehículos' },
-                                    { key: 'orders', label: 'Gestión de Órdenes / OT' },
-                                    { key: 'income', label: 'Reportes de Ingresos' },
-                                    { key: 'settings', label: 'Configuración Interna' },
-                                    { key: 'manage_users', label: 'Gestión de Usuarios' },
-                                    { key: 'manage_roles', label: 'Gestión de Roles' },
-                                    { key: 'reminders', label: 'Seguimientos / Recordatorios' },
-                                    { key: 'appointments', label: 'Turnos / Calendario' }
+                                    { key: 'clientes', label: 'Gestión de Clientes' },
+                                    { key: 'vehiculos', label: 'Gestión de Vehículos' },
+                                    { key: 'ordenes', label: 'Gestión de Órdenes / OT' },
+                                    { key: 'ingresos', label: 'Reportes de Ingresos' },
+                                    { key: 'configuracion', label: 'Configuración Interna' },
+                                    { key: 'usuarios', label: 'Gestión de Usuarios' },
+                                    { key: 'roles', label: 'Gestión de Roles' },
+                                    { key: 'recordatorios', label: 'Seguimientos / Recordatorios' },
+                                    { key: 'turnos', label: 'Turnos / Calendario' }
                                 ].map(module => {
                                     // Assume enabled_modules is an array, it might be a JSON string if not enriched properly but we enriched it
                                     const isEnabled = Array.isArray(showModulesModal.enabled_modules) && showModulesModal.enabled_modules.includes(module.key);

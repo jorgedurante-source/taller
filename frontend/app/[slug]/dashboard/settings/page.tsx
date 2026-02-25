@@ -40,7 +40,7 @@ import { useNotification } from '@/lib/notification';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('global');
-    const [commsTab, setCommsTab] = useState('reminders');
+    const [commsTab, setCommsTab] = useState('recordatorios');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [currentTheme, setCurrentTheme] = useState('default');
@@ -119,7 +119,7 @@ export default function SettingsPage() {
     const [roles, setRoles] = useState<any[]>([]);
     const [newUser, setNewUser] = useState({ username: '', password: '', role_id: '', first_name: '', last_name: '' });
     const [permissionsList] = useState([
-        'dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'manage_users', 'manage_roles', 'reminders', 'appointments'
+        'dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos'
     ]);
 
     const handleInsertToken = (token: string) => {
@@ -156,10 +156,10 @@ export default function SettingsPage() {
                     api.get('/templates')
                 ];
 
-                if (hasPermission('manage_users')) {
+                if (hasPermission('usuarios')) {
                     requests.push(api.get('/users'));
                 }
-                if (hasPermission('manage_roles')) {
+                if (hasPermission('roles')) {
                     requests.push(api.get('/roles'));
                 }
 
@@ -358,8 +358,8 @@ export default function SettingsPage() {
                 <TabButton active={activeTab === 'global'} onClick={() => setActiveTab('global')} icon={<Globe size={18} />} label="Global" />
                 <TabButton active={activeTab === 'comms'} onClick={() => setActiveTab('comms')} icon={<MessageSquare size={18} />} label="Comunicaciones" />
                 <TabButton active={activeTab === 'services'} onClick={() => setActiveTab('services')} icon={<Wrench size={18} />} label="Catálogo / Servicios" />
-                {hasPermission('manage_users') && <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<UserIcon size={18} />} label="Usuarios" />}
-                {hasPermission('manage_roles') && <TabButton active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} icon={<Shield size={18} />} label="Roles" />}
+                {hasPermission('usuarios') && <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<UserIcon size={18} />} label="Usuarios" />}
+                {hasPermission('roles') && <TabButton active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} icon={<Shield size={18} />} label="Roles" />}
                 <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')} icon={<Palette size={18} />} label="Apariencia" />
             </div>
 
@@ -609,8 +609,8 @@ export default function SettingsPage() {
                         {/* Sub-tabs for Communications */}
                         <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit gap-1 border border-slate-200">
                             <button
-                                onClick={() => setCommsTab('reminders')}
-                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${commsTab === 'reminders' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                                onClick={() => setCommsTab('recordatorios')}
+                                className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${commsTab === 'recordatorios' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                             >
                                 <Bell size={14} className="inline mr-2" />
                                 Recordatorios
@@ -624,7 +624,7 @@ export default function SettingsPage() {
                             </button>
                         </div>
 
-                        {commsTab === 'reminders' && (
+                        {commsTab === 'recordatorios' && (
                             <div className="max-w-4xl space-y-8">
                                 <div className="bg-slate-900 rounded-[32px] p-10 text-white relative overflow-hidden shadow-2xl">
                                     <div className="absolute right-0 top-0 opacity-10 translate-x-1/4 -translate-y-1/4">
@@ -1038,7 +1038,7 @@ export default function SettingsPage() {
                 }
 
                 {
-                    activeTab === 'users' && hasPermission('manage_users') && (
+                    activeTab === 'users' && hasPermission('usuarios') && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             <div className="md:col-span-1">
                                 <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 sticky top-24">
@@ -1092,7 +1092,7 @@ export default function SettingsPage() {
                 }
 
                 {
-                    activeTab === 'roles' && hasPermission('manage_roles') && (
+                    activeTab === 'roles' && hasPermission('roles') && (
                         <div className="space-y-8">
                             <div className="flex justify-between items-center">
                                 <h3 className="text-2xl font-bold text-slate-800 italic uppercase">Editor de Roles y Permisos</h3>
@@ -1305,12 +1305,12 @@ function UserRow({ userItem, roles, onUpdate, onDelete }: { userItem: any, roles
 }
 
 function RoleCard({ role, permissionsList, onUpdate, onDelete }: { role: any, permissionsList: string[], onUpdate: (id: number, data: any) => void, onDelete: (id: number) => void }) {
-    const isAdmin = role.name.toLowerCase() === 'admin';
+    const isSystemAdmin = role.name.toLowerCase() === 'admin' || role.name.toLowerCase() === 'administrador';
     const [editingName, setEditingName] = useState(false);
     const [name, setName] = useState(role.name);
 
     const togglePermission = (perm: string) => {
-        if (isAdmin) return;
+        if (isSystemAdmin) return;
         const newPermissions = role.permissions.includes(perm)
             ? role.permissions.filter((p: string) => p !== perm)
             : [...role.permissions, perm];
@@ -1323,11 +1323,11 @@ function RoleCard({ role, permissionsList, onUpdate, onDelete }: { role: any, pe
     };
 
     return (
-        <div className={`bg-white rounded-3xl border ${isAdmin ? 'border-blue-500 shadow-xl shadow-blue-500/10' : 'border-slate-100 shadow-sm'} overflow-hidden flex flex-col`}>
-            <div className={`p-6 ${isAdmin ? 'bg-blue-600' : 'bg-slate-900'} text-white`}>
+        <div className={`bg-white rounded-3xl border ${isSystemAdmin ? 'border-blue-500 shadow-xl shadow-blue-500/10' : 'border-slate-100 shadow-sm'} overflow-hidden flex flex-col`}>
+            <div className={`p-6 ${isSystemAdmin ? 'bg-blue-600' : 'bg-slate-900'} text-white`}>
                 <div className="flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <Shield size={24} className={isAdmin ? 'text-blue-200' : 'text-slate-400'} />
+                        <Shield size={24} className={isSystemAdmin ? 'text-blue-200' : 'text-slate-400'} />
                         {editingName ? (
                             <div className="flex gap-2">
                                 <input
@@ -1342,14 +1342,14 @@ function RoleCard({ role, permissionsList, onUpdate, onDelete }: { role: any, pe
                             <h4 className="text-lg font-black italic uppercase tracking-tighter">{role.name}</h4>
                         )}
                     </div>
-                    {!isAdmin && (
+                    {!isSystemAdmin && (
                         <div className="flex gap-2">
                             <button onClick={() => setEditingName(true)} className="text-white/50 hover:text-white transition-all"><Save size={16} /></button>
                             <button onClick={() => onDelete(role.id)} className="text-white/50 hover:text-red-400 transition-all"><Trash2 size={16} /></button>
                         </div>
                     )}
                 </div>
-                {isAdmin && <p className="text-blue-100 text-[10px] mt-2 font-bold uppercase tracking-widest opacity-80 italic">Reservado por el sistema (No editable)</p>}
+                {isSystemAdmin && <p className="text-blue-100 text-[10px] mt-2 font-bold uppercase tracking-widest opacity-80 italic">Reservado por el sistema (No editable)</p>}
             </div>
 
             <div className="p-6 flex-grow space-y-4">
@@ -1362,7 +1362,7 @@ function RoleCard({ role, permissionsList, onUpdate, onDelete }: { role: any, pe
                             </span>
                             <div
                                 onClick={() => togglePermission(perm)}
-                                className={`w-10 h-5 rounded-full relative cursor-pointer transition-all duration-300 ${role.permissions.includes(perm) ? (isAdmin ? 'bg-blue-100 cursor-not-allowed' : 'bg-blue-600 shadow-lg shadow-blue-500/20') : 'bg-slate-200'}`}
+                                className={`w-10 h-5 rounded-full relative cursor-pointer transition-all duration-300 ${role.permissions.includes(perm) ? (isSystemAdmin ? 'bg-blue-100 cursor-not-allowed' : 'bg-blue-600 shadow-lg shadow-blue-500/20') : 'bg-slate-200'}`}
                             >
                                 <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all duration-300 ${role.permissions.includes(perm) ? 'left-6' : 'left-1'}`} />
                             </div>

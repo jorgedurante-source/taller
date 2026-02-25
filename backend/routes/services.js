@@ -12,21 +12,21 @@ router.get('/', auth, (req, res) => {
 });
 
 // @route   POST api/services
-router.post('/', auth, hasPermission('settings'), (req, res) => {
+router.post('/', auth, hasPermission('configuracion'), (req, res) => {
     const { name, base_price } = req.body;
     const result = req.db.prepare('INSERT INTO service_catalog (name, base_price) VALUES (?, ?)').run(name, base_price);
     res.json({ id: result.lastInsertRowid, name, base_price });
 });
 
 // @route   PUT api/services/:id
-router.put('/:id', auth, hasPermission('settings'), (req, res) => {
+router.put('/:id', auth, hasPermission('configuracion'), (req, res) => {
     const { name, base_price } = req.body;
     req.db.prepare('UPDATE service_catalog SET name = ?, base_price = ? WHERE id = ?').run(name, base_price, req.params.id);
     res.json({ message: 'Service updated' });
 });
 
 // @route   DELETE api/services/:id
-router.delete('/:id', auth, hasPermission('settings'), (req, res) => {
+router.delete('/:id', auth, hasPermission('configuracion'), (req, res) => {
     req.db.prepare('DELETE FROM service_catalog WHERE id = ?').run(req.params.id);
     res.json({ message: 'Service removed' });
 });

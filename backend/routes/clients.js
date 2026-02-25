@@ -24,13 +24,13 @@ const upload = multer({ storage });
 
 // db is injected per-request via req.db (tenant middleware)
 // Each route reads db from req.db
-router.get('/', auth, hasPermission('clients'), (req, res) => {
+router.get('/', auth, hasPermission('clientes'), (req, res) => {
     const clients = req.db.prepare("SELECT *, (first_name || ' ' || last_name) as full_name FROM clients").all();
     res.json(clients);
 });
 
 // @route   POST api/clients
-router.post('/', auth, hasPermission('clients'), (req, res) => {
+router.post('/', auth, hasPermission('clientes'), (req, res) => {
     const { first_name, last_name, nickname, phone, email, address, notes, vehicle } = req.body;
 
     // Use a transaction for consistency
@@ -71,7 +71,7 @@ router.post('/', auth, hasPermission('clients'), (req, res) => {
 });
 
 // @route   PUT api/clients/:id
-router.put('/:id', auth, hasPermission('clients'), (req, res) => {
+router.put('/:id', auth, hasPermission('clientes'), (req, res) => {
     const { first_name, last_name, nickname, phone, email, address, notes } = req.body;
     try {
         req.db.prepare(`
@@ -86,7 +86,7 @@ router.put('/:id', auth, hasPermission('clients'), (req, res) => {
 });
 
 // @route   POST api/clients/:id/password
-router.post('/:id/password', auth, hasPermission('clients'), async (req, res) => {
+router.post('/:id/password', auth, hasPermission('clientes'), async (req, res) => {
     const { password } = req.body;
     try {
         const client = req.db.prepare('SELECT id FROM clients WHERE id = ?').get(req.params.id);
@@ -106,7 +106,7 @@ router.post('/:id/password', auth, hasPermission('clients'), async (req, res) =>
 // --- Vehicles ---
 
 // @route   GET api/clients/all-vehicles
-router.get('/all-vehicles', auth, hasPermission('vehicles'), (req, res) => {
+router.get('/all-vehicles', auth, hasPermission('vehiculos'), (req, res) => {
     const vehicles = req.db.prepare(`
         SELECT v.*, c.first_name, c.last_name, c.phone as client_phone 
         FROM vehicles v
@@ -116,13 +116,13 @@ router.get('/all-vehicles', auth, hasPermission('vehicles'), (req, res) => {
 });
 
 // @route   GET api/clients/:id/vehicles
-router.get('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
+router.get('/:id/vehicles', auth, hasPermission('vehiculos'), (req, res) => {
     const vehicles = req.db.prepare('SELECT * FROM vehicles WHERE client_id = ?').all(req.params.id);
     res.json(vehicles);
 });
 
 // @route   POST api/clients/:id/vehicles
-router.post('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
+router.post('/:id/vehicles', auth, hasPermission('vehiculos'), (req, res) => {
     const { plate, brand, model, year, km, photos } = req.body;
     try {
         const result = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, year, km, photos) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
@@ -146,7 +146,7 @@ router.post('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
 });
 
 // @route   PUT api/clients/vehicles/:vid
-router.put('/vehicles/:vid', auth, hasPermission('vehicles'), (req, res) => {
+router.put('/vehicles/:vid', auth, hasPermission('vehiculos'), (req, res) => {
     const { brand, model, plate, year, km, status } = req.body;
     try {
         const current = req.db.prepare('SELECT km FROM vehicles WHERE id = ?').get(req.params.vid);
@@ -171,7 +171,7 @@ router.put('/vehicles/:vid', auth, hasPermission('vehicles'), (req, res) => {
 
 // @route   PUT api/clients/vehicles/:vid/km
 // @desc    Update only the km of a vehicle and log the change
-router.put('/vehicles/:vid/km', auth, hasPermission('vehicles'), (req, res) => {
+router.put('/vehicles/:vid/km', auth, hasPermission('vehiculos'), (req, res) => {
     const { km, notes } = req.body;
     if (km === undefined || km === null) return res.status(400).json({ message: 'KM requerido' });
     try {
@@ -195,7 +195,7 @@ router.put('/vehicles/:vid/km', auth, hasPermission('vehicles'), (req, res) => {
 
 // @route   GET api/clients/vehicles/:vid/km-history
 // @desc    Get the km history for a vehicle
-router.get('/vehicles/:vid/km-history', auth, hasPermission('vehicles'), (req, res) => {
+router.get('/vehicles/:vid/km-history', auth, hasPermission('vehiculos'), (req, res) => {
     try {
         const history = req.db.prepare(`
             SELECT 
@@ -218,7 +218,7 @@ router.get('/vehicles/:vid/km-history', auth, hasPermission('vehicles'), (req, r
 });
 
 // @route   DELETE api/clients/vehicles/:vid
-router.delete('/vehicles/:vid', auth, hasPermission('vehicles'), (req, res) => {
+router.delete('/vehicles/:vid', auth, hasPermission('vehiculos'), (req, res) => {
     try {
         // Check if vehicle has orders
         const orders = req.db.prepare('SELECT COUNT(*) as count FROM orders WHERE vehicle_id = ?').get(req.params.vid);
@@ -235,7 +235,7 @@ router.delete('/vehicles/:vid', auth, hasPermission('vehicles'), (req, res) => {
 });
 
 // @route   POST api/clients/vehicles/:vid/photo
-router.post('/vehicles/:vid/photo', auth, hasPermission('vehicles'), upload.single('photo'), (req, res) => {
+router.post('/vehicles/:vid/photo', auth, hasPermission('vehiculos'), upload.single('photo'), (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
     try {
         const photoPath = `/uploads/${req.user.slug}/vehicles/${req.file.filename}`;

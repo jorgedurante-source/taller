@@ -46,7 +46,7 @@ router.get('/', (req, res) => {
 });
 
 // @route   PUT api/config
-router.put('/', auth, hasPermission('settings'), (req, res) => {
+router.put('/', auth, hasPermission('configuracion'), (req, res) => {
     const {
         workshop_name, footer_text, logo_path,
         address, phone, email, whatsapp, instagram, business_hours,
@@ -81,7 +81,7 @@ router.put('/', auth, hasPermission('settings'), (req, res) => {
             resend_api_key || null,
             messages_enabled === undefined ? 1 : messages_enabled
         );
-        res.json({ message: 'Configuration updated successfully' });
+        res.json({ message: 'Configuración actualizada correctamente' });
     } catch (err) {
         console.error('Error updating config:', err);
         res.status(500).json({ message: 'Error al actualizar configuración: ' + err.message });
@@ -89,7 +89,7 @@ router.put('/', auth, hasPermission('settings'), (req, res) => {
 });
 
 // @route   POST api/config/logo
-router.post('/logo', auth, hasPermission('settings'), upload.single('logo'), (req, res) => {
+router.post('/logo', auth, hasPermission('configuracion'), upload.single('logo'), (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'Logo file required' });
     try {
         const slug = req.user.slug || req.slug;

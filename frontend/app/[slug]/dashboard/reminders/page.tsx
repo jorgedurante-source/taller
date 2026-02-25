@@ -38,7 +38,7 @@ export default function RemindersPage() {
     const [editingDateId, setEditingDateId] = useState<number | null>(null);
     const [newDate, setNewDate] = useState('');
 
-    if (!hasPermission('reminders')) {
+    if (!hasPermission('recordatorios')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
                 <Bell size={48} className="mb-4 opacity-20" />

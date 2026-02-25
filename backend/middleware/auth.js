@@ -36,10 +36,11 @@ const auth = (req, res, next) => {
 
 const isAdmin = (req, res, next) => {
     // Superuser always has admin access
-    if (req.user && (req.user.isSuperuser || (req.user.role && req.user.role.toLowerCase() === 'admin'))) {
+    const role = req.user?.role?.toLowerCase();
+    if (req.user && (req.user.isSuperuser || role === 'administrador' || role === 'admin')) {
         next();
     } else {
-        res.status(403).json({ message: 'Access denied: Requires Admin role or Superuser access' });
+        res.status(403).json({ message: 'Acceso denegado: Se requiere rol de Administrador o acceso de Superusuario' });
     }
 };
 
@@ -54,7 +55,7 @@ const hasPermission = (permission) => {
                 res.status(403).json({ message: 'Módulo no habilitado' });
             }
         } else {
-            res.status(403).json({ message: `Access denied: Requires permission ${permission}` });
+            res.status(403).json({ message: `Acceso denegado: Se requiere permiso de ${permission}` });
         }
     };
 };

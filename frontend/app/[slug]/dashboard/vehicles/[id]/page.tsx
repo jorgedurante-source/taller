@@ -23,11 +23,23 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useNotification } from '@/lib/notification';
+import { useAuth } from '@/lib/auth';
 
 export default function VehicleDetailsPage() {
     const { slug } = useSlug();
     const params = useParams();
     const { notify } = useNotification();
+    const { hasPermission } = useAuth();
+
+    if (!hasPermission('vehiculos')) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
+                <Car size={48} className="mb-4 opacity-20" />
+                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
+                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+            </div>
+        );
+    }
     const [vehicle, setVehicle] = useState<any>(null);
     const [orders, setOrders] = useState<any[]>([]);
     const [kmHistory, setKmHistory] = useState<any[]>([]);

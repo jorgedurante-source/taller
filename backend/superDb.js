@@ -52,7 +52,7 @@ addColumn('workshops', 'status', "TEXT DEFAULT 'active'");
 addColumn('workshops', 'api_token', 'TEXT');
 addColumn('workshops', 'logo_path', 'TEXT');
 addColumn('workshops', 'environment', "TEXT DEFAULT 'prod'");
-addColumn('workshops', 'enabled_modules', "TEXT DEFAULT '[\"dashboard\", \"clients\", \"vehicles\", \"orders\", \"income\", \"settings\", \"manage_users\", \"manage_roles\", \"reminders\"]'");
+addColumn('workshops', 'enabled_modules', "TEXT DEFAULT '[\"dashboard\", \"clientes\", \"vehiculos\", \"ordenes\", \"ingresos\", \"configuracion\", \"usuarios\", \"roles\", \"recordatorios\", \"turnos\"]'");
 
 // Ensure unique index for token
 try {
@@ -103,6 +103,64 @@ try {
     }
 } catch (e) {
     console.error("[super] Error seeding superuser:", e.message);
+}
+
+// --- DATA MIGRATION: Normalize workshops' enabled_modules to Spanish ---
+try {
+    const workshops = db.prepare('SELECT id, slug, enabled_modules FROM workshops').all();
+    const mapping = {
+        'inventory': ['clientes', 'vehiculos'],
+        'appointments': ['turnos'],
+        'income': ['ingresos'],
+        'reports': ['recordatorios'],
+        'settings': ['configuracion', 'usuarios', 'roles'],
+        'clients': ['clientes'],
+        'vehicles': ['vehiculos'],
+        'orders': ['ordenes'],
+        'reminders': ['recordatorios']
+    };
+
+    workshops.forEach(w => {
+        if (!w.enabled_modules) return;
+        let modules = [];
+        try {
+            modules = JSON.parse(w.enabled_modules || '[]');
+        } catch (e) {
+            return;
+        }
+
+        let migrated = false;
+        let newModules = [];
+
+        // Add 'dashboard' if missing
+        if (!modules.includes('dashboard')) {
+            modules.push('dashboard');
+            migrated = true;
+        }
+
+        modules.forEach(m => {
+            if (mapping[m]) {
+                newModules.push(...mapping[m]);
+                migrated = true;
+            } else if (!newModules.includes(m)) {
+                newModules.push(m);
+            }
+        });
+
+        // Extra check: if 'configuracion' is enabled, ensure 'usuarios' and 'roles' are too
+        if (newModules.includes('configuracion')) {
+            if (!newModules.includes('usuarios')) { newModules.push('usuarios'); migrated = true; }
+            if (!newModules.includes('roles')) { newModules.push('roles'); migrated = true; }
+        }
+
+        if (migrated) {
+            const finalModules = Array.from(new Set(newModules));
+            db.prepare('UPDATE workshops SET enabled_modules = ? WHERE id = ?').run(JSON.stringify(finalModules), w.id);
+            console.log(`[super] Migrated workshop '${w.slug}' enabled_modules to Spanish`);
+        }
+    });
+} catch (e) {
+    console.error(`[super] Error migrating workshops enabled_modules:`, e.message);
 }
 
 db.generateApiToken = () => crypto.randomBytes(32).toString('hex');

@@ -14,11 +14,11 @@ export default function Home() {
       const savedSlug = localStorage.getItem('current_slug') || 'kabul';
 
       if (user) {
-        if (user.role === 'admin' || user.role === 'mechanic' || user.role === 'staff') {
+        if (user.role === 'administrador' || user.role === 'admin' || user.role === 'mecanico' || user.role === 'mechanic' || user.role === 'empleado' || user.role === 'staff') {
           router.replace(`/${savedSlug}/dashboard`);
-        } else if (user.role === 'client') {
+        } else if (user.role === 'cliente' || user.role === 'client') {
           router.replace(`/${savedSlug}/client`);
-        } else if (user.role === 'superuser') {
+        } else if (user.role === 'superusuario' || user.role === 'superuser') {
           router.replace('/superadmin/dashboard');
         } else {
           router.replace(`/${savedSlug}/login`);

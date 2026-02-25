@@ -150,7 +150,7 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
 });
 
 // @route   GET api/reports/income-daily
-router.get('/income-daily', auth, hasPermission('income'), (req, res) => {
+router.get('/income-daily', auth, hasPermission('ingresos'), (req, res) => {
     const { month } = req.query; // YYYY-MM
 
     // Use local date to avoid UTC timezone month shift
@@ -184,7 +184,7 @@ router.get('/income-daily', auth, hasPermission('income'), (req, res) => {
 });
 
 // @route   GET api/reports/orders-status
-router.get('/orders-status', auth, (req, res) => {
+router.get('/orders-status', auth, hasPermission('ingresos'), (req, res) => {
     try {
         const ordersByStatus = req.db.prepare(`
             SELECT status, COUNT(*) as count
@@ -199,7 +199,7 @@ router.get('/orders-status', auth, (req, res) => {
 });
 
 // @route   GET api/reports/top-customers
-router.get('/top-customers', auth, (req, res) => {
+router.get('/top-customers', auth, hasPermission('ingresos'), (req, res) => {
     try {
         const topCustomers = req.db.prepare(`
             SELECT c.first_name || ' ' || c.last_name AS name, SUM(o.payment_amount) as total
@@ -218,7 +218,7 @@ router.get('/top-customers', auth, (req, res) => {
 
 
 // @route   GET api/reports/reminders
-router.get('/reminders', auth, hasPermission('reminders'), (req, res) => {
+router.get('/reminders', auth, hasPermission('recordatorios'), (req, res) => {
     const tab = req.query.tab || 'today';
     try {
         let whereClause = "WHERE o.reminder_at IS NOT NULL AND o.status = 'Entregado'";
@@ -270,7 +270,7 @@ router.get('/reminders', auth, hasPermission('reminders'), (req, res) => {
 });
 
 // @route   PATCH api/reports/reminders/:orderId/date
-router.patch('/reminders/:orderId/date', auth, hasPermission('reminders'), (req, res) => {
+router.patch('/reminders/:orderId/date', auth, hasPermission('recordatorios'), (req, res) => {
     const { date } = req.body;
     try {
         req.db.prepare('UPDATE orders SET reminder_at = ? WHERE id = ?').run(
@@ -285,7 +285,7 @@ router.patch('/reminders/:orderId/date', auth, hasPermission('reminders'), (req,
 });
 
 // @route   POST api/reports/reminders/send-bulk
-router.post('/reminders/send-bulk', auth, hasPermission('reminders'), async (req, res) => {
+router.post('/reminders/send-bulk', auth, hasPermission('recordatorios'), async (req, res) => {
     const { orderIds } = req.body;
     if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ message: 'No order IDs provided' });
