@@ -88,8 +88,8 @@ const { createTenant, listTenants, getDb } = require('./tenantManager');
     try {
         const workshops = listTenants();
         if (workshops.length === 0) {
-            console.log('[startup] No workshops found, creating default "kabul"...');
-            createTenant('kabul', 'Kabul');
+            console.log('[startup] No workshops found, creating default "demo"...');
+            createTenant('demo', 'Taller Demo');
         } else {
             // Ensure all registered workshops have their DB schemas ready
             workshops.forEach(w => {

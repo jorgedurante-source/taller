@@ -18,11 +18,11 @@ export default function ClientLoginPage() {
     const { clientLogin, clientUser, loading: authLoading } = useAuth();
     const router = useRouter();
     const params = useParams();
-    const slug = params?.slug as string || 'kabul';
+    const slug = params?.slug as string || 'demo';
 
     useEffect(() => {
         if (!authLoading && clientUser) {
-            const slug = typeof window !== 'undefined' ? localStorage.getItem('current_slug') : 'kabul';
+            const slug = typeof window !== 'undefined' ? localStorage.getItem('current_slug') : 'demo';
             router.push(`/${slug}/client`);
         }
     }, [clientUser, authLoading, router]);

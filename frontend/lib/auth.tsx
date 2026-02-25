@@ -51,7 +51,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         localStorage.setItem('user', JSON.stringify(user));
         setUser(user);
 
-        const slug = localStorage.getItem('current_slug') || 'kabul';
+        const slug = localStorage.getItem('current_slug') || 'demo';
 
         if (user.isSuperuser || user.role === 'superuser') {
             router.push('/superadmin/dashboard');
@@ -65,12 +65,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         localStorage.setItem('client_user', JSON.stringify(user));
         setClientUser(user);
 
-        const slug = localStorage.getItem('current_slug') || 'kabul';
+        const slug = localStorage.getItem('current_slug') || 'demo';
         router.push(`/${slug}/client`);
     };
 
     const logout = () => {
-        const slug = localStorage.getItem('current_slug') || 'kabul';
+        const slug = localStorage.getItem('current_slug') || 'demo';
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setUser(null);
@@ -78,7 +78,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     const clientLogout = () => {
-        const slug = localStorage.getItem('current_slug') || 'kabul';
+        const slug = localStorage.getItem('current_slug') || 'demo';
         localStorage.removeItem('client_token');
         localStorage.removeItem('client_user');
         setClientUser(null);

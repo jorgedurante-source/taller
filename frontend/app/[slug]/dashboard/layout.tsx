@@ -47,7 +47,7 @@ export default function DashboardLayout({
 
     useEffect(() => {
         if (!loading && !user) {
-            router.push(`/${slug || 'kabul'}/login`);
+            router.push(`/${slug || 'demo'}/login`);
         }
     }, [user, loading, router, slug]);
 

@@ -73,7 +73,7 @@ api.interceptors.response.use(
     (response) => response,
     (error) => {
         if (typeof window !== 'undefined' && error.response?.status === 401 && !window.location.pathname.includes('/login')) {
-            const slug = localStorage.getItem('current_slug') || 'kabul';
+            const slug = localStorage.getItem('current_slug') || 'demo';
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             window.location.href = `/${slug}/login`;
@@ -107,7 +107,7 @@ clientApi.interceptors.response.use(
     (response) => response,
     (error) => {
         if (typeof window !== 'undefined' && error.response?.status === 401 && !window.location.pathname.includes('/login')) {
-            const slug = localStorage.getItem('current_slug') || 'kabul';
+            const slug = localStorage.getItem('current_slug') || 'demo';
             localStorage.removeItem('client_token');
             localStorage.removeItem('client_user');
             window.location.href = `/${slug}/client/login`;

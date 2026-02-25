@@ -359,7 +359,7 @@ function initTenantDb(db, slug) {
             },
             {
                 name: 'Turno Asignado',
-                content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos!\n\nSaludos,\n[usuario]',
+                content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\nSaludos,\n[usuario]',
                 trigger_status: 'Turno asignado',
                 include_pdf: 0,
                 send_email: 1,
@@ -398,7 +398,7 @@ function initTenantDb(db, slug) {
                 VALUES (?, ?, ?, 0, 1, 0)
             `).run(
                 'Turno Asignado',
-                'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos!\n\nSaludos,\n[usuario]',
+                'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\nSaludos,\n[usuario]',
                 'Turno asignado'
             );
         }

@@ -513,7 +513,7 @@ export default function SuperAdminDashboard() {
                                     <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre Comercial del Taller</label>
                                     <input
                                         type="text"
-                                        placeholder="Ej: Kabul Automotriz"
+                                        placeholder="Ej: Taller Mecánico"
                                         value={newWorkshop.name}
                                         onChange={(e) => {
                                             const name = e.target.value;
@@ -534,7 +534,7 @@ export default function SuperAdminDashboard() {
                                         <span className="text-slate-400 font-black text-sm uppercase italic tracking-widest">/</span>
                                         <input
                                             type="text"
-                                            placeholder="taller-kabul"
+                                            placeholder="mi-taller"
                                             value={newWorkshop.slug}
                                             onChange={(e) => setNewWorkshop(prev => ({ ...prev, slug: e.target.value.toLowerCase().replace(/ /g, '-') }))}
                                             className="flex-grow bg-transparent border-none text-slate-900 p-0 font-black focus:ring-0 placeholder:text-slate-200 text-lg tracking-tight"

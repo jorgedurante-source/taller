@@ -127,8 +127,8 @@ function reseedTemplates(db) {
             send_whatsapp: 0
         },
         {
-            name: 'Confirmación de Turno',
-            content: 'Hola [apodo], confirmamos tu turno en [taller] para tu [vehiculo] el día [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]',
+            name: 'Turno Asignado',
+            content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\nSaludos,\n[usuario]',
             trigger_status: 'Turno asignado',
             include_pdf: 0,
             send_email: 1,
