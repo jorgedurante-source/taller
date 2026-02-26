@@ -33,7 +33,8 @@ export const ConfigProvider = ({ children }: { children: React.ReactNode }) => {
 
     const fetchConfig = async () => {
         try {
-            const res = await axios.get('http://localhost:5000/api/info');
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+            const res = await axios.get(`${apiBase}/info`);
             setConfig(res.data);
         } catch (err) {
             console.error('Failed to fetch global config:', err);
