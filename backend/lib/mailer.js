@@ -30,6 +30,7 @@ async function sendEmail(db, to, subject, text, attachments = [], html = null) {
             const { data, error } = await resend.emails.send({
                 from: fromAddress,
                 to: [to],
+                replyTo: config.email, // Formato camelCase por si acaso
                 subject: subject,
                 html: finalHtml,
                 text: text,
@@ -40,7 +41,7 @@ async function sendEmail(db, to, subject, text, attachments = [], html = null) {
                 console.error('[mailer:resend] Error sending email:', error);
                 throw new Error(error.message);
             }
-            console.log(`[mailer:resend] Email sent to ${to}: ${subject}`);
+            console.log(`[mailer:resend] Email sent to ${to}: ${subject} (Reply-To: ${config.email})`);
 
         } else {
             // Default to SMTP
@@ -57,12 +58,11 @@ async function sendEmail(db, to, subject, text, attachments = [], html = null) {
                     user: config.smtp_user,
                     pass: config.smtp_pass,
                 },
-                // Force IPv4, as Railway sometimes fails resolving IPv6 for SMTP
                 tls: {
                     rejectUnauthorized: false
                 },
                 family: 4,
-                connectionTimeout: 10000, // 10 seconds
+                connectionTimeout: 10000,
                 greetingTimeout: 10000,
                 socketTimeout: 20000
             });
@@ -70,12 +70,13 @@ async function sendEmail(db, to, subject, text, attachments = [], html = null) {
             await transporter.sendMail({
                 from: fromAddress,
                 to,
+                replyTo: config.email, // También para SMTP tradicional
                 subject,
                 text,
                 html: finalHtml,
                 attachments
             });
-            console.log(`[mailer:smtp] Email sent to ${to}: ${subject}`);
+            console.log(`[mailer:smtp] Email sent to ${to}: ${subject} (Reply-To: ${config.email})`);
         }
     } catch (err) {
         console.error('[mailer] Error sending email:', err);

@@ -80,6 +80,11 @@ function initTenantDb(db, slug) {
             smtp_port INTEGER,
             smtp_user TEXT,
             smtp_pass TEXT,
+            imap_host TEXT,
+            imap_port INTEGER,
+            imap_user TEXT,
+            imap_pass TEXT,
+            imap_enabled INTEGER DEFAULT 0,
             theme_id TEXT DEFAULT 'default',
             reminder_enabled INTEGER DEFAULT 1,
             reminder_time TEXT DEFAULT '09:00',
@@ -183,6 +188,8 @@ function initTenantDb(db, slug) {
             order_id INTEGER NOT NULL,
             status TEXT NOT NULL,
             notes TEXT,
+            reply_to TEXT,
+            is_read INTEGER DEFAULT 0,
             user_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
@@ -196,6 +203,25 @@ function initTenantDb(db, slug) {
             recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             notes TEXT,
             FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS suppliers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT,
+            phone TEXT,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS part_inquiries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER,
+            supplier_ids TEXT NOT NULL, -- JSON array of supplier names or IDs
+            part_description TEXT NOT NULL,
+            vehicle_info TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
         );
     `);
 
@@ -212,7 +238,7 @@ function initTenantDb(db, slug) {
         }
     } else {
         db.prepare("INSERT INTO roles (name, permissions) VALUES ('Admin', ?)").run(
-            JSON.stringify(['dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos'])
+            JSON.stringify(['dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos', 'proveedores'])
         );
     }
 
@@ -247,7 +273,8 @@ function initTenantDb(db, slug) {
                 'clients': ['clientes'],
                 'vehicles': ['vehiculos'],
                 'orders': ['ordenes'],
-                'reminders': ['recordatorios']
+                'reminders': ['recordatorios'],
+                'suppliers': ['proveedores']
             };
 
             // Add 'dashboard' if missing
@@ -296,7 +323,8 @@ function initTenantDb(db, slug) {
             'clients': ['clientes'],
             'vehicles': ['vehiculos'],
             'orders': ['ordenes'],
-            'reminders': ['recordatorios']
+            'reminders': ['recordatorios'],
+            'suppliers': ['proveedores']
         };
 
         roles.forEach(role => {
@@ -362,6 +390,13 @@ function initTenantDb(db, slug) {
     addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
     addColumn('users', 'first_name', "TEXT");
     addColumn('users', 'last_name', "TEXT");
+    addColumn('config', 'imap_host', "TEXT");
+    addColumn('config', 'imap_port', "INTEGER");
+    addColumn('config', 'imap_user', "TEXT");
+    addColumn('config', 'imap_pass', "TEXT");
+    addColumn('config', 'imap_enabled', "INTEGER DEFAULT 0");
+    addColumn('order_history', 'reply_to', "TEXT");
+    addColumn('order_history', 'is_read', "INTEGER DEFAULT 0");
 
     // Self-reparative migration for parts_profit on existing items
     try {

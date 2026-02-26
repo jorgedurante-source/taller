@@ -30,7 +30,8 @@ router.get('/', auth, hasPermission('ordenes'), (req, res) => {
         SELECT o.*, 
             (c.first_name || ' ' || c.last_name) as client_name, 
             v.plate, v.model,
-            COALESCE((SELECT SUM(subtotal) FROM order_items WHERE order_id = o.id), 0) as order_total
+            COALESCE((SELECT SUM(subtotal) FROM order_items WHERE order_id = o.id), 0) as order_total,
+            (SELECT COUNT(*) FROM order_history WHERE order_id = o.id AND status = 'Respuesta Recibida' AND (is_read = 0 OR is_read IS NULL)) as unread_messages
         FROM orders o
         JOIN clients c ON o.client_id = c.id
         JOIN vehicles v ON o.vehicle_id = v.id
@@ -106,6 +107,7 @@ router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
                     'vehiculo': `${order.brand} ${order.model}`,
                     'taller': config.workshop_name || 'Nuestro Taller',
                     'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim(),
+                    'datos_contacto_taller': `Email: ${config.email || '---'} | Tel: ${config.whatsapp || config.phone || '---'} | Dir: ${config.address || '---'}`,
                     'turno_fecha': '---',
                     'link': trackingLink,
                     'orden_id': orderId
@@ -124,7 +126,7 @@ router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
                         attachments.push({ filename: `orden_${orderId}.pdf`, content: pdfBuffer });
                     }
                 }
-                sendEmail(req.db, order.email, `Nueva Orden #${orderId} - Confirmación`, message, attachments)
+                sendEmail(req.db, order.email, `Nueva Orden (Orden #${orderId}) - Confirmación`, message, attachments)
                     .catch(err => console.error('Initial email error:', err));
             }
         }
@@ -137,7 +139,7 @@ router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
 });
 
 // @route   GET api/orders/:id
-router.get('/:id', auth, hasPermission('orders'), (req, res) => {
+router.get('/:id', auth, hasPermission('ordenes'), (req, res) => {
     try {
         const order = req.db.prepare(`
             SELECT o.*, (c.first_name || ' ' || c.last_name) as client_name, c.phone as client_phone, c.email as client_email,
@@ -170,7 +172,7 @@ router.get('/:id', auth, hasPermission('orders'), (req, res) => {
 });
 
 // @route   PUT api/orders/:id/status
-router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
+router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
     const { status, notes, reminder_days, appointment_date } = req.body;
     try {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
@@ -269,6 +271,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                     'items': servicesStr || 'servicios realizados',
                     'km': order.km || '---',
                     'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim(),
+                    'datos_contacto_taller': `Email: ${config.email || '---'} | Tel: ${config.whatsapp || config.phone || '---'} | Dir: ${config.address || '---'}`,
                     'turno_fecha': appointmentDateFormatted,
                     'link': trackingLink,
                     'orden_id': order.id
@@ -288,7 +291,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                     }
                 }
 
-                sendEmail(req.db, order.email, `Actualización de tu Orden #${order.id} - ${status}`, message, attachments)
+                sendEmail(req.db, order.email, `Actualización (Orden #${order.id}) - ${status}`, message, attachments)
                     .catch(err => console.error('Delayed email error:', err));
             }
         }
@@ -301,7 +304,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
 });
 
 // @route   PUT api/orders/:id/payment
-router.put('/:id/payment', auth, hasPermission('orders'), (req, res) => {
+router.put('/:id/payment', auth, hasPermission('ordenes'), (req, res) => {
     const { payment_status, payment_amount } = req.body;
     if (!['cobrado', 'parcial', 'sin_cobrar'].includes(payment_status)) {
         return res.status(400).json({ message: 'Estado de cobro inválido' });
@@ -322,7 +325,7 @@ router.put('/:id/payment', auth, hasPermission('orders'), (req, res) => {
 });
 
 // @route   POST api/orders/:id/photos
-router.post('/:id/photos', auth, hasPermission('orders'), upload.array('photos', 5), (req, res) => {
+router.post('/:id/photos', auth, hasPermission('ordenes'), upload.array('photos', 5), (req, res) => {
     const filenames = req.files.map(f => f.filename);
     const order = req.db.prepare('SELECT photos FROM orders WHERE id = ?').get(req.params.id);
     const existingPhotos = JSON.parse(order.photos || '[]');
@@ -335,7 +338,7 @@ router.post('/:id/photos', auth, hasPermission('orders'), upload.array('photos',
 });
 
 // @route   POST api/orders/:id/budget
-router.post('/:id/budget', auth, hasPermission('orders'), (req, res) => {
+router.post('/:id/budget', auth, hasPermission('ordenes'), (req, res) => {
     const { items, subtotal, tax, total } = req.body;
     const result = req.db.prepare('INSERT INTO budgets (order_id, items, subtotal, tax, total) VALUES (?, ?, ?, ?, ?)').run(
         req.params.id, JSON.stringify(items), subtotal, tax, total
@@ -401,7 +404,6 @@ router.use('/photos', express.static('uploads'));
 
 // @route   POST api/orders/:id/items
 router.post('/:id/items', auth, hasPermission('ordenes'), (req, res) => {
-    const { items } = req.body;
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
@@ -621,6 +623,78 @@ router.post('/send-manual-template', auth, hasPermission('ordenes'), async (req,
     } catch (err) {
         console.error(err);
         res.status(500).send('Error al enviar el mensaje');
+    }
+});
+
+// @route   POST api/orders/:id/reply
+router.post('/:id/reply', auth, hasPermission('proveedores'), async (req, res) => {
+    const { orderId } = req.params;
+    const { to, message } = req.body;
+
+    try {
+        const config = req.db.prepare('SELECT * FROM config LIMIT 1').get();
+        const order = req.db.prepare(`
+            SELECT v.plate 
+            FROM orders o 
+            JOIN vehicles v ON o.vehicle_id = v.id 
+            WHERE o.id = ?
+        `).get(req.params.id);
+
+        if (!config || !order) return res.status(404).json({ message: 'Config or Order not found' });
+
+        const subject = `Re: Consulta (Orden #${req.params.id}) - ${order.plate}`;
+        const { sendEmail } = require('../lib/mailer');
+
+        // Fetch relevant history for context (last replies with THIS specific recipient)
+        const history = req.db.prepare(`
+            SELECT status, notes, created_at 
+            FROM order_history 
+            WHERE order_id = ? 
+            AND (status = 'Respuesta Recibida' OR status = 'Respuesta Enviada')
+            AND reply_to = ?
+            ORDER BY created_at DESC
+            LIMIT 5
+        `).all(req.params.id, to);
+
+        let fullMessage = message;
+        if (history.length > 0) {
+            fullMessage += "\n\n--- Historial de la conversación ---\n";
+            history.forEach(h => {
+                const date = new Date(h.created_at).toLocaleString('es-AR');
+                fullMessage += `\n[${date}] ${h.status}:\n${h.notes}\n`;
+            });
+        }
+
+        await sendEmail(req.db, to, subject, fullMessage, []);
+
+        // Guardar en el historial
+        req.db.prepare(`
+            INSERT INTO order_history (order_id, status, notes, user_id, reply_to, is_read)
+            VALUES (?, ?, ?, ?, ?, 1)
+        `).run(req.params.id, 'Respuesta Enviada', `Respuesta a ${to}:\n${message}`, req.user.id, to);
+
+        res.json({ message: 'Respuesta enviada correctamente' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al enviar la respuesta' });
+    }
+});
+
+// @route   PUT api/orders/:id/messages/read
+router.put('/:id/messages/read', auth, hasPermission('proveedores'), (req, res) => {
+    const { reply_to } = req.body;
+    try {
+        if (reply_to) {
+            req.db.prepare('UPDATE order_history SET is_read = 1 WHERE order_id = ? AND reply_to = ? AND status = \'Respuesta Recibida\'')
+                .run(req.params.id, reply_to);
+        } else {
+            req.db.prepare('UPDATE order_history SET is_read = 1 WHERE order_id = ? AND status = \'Respuesta Recibida\'')
+                .run(req.params.id);
+        }
+        res.json({ message: 'Mensajes marcados como leídos' });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al marcar mensajes como leídos' });
     }
 });
 

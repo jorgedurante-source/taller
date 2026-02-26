@@ -16,7 +16,8 @@ import {
     EyeOff,
     Bell,
     Settings,
-    Clock
+    Clock,
+    MessageSquare
 } from 'lucide-react';
 import {
     BarChart,
@@ -165,6 +166,14 @@ export default function DashboardPage() {
                     />
                 )}
                 <StatCard
+                    title="Mensajes Nuevos"
+                    value={data?.unreadMessagesCount || 0}
+                    icon={<MessageSquare size={24} />}
+                    color={data?.unreadMessagesCount > 0 ? "orange" : "slate"}
+                    description="Respuestas sin leer"
+                    onClick={() => router.push(`/${slug}/dashboard/orders?filter=unread`)}
+                />
+                <StatCard
                     title="Listos para entrega"
                     value={data?.ordersByStatus.find((s: any) => s.status === 'Listo para entrega')?.count || 0}
                     icon={<Car size={24} />}
@@ -295,7 +304,9 @@ function StatCard({ title, value, icon, color, description, onClick }: { title: 
         amber: 'bg-amber-50 text-amber-600 border-amber-100',
         emerald: 'bg-emerald-50 text-emerald-600 border-emerald-100',
         indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
-        purple: 'bg-purple-50 text-purple-600 border-purple-100'
+        purple: 'bg-purple-50 text-purple-600 border-purple-100',
+        orange: 'bg-orange-50 text-orange-600 border-orange-100',
+        slate: 'bg-slate-50 text-slate-400 border-slate-100'
     };
 
     return (

@@ -131,6 +131,12 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
           SELECT COUNT(*) as count FROM orders WHERE status = 'Turno asignado'
         `).get().count;
 
+        const unreadMessagesCount = req.db.prepare(`
+            SELECT COUNT(*) as count 
+            FROM order_history 
+            WHERE status = 'Respuesta Recibida' AND (is_read = 0 OR is_read IS NULL)
+        `).get().count;
+
         res.json({
             incomeByMonth,
             historicalStats,
@@ -141,7 +147,8 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
             vehiclesByMonth,
             newClientsThisMonth,
             readyToDeliverTotal,
-            assignedAppointmentsCount
+            assignedAppointmentsCount,
+            unreadMessagesCount
         });
     } catch (err) {
         console.error(err);

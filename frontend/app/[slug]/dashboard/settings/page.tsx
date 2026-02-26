@@ -119,7 +119,7 @@ export default function SettingsPage() {
     const [roles, setRoles] = useState<any[]>([]);
     const [newUser, setNewUser] = useState({ username: '', password: '', role_id: '', first_name: '', last_name: '' });
     const [permissionsList] = useState([
-        'dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos'
+        'dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos', 'proveedores'
     ]);
 
     const handleInsertToken = (token: string) => {
@@ -553,6 +553,42 @@ export default function SettingsPage() {
                                         </p>
                                     </>
                                 )}
+
+                                <div className="pt-6 border-t border-slate-100 space-y-4">
+                                    <label className="flex items-center justify-between cursor-pointer group p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-blue-100 p-2 rounded-lg text-blue-600">
+                                                <RefreshCw size={20} />
+                                            </div>
+                                            <div>
+                                                <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Lector de Respuestas automáticas</span>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Captura respuestas de clientes y proveedores</p>
+                                            </div>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                type="checkbox"
+                                                className="sr-only"
+                                                checked={config.imap_enabled === 1}
+                                                onChange={(e) => setConfig((prev: any) => ({ ...prev, imap_enabled: e.target.checked ? 1 : 0 }))}
+                                            />
+                                            <div className={`w-12 h-6 rounded-full transition-colors ${config.imap_enabled === 1 ? 'bg-blue-600' : 'bg-slate-300'}`}></div>
+                                            <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${config.imap_enabled === 1 ? 'translate-x-6' : ''}`}></div>
+                                        </div>
+                                    </label>
+
+                                    {config.imap_enabled === 1 && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top-2 duration-300">
+                                            <ConfigInput label="Servidor IMAP (Entrante)" placeholder="imap.gmail.com" value={config.imap_host} onChange={(v) => setConfig((prev: any) => ({ ...prev, imap_host: v }))} />
+                                            <ConfigInput label="Puerto IMAP" type="number" placeholder="993" value={config.imap_port} onChange={(v) => setConfig((prev: any) => ({ ...prev, imap_port: parseInt(v) || '' }))} />
+                                            <ConfigInput label="Usuario IMAP" placeholder="tu-email@gmail.com" value={config.imap_user} onChange={(v) => setConfig((prev: any) => ({ ...prev, imap_user: v }))} />
+                                            <ConfigInput label="Contraseña IMAP / App Password" type="password" value={config.imap_pass} onChange={(v) => setConfig((prev: any) => ({ ...prev, imap_pass: v }))} />
+                                            <p className="col-span-full text-[9px] text-slate-400 font-bold uppercase tracking-widest bg-blue-50/50 p-4 rounded-xl border border-blue-100/50 italic">
+                                                💡 Tip: Si usás Gmail, recordá generar una "Contraseña de aplicación" en tu cuenta de Google para que el sistema pueda entrar sin bloqueos.
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
                             </section>
 
                         </div>
@@ -967,6 +1003,17 @@ export default function SettingsPage() {
                                                         <span className="text-slate-200 font-black tracking-wider">[taller]</span>
                                                         <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-slate-200">Insertar</span>
                                                     </div>
+                                                </button>
+
+                                                <button
+                                                    onClick={() => handleInsertToken('[datos_contacto_taller]')}
+                                                    className="w-full text-left p-4 bg-white/5 hover:bg-white/10 rounded-xl transition-all border border-transparent hover:border-emerald-500/30 group"
+                                                >
+                                                    <div className="flex justify-between items-center">
+                                                        <span className="text-emerald-400 font-black tracking-wider">[datos_contacto_taller]</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
+                                                    </div>
+                                                    <p className="text-slate-400 text-xs mt-1">Email, Tel y Dirección del taller.</p>
                                                 </button>
                                             </div>
                                         </div>
@@ -1457,7 +1504,7 @@ function TabButton({ active, icon, label, onClick }: any) {
     );
 }
 
-function ConfigInput({ label, icon, value, onChange, type = 'text' }: { label: string, icon?: React.ReactNode, value: any, onChange: (v: any) => void, type?: string }) {
+function ConfigInput({ label, icon, value, onChange, type = 'text', placeholder }: { label: string, icon?: React.ReactNode, value: any, onChange: (v: any) => void, type?: string, placeholder?: string }) {
     return (
         <div className="space-y-1">
             <label className="text-sm font-bold text-slate-900 ml-1">{label}</label>
@@ -1466,6 +1513,7 @@ function ConfigInput({ label, icon, value, onChange, type = 'text' }: { label: s
                 <input
                     type={type}
                     className={`w-full ${icon ? 'pl-12' : 'px-5'} pr-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold`}
+                    placeholder={placeholder}
                     value={value || ''}
                     onChange={(e) => onChange(e.target.value)}
                 />

@@ -52,7 +52,7 @@ addColumn('workshops', 'status', "TEXT DEFAULT 'active'");
 addColumn('workshops', 'api_token', 'TEXT');
 addColumn('workshops', 'logo_path', 'TEXT');
 addColumn('workshops', 'environment', "TEXT DEFAULT 'prod'");
-addColumn('workshops', 'enabled_modules', "TEXT DEFAULT '[\"dashboard\", \"clientes\", \"vehiculos\", \"ordenes\", \"ingresos\", \"configuracion\", \"usuarios\", \"roles\", \"recordatorios\", \"turnos\"]'");
+addColumn('workshops', 'enabled_modules', "TEXT DEFAULT '[\"dashboard\", \"clientes\", \"vehiculos\", \"ordenes\", \"ingresos\", \"configuracion\", \"usuarios\", \"roles\", \"recordatorios\", \"turnos\", \"proveedores\"]'");
 
 // Ensure unique index for token
 try {
@@ -117,7 +117,8 @@ try {
         'clients': ['clientes'],
         'vehicles': ['vehiculos'],
         'orders': ['ordenes'],
-        'reminders': ['recordatorios']
+        'reminders': ['recordatorios'],
+        'suppliers': ['proveedores']
     };
 
     workshops.forEach(w => {

@@ -32,7 +32,7 @@ router.get('/:token', (req, res) => {
         const history = req.db.prepare(`
             SELECT status, notes, created_at 
             FROM order_history 
-            WHERE order_id = ? 
+            WHERE order_id = ? AND status NOT IN ('Respuesta Recibida', 'Respuesta Enviada')
             ORDER BY created_at DESC
         `).all(order.id);
 

@@ -53,11 +53,12 @@ router.put('/', auth, hasPermission('configuracion'), (req, res) => {
         tax_percentage, income_include_parts, parts_profit_percentage,
         smtp_host, smtp_port, smtp_user, smtp_pass, theme_id,
         reminder_enabled, reminder_time, mail_provider, resend_api_key,
-        messages_enabled
+        messages_enabled, imap_host, imap_port, imap_user, imap_pass, imap_enabled
     } = req.body;
 
     try {
         const port = (smtp_port === '' || smtp_port === null || isNaN(parseInt(smtp_port))) ? null : parseInt(smtp_port);
+        const iPort = (imap_port === '' || imap_port === null || isNaN(parseInt(imap_port))) ? 993 : parseInt(imap_port);
 
         req.db.prepare(`
             UPDATE config 
@@ -67,7 +68,7 @@ router.put('/', auth, hasPermission('configuracion'), (req, res) => {
                 parts_profit_percentage = ?, smtp_host = ?, smtp_port = ?, 
                 smtp_user = ?, smtp_pass = ?, theme_id = ?,
                 reminder_enabled = ?, reminder_time = ?, mail_provider = ?, resend_api_key = ?,
-                messages_enabled = ?
+                messages_enabled = ?, imap_host = ?, imap_port = ?, imap_user = ?, imap_pass = ?, imap_enabled = ?
             WHERE id = 1
         `).run(
             workshop_name, footer_text, logo_path,
@@ -79,7 +80,12 @@ router.put('/', auth, hasPermission('configuracion'), (req, res) => {
             reminder_time || '09:00',
             mail_provider || 'smtp',
             resend_api_key || null,
-            messages_enabled === undefined ? 1 : messages_enabled
+            messages_enabled === undefined ? 1 : messages_enabled,
+            imap_host || null,
+            iPort,
+            imap_user || null,
+            imap_pass || null,
+            imap_enabled || 0
         );
         res.json({ message: 'Configuración actualizada correctamente' });
     } catch (err) {

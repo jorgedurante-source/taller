@@ -97,6 +97,20 @@ function seedWorkshop(db) {
                 db.prepare('UPDATE orders SET payment_amount = ? WHERE id = ?').run(Math.floor(orderTotal / 2), orderId);
             }
         }
+
+        // 5. Insert 5 Suppliers
+        const suppliers = [
+            { name: 'Repuestos Buenos Aires', email: 'ventas@repuestosba.com', phone: '11 4567-8901', notes: 'Especialistas en Ford y Chevrolet' },
+            { name: 'Todo Frenos', email: 'contacto@todofrenos.com', phone: '11 2345-6789', notes: 'Mejores precios en pastillas y discos' },
+            { name: 'Embragues del Sur', email: 'info@embraguessur.com', phone: '11 9876-5432', notes: 'Entregas en el día' },
+            { name: 'Baterías y Accesorios Lucas', email: 'lucas@baterias.com', phone: '11 3210-4567', notes: 'Garantía oficial' },
+            { name: 'Warnes Repuestos', email: 'warnes@repuestos.com', phone: '11 5555-1234', notes: 'Tienen de todo' }
+        ];
+
+        const insertSupplier = db.prepare('INSERT INTO suppliers (name, email, phone, notes) VALUES (?, ?, ?, ?)');
+        for (const s of suppliers) {
+            insertSupplier.run(s.name, s.email, s.phone, s.notes);
+        }
     });
 
     transaction();
@@ -120,7 +134,7 @@ function reseedTemplates(db) {
     const defaultTemplates = [
         {
             name: 'Recepción de Vehículo',
-            content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id]. Seguí el estado acá: [link]',
+            content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id]. Seguí el estado acá: [link]\n\n[datos_contacto_taller]',
             trigger_status: 'Pendiente',
             include_pdf: 0,
             send_email: 1,
@@ -128,7 +142,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Turno Asignado',
-            content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\nSaludos,\n[usuario]',
+            content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\n[datos_contacto_taller]\n\nSaludos, [usuario]',
             trigger_status: 'Turno asignado',
             include_pdf: 0,
             send_email: 1,
@@ -136,7 +150,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Presupuesto para Revisión',
-            content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes aquí: [link]. Avisanos si estás de acuerdo para comenzar con el trabajo.',
+            content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes aquí: [link]. Avisanos si estás de acuerdo para comenzar con el trabajo.\n\n[datos_contacto_taller]',
             trigger_status: 'Presupuestado',
             include_pdf: 1,
             send_email: 1,
@@ -144,7 +158,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Trabajo en Marcha',
-            content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [items]. Seguí el avance en vivo: [link]',
+            content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [items]. Seguí el avance en vivo: [link]\n\nCualquier duda, nuestro contacto es:\n[datos_contacto_taller]',
             trigger_status: 'Aprobado',
             include_pdf: 0,
             send_email: 1,
@@ -152,7 +166,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Vehículo Listo',
-            content: '¡Buenas noticias [apodo]! Tu [vehiculo] ya está listo para ser retirado. Podés pasar por [taller] en nuestros horarios de atención. ¡Te esperamos!',
+            content: '¡Buenas noticias [apodo]! Tu [vehiculo] ya está listo para ser retirado. Podés pasar por [taller] en nuestros horarios de atención. ¡Te esperamos!\n\n[datos_contacto_taller]',
             trigger_status: 'Listo para entrega',
             include_pdf: 0,
             send_email: 1,
@@ -160,7 +174,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Agradecimiento y Entrega',
-            content: 'Muchas gracias [apodo] por confiar en [taller]. Acabamos de registrar la entrega de tu [vehiculo] con [km] km. Esperamos que disfrutes del andar y cualquier duda estamos a tu disposición.',
+            content: 'Muchas gracias [apodo] por confiar en [taller]. Acabamos de registrar la entrega de tu [vehiculo] con [km] km. Esperamos que disfrutes del andar y cualquier duda estamos a tu disposición.\n\n[datos_contacto_taller]\n\nSaludos, [usuario]',
             trigger_status: 'Entregado',
             include_pdf: 1,
             send_email: 1,
@@ -168,7 +182,7 @@ function reseedTemplates(db) {
         },
         {
             name: 'Seguimiento Preventivo',
-            content: 'Hola [apodo], hace unos meses realizamos el servicio de [items] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva y asegurar que todo siga funcionando perfecto. ¡Te esperamos!',
+            content: 'Hola [apodo], hace unos meses realizamos el servicio de [items] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva y asegurar que todo siga funcionando perfecto. ¡Te esperamos!\n\n[datos_contacto_taller]',
             trigger_status: 'Recordatorio',
             include_pdf: 0,
             send_email: 1,
@@ -176,9 +190,25 @@ function reseedTemplates(db) {
         },
         {
             name: 'Envío de Documento',
-            content: 'Hola [apodo], te enviamos adjunto el documento solicitado relacionado con tu [vehiculo] desde [taller]. Quedamos a tu disposición por cualquier consulta.',
+            content: 'Hola [apodo], te enviamos adjunto el documento solicitado relacionado con tu [vehiculo] desde [taller]. Quedamos a tu disposición por cualquier consulta.\n\n[datos_contacto_taller]',
             trigger_status: null,
             include_pdf: 1,
+            send_email: 1,
+            send_whatsapp: 0
+        },
+        {
+            name: 'Consulta de Repuesto (Proveedor)',
+            content: 'Hola [proveedor], te consultamos por el presupuesto de: [repuesto] para el vehículo [vehiculo].\n\nQuedamos a la espera de tu respuesta.\n\n[datos_contacto_taller]\n\nSaludos, [usuario]',
+            trigger_status: 'proveedores_consulta',
+            include_pdf: 0,
+            send_email: 1,
+            send_whatsapp: 0
+        },
+        {
+            name: 'Orden en Espera de Repuestos',
+            content: 'Hola [apodo], te informamos que tu [vehiculo] se encuentra en espera de los repuestos necesarios para continuar con la reparación. Te avisaremos apenas los recibamos para seguir avanzando. Podés ver el detalle acá: [link]\n\n[datos_contacto_taller]',
+            trigger_status: 'Esperando Repuestos',
+            include_pdf: 0,
             send_email: 1,
             send_whatsapp: 0
         }

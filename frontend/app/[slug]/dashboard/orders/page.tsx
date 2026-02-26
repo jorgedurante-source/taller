@@ -13,7 +13,8 @@ import {
     Filter,
     CheckCircle2,
     CircleDollarSign,
-    CircleSlash
+    CircleSlash,
+    MessageSquare
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
@@ -25,6 +26,7 @@ export default function OrdersPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const [showAll, setShowAll] = useState(false);
+    const [onlyUnread, setOnlyUnread] = useState(false);
     const { hasPermission } = useAuth();
     const canSeeIncome = hasPermission('ingresos');
 
@@ -54,6 +56,9 @@ export default function OrdersPage() {
             setShowAll(false);
             setSearch('Apro'); // Will match Aprobado
         }
+        if (filterParam === 'unread') {
+            setOnlyUnread(true);
+        }
     }, [statusParam, historyParam, filterParam]);
 
     useEffect(() => {
@@ -78,6 +83,10 @@ export default function OrdersPage() {
             (o.model || '').toLowerCase().includes(query) ||
             (o.status || '').toLowerCase().includes(query)
         );
+
+        if (onlyUnread) {
+            return matchesSearch && o.unread_messages > 0;
+        }
 
         if (showAll) {
             // History mode: only delivered orders
@@ -176,6 +185,18 @@ export default function OrdersPage() {
                     </label>
                 </div>
 
+                <button
+                    onClick={() => {
+                        setOnlyUnread(!onlyUnread);
+                        if (!onlyUnread) setShowAll(false);
+                    }}
+                    className={`bg-white p-4 rounded-2xl border flex items-center gap-2 transition-all ${onlyUnread ? 'border-red-200 text-red-600 bg-red-50' : 'border-slate-100 text-slate-400 hover:text-slate-900'}`}
+                    title="Filtrar por no leídos"
+                >
+                    <MessageSquare size={20} />
+                    {onlyUnread && <span className="text-[10px] font-black uppercase">Solo no leídos</span>}
+                </button>
+
                 <button className="bg-white p-4 rounded-2xl border border-slate-100 text-slate-400 hover:text-slate-900 transition-all">
                     <Filter size={20} />
                 </button>
@@ -197,7 +218,14 @@ export default function OrdersPage() {
                                     <ClipboardList size={28} />
                                 </div>
                                 <div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Orden #{order.id}</p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Orden #{order.id}</p>
+                                        {order.unread_messages > 0 && (
+                                            <span className="flex items-center gap-1 bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase animate-pulse">
+                                                <MessageSquare size={8} /> {order.unread_messages}
+                                            </span>
+                                        )}
+                                    </div>
                                     <h3 className="text-xl font-black text-slate-900 uppercase truncate">{order.client_name}</h3>
                                     {canSeeIncome && order.order_total > 0 && (
                                         <p className="text-[11px] font-black text-slate-400">
@@ -240,6 +268,6 @@ export default function OrdersPage() {
                     ))
                 )}
             </div>
-        </div>
+        </div >
     );
 }

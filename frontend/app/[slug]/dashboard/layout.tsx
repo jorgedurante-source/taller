@@ -22,7 +22,8 @@ import {
     ChevronDown,
     Building2,
     Bell,
-    Calendar as CalendarIcon
+    Calendar as CalendarIcon,
+    Truck
 } from 'lucide-react';
 
 interface Workshop {
@@ -156,6 +157,7 @@ export default function DashboardLayout({
                     {hasPermission('turnos') && <NavItem href={`/${slug}/dashboard/appointments`} icon={<CalendarIcon size={20} />} label="Turnos" />}
                     {hasPermission('ingresos') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label="Ingresos" />}
                     {hasPermission('recordatorios') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label="Recordatorios" />}
+                    {hasPermission('proveedores') && <NavItem href={`/${slug}/dashboard/suppliers`} icon={<Truck size={20} />} label="Proveedores" />}
                     {hasPermission('configuracion') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label="Configuración" />}
                 </nav>
 

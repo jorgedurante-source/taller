@@ -39,6 +39,7 @@ tenantRouter.use('/templates', require('./routes/templates'));
 tenantRouter.use('/client', require('./routes/client'));
 tenantRouter.use('/users', require('./routes/users'));
 tenantRouter.use('/roles', require('./routes/roles'));
+tenantRouter.use('/suppliers', require('./routes/suppliers'));
 tenantRouter.use('/public/order', require('./routes/public_order'));
 tenantRouter.use('/', require('./routes/api'));
 
@@ -72,13 +73,21 @@ const cron = require('node-cron');
 // Correr al minuto 0 de cada hora (exactamente en punto)
 cron.schedule('0 * * * *', processReminders);
 
+// Correr sincronización de correos cada 10 minutos
+const { syncAllEmails } = require('./cron/imap_sync');
+cron.schedule('*/10 * * * *', syncAllEmails);
+
 // Correr también 10 segundos después del inicio del servidor para no perder notificaciones atrasadas.
-setTimeout(processReminders, 10000);
+setTimeout(() => {
+    processReminders();
+    syncAllEmails();
+}, 10000);
 
 // Manual trigger for superadmin
 app.post('/api/super/trigger-reminders', (req, res) => {
     processReminders();
-    res.json({ message: 'Proceso de recordatorios iniciado' });
+    syncAllEmails();
+    res.json({ message: 'Proceso de recordatorios y sincronización de mails iniciado' });
 });
 
 // ─── Startup: Ensure at least one workshop exists or initialize existing ones ──
