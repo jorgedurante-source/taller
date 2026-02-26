@@ -6,41 +6,37 @@ function getDb(req) { return req.db; }
 const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 
 // @route   GET api/roles
-router.get('/', auth, (req, res) => {
-    try {
-        const roles = req.db.prepare('SELECT * FROM roles').all();
-        const isAdminUser = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'administrador'));
-        const userPermissions = req.user.permissions || [];
+router.get('/', auth, (req, res, next) => {
+    const roles = req.db.prepare('SELECT * FROM roles').all();
+    const isAdminUser = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'administrador'));
+    const userPermissions = req.user.permissions || [];
 
-        const filteredRoles = roles.map(r => {
-            try {
-                r.permissions = JSON.parse(r.permissions);
-                return r;
-            } catch (e) {
-                r.permissions = [];
-                return r;
-            }
-        }).filter(r => {
-            if (isAdminUser) return true;
-            // A non-admin user can only see roles that have a subset of their own permissions
-            return r.permissions.every(p => userPermissions.includes(p));
-        });
+    const filteredRoles = roles.map(r => {
+        try {
+            r.permissions = JSON.parse(r.permissions);
+            return r;
+        } catch (e) {
+            r.permissions = [];
+            return r;
+        }
+    }).filter(r => {
+        if (isAdminUser) return true;
+        // A non-admin user can only see roles that have a subset of their own permissions
+        return r.permissions.every(p => userPermissions.includes(p));
+    });
 
-        // Further filter permissions based on enabled modules
-        filteredRoles.forEach(r => {
-            if (req.enabledModules) {
-                r.permissions = r.permissions.filter(p => req.enabledModules.includes(p));
-            }
-        });
+    // Further filter permissions based on enabled modules
+    filteredRoles.forEach(r => {
+        if (req.enabledModules) {
+            r.permissions = r.permissions.filter(p => req.enabledModules.includes(p));
+        }
+    });
 
-        res.json(filteredRoles);
-    } catch (err) {
-        res.status(500).send('Server error');
-    }
+    res.json(filteredRoles);
 });
 
 // @route   POST api/roles
-router.post('/', auth, hasPermission('roles'), (req, res) => {
+router.post('/', auth, hasPermission('roles'), (req, res, next) => {
     const { name, permissions } = req.body;
     const isAdminUser = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'administrador'));
     const userPermissions = req.user.permissions || [];
@@ -51,19 +47,15 @@ router.post('/', auth, hasPermission('roles'), (req, res) => {
         }
     }
 
-    try {
-        const result = req.db.prepare('INSERT INTO roles (name, permissions) VALUES (?, ?)').run(
-            name,
-            JSON.stringify(permissions || [])
-        );
-        res.json({ id: result.lastInsertRowid, name, permissions });
-    } catch (err) {
-        res.status(400).json({ message: 'Error al crear rol (posible nombre duplicado)' });
-    }
+    const result = req.db.prepare('INSERT INTO roles (name, permissions) VALUES (?, ?)').run(
+        name,
+        JSON.stringify(permissions || [])
+    );
+    res.json({ id: result.lastInsertRowid, name, permissions });
 });
 
 // @route   PUT api/roles/:id
-router.put('/:id', auth, hasPermission('roles'), (req, res) => {
+router.put('/:id', auth, hasPermission('roles'), (req, res, next) => {
     const { name, permissions } = req.body;
     const isAdminUser = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'administrador'));
     const userPermissions = req.user.permissions || [];
@@ -95,7 +87,7 @@ router.put('/:id', auth, hasPermission('roles'), (req, res) => {
 });
 
 // @route   DELETE api/roles/:id
-router.delete('/:id', auth, hasPermission('roles'), (req, res) => {
+router.delete('/:id', auth, hasPermission('roles'), (req, res, next) => {
     try {
         const role = req.db.prepare('SELECT * FROM roles WHERE id = ?').get(req.params.id);
         if (!role) return res.status(404).json({ message: 'Rol no encontrado' });

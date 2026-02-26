@@ -92,6 +92,9 @@ seedSetting('support_email', 'soporte@surforge.com');
 seedSetting('system_currency', '$');
 seedSetting('system_announcement', '');
 seedSetting('superadmin_theme', 'default');
+seedSetting('backup_enabled', 'false');
+seedSetting('backup_frequency', 'daily');
+seedSetting('backup_retention', '7');
 
 // 5. Seed Superuser
 try {

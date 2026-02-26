@@ -49,8 +49,7 @@ function tenantMiddleware(req, res, next) {
         req.slug = slug;
         next();
     } catch (err) {
-        console.error(`[tenant] Error loading DB for ${slug}:`, err);
-        res.status(500).json({ message: 'Error interno del servidor' });
+        next(err);
     }
 }
 

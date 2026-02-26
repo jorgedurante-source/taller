@@ -34,8 +34,13 @@ import {
     Copy,
     Check,
     Key,
-    Car
+    Car,
+    Palette,
+    Archive,
+    Download,
+    Upload
 } from 'lucide-react';
+import { THEMES, applyTheme } from '@/lib/theme';
 
 interface Workshop {
     id: number;
@@ -49,6 +54,7 @@ interface Workshop {
     logo_path?: string;
     environment?: string;
     enabled_modules?: string[];
+    error_count?: number;
 }
 
 interface Stats {
@@ -74,6 +80,18 @@ export default function SuperAdminDashboard() {
     const logoInputRef = useRef<HTMLInputElement>(null);
     const [adminPassword, setAdminPassword] = useState('');
     const [updatingModules, setUpdatingModules] = useState(false);
+    const [showLogsModal, setShowLogsModal] = useState<Workshop | null>(null);
+    const [systemLogs, setSystemLogs] = useState<any[]>([]);
+    const [fileLogs, setFileLogs] = useState<any[]>([]);
+    const [loadingLogs, setLoadingLogs] = useState(false);
+    const [selectedLogs, setSelectedLogs] = useState<number[]>([]);
+    const [logLevelFilter, setLogLevelFilter] = useState('all');
+    const [logSearchFilter, setLogSearchFilter] = useState('');
+    const [showThemeSelector, setShowThemeSelector] = useState(false);
+    const [workshopBackups, setWorkshopBackups] = useState<any[]>([]);
+    const [loadingBackups, setLoadingBackups] = useState(false);
+    const [restoreOptions, setRestoreOptions] = useState({ db: true, uploads: true });
+    const backupInputRef = useRef<HTMLInputElement>(null);
     const { config } = useConfig();
     const { notify } = useNotification();
     const router = useRouter();
@@ -81,6 +99,81 @@ export default function SuperAdminDashboard() {
     useEffect(() => {
         fetchData();
     }, []);
+
+    useEffect(() => {
+        if (showManageModal) {
+            fetchWorkshopBackups(showManageModal.slug);
+        }
+    }, [showManageModal]);
+
+    const fetchWorkshopBackups = async (slug: string) => {
+        setLoadingBackups(true);
+        try {
+            const res = await superApi.get(`/workshops/${slug}/backups`);
+            setWorkshopBackups(res.data);
+        } catch (err) {
+            console.error('Error fetching backups', err);
+        } finally {
+            setLoadingBackups(false);
+        }
+    };
+
+    const handleCreateServerBackup = async (slug: string) => {
+        notify('info', 'Generando backup en servidor...');
+        try {
+            await superApi.post(`/workshops/${slug}/backups/create`);
+            notify('success', 'Backup guardado en servidor');
+            fetchWorkshopBackups(slug);
+        } catch (err) {
+            notify('error', 'Error al crear backup');
+        }
+    };
+
+    const handleRestoreWorkshop = async (slug: string, source: 'upload' | 'file', filename?: string) => {
+        if (!restoreOptions.db && !restoreOptions.uploads) {
+            return notify('warning', 'Selecciona al menos qué restaurar (Base o Archivos)');
+        }
+
+        const msg = source === 'upload'
+            ? '¿Estás SEGURO? Los datos actuales del taller serán SOBRESCRITOS por el archivo seleccionado.'
+            : `¿Estás SEGURO de restaurar desde "${filename}"? Los datos actuales serán SOBRESCRITOS.`;
+
+        if (!confirm(msg)) return;
+
+        const formData = new FormData();
+        formData.append('restoreDb', String(restoreOptions.db));
+        formData.append('restoreUploads', String(restoreOptions.uploads));
+
+        if (source === 'upload') {
+            const file = backupInputRef.current?.files?.[0];
+            if (!file) return notify('error', 'Selección de archivo inválida');
+            formData.append('backup', file);
+        } else {
+            if (!filename) return;
+            formData.append('filename', filename);
+        }
+
+        notify('info', 'Iniciando restauración...');
+        try {
+            await superApi.post(`/workshops/${slug}/restore`, formData);
+            notify('success', 'Taller restaurado con éxito');
+            fetchData();
+        } catch (err: any) {
+            notify('error', err.response?.data?.message || 'Error en la restauración');
+        }
+    };
+
+    const handleDeleteBackup = async (slug: string, filename: string) => {
+        if (!confirm(`¿Estás seguro de eliminar permanentemente el respaldo "${filename}"?`)) return;
+
+        try {
+            await superApi.delete(`/workshops/${slug}/backups/${filename}`);
+            notify('success', 'Respaldo eliminado');
+            fetchWorkshopBackups(slug);
+        } catch (err) {
+            notify('error', 'Error al eliminar respaldo');
+        }
+    };
 
     const fetchData = async () => {
         try {
@@ -282,6 +375,88 @@ export default function SuperAdminDashboard() {
         w.slug.toLowerCase().includes(search.toLowerCase())
     );
 
+    const fetchWorkshopLogs = async (slug: string) => {
+        setLoadingLogs(true);
+        setSelectedLogs([]); // Reset selection when refreshing or loading new
+        try {
+            const [dbRes, fileRes] = await Promise.all([
+                superApi.get(`/workshops/${slug}/logs`),
+                superApi.get(`/workshops/${slug}/logs/file`)
+            ]);
+            setSystemLogs(dbRes.data);
+            setFileLogs(fileRes.data);
+        } catch (err) {
+            notify('error', 'Error al cargar logs del taller');
+        } finally {
+            setLoadingLogs(false);
+        }
+    };
+
+    const handlePurgeWorkshopLogs = async (slug: string, mode: 'all' | 'old') => {
+        const msg = mode === 'all' ? '¿Desea eliminar TODOS los logs?' : '¿Desea eliminar logs de más de 30 días?';
+        if (!confirm(msg)) return;
+        try {
+            await superApi.delete(`/workshops/${slug}/logs?mode=${mode}`);
+            notify('success', 'Logs purgados');
+            fetchWorkshopLogs(slug);
+            fetchData(); // Update the error_count in the main list
+        } catch (err) {
+            notify('error', 'Error al purgar logs');
+        }
+    };
+
+    const handleDeleteWorkshopLogs = async (slug: string, ids: number[]) => {
+        if (!confirm(`¿Eliminar ${ids.length} registros seleccionados?`)) return;
+        try {
+            await superApi.delete(`/workshops/${slug}/logs?ids=${ids.join(',')}`);
+            notify('success', 'Registros eliminados');
+            setSelectedLogs([]);
+            fetchWorkshopLogs(slug);
+            fetchData();
+        } catch (err) {
+            notify('error', 'Error al eliminar registros');
+        }
+    };
+
+    useEffect(() => {
+        if (showLogsModal) {
+            fetchWorkshopLogs(showLogsModal.slug);
+        } else {
+            setLogLevelFilter('all');
+            setLogSearchFilter('');
+        }
+    }, [showLogsModal]);
+
+    const filteredSystemLogs = systemLogs.filter(log => {
+        const matchesLevel = logLevelFilter === 'all' || log.level === logLevelFilter;
+        const matchesSearch = log.message.toLowerCase().includes(logSearchFilter.toLowerCase()) ||
+            (log.path && log.path.toLowerCase().includes(logSearchFilter.toLowerCase()));
+        return matchesLevel && matchesSearch;
+    });
+
+    const filteredFileLogs = fileLogs.filter(log => {
+        return log.message.toLowerCase().includes(logSearchFilter.toLowerCase());
+    });
+
+    const handleDownloadBackup = async (slug?: string) => {
+        try {
+            const url = slug ? `/workshops/${slug}/backup` : '/system/backup';
+            const response = await superApi.get(url, { responseType: 'blob' });
+            const blob = new Blob([response.data], { type: 'application/zip' });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            const date = new Date().toISOString().split('T')[0];
+            link.setAttribute('download', slug ? `backup-${slug}-${date}.zip` : `system-backup-${date}.zip`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            notify('success', 'Respaldo generado correctamente');
+        } catch (err) {
+            notify('error', 'Error al generar respaldo');
+        }
+    };
+
     if (loading) return (
         <div className="min-h-screen flex items-center justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -304,6 +479,63 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <div className="flex items-center gap-4">
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowThemeSelector(!showThemeSelector)}
+                                className={`p-2.5 rounded-xl transition-all group border ${showThemeSelector ? 'bg-indigo-600 border-indigo-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white hover:border-indigo-500/50'}`}
+                                title="Cambiar Tema"
+                            >
+                                <Palette size={20} />
+                            </button>
+
+                            {showThemeSelector && (
+                                <>
+                                    <div className="fixed inset-0 z-[60]" onClick={() => setShowThemeSelector(false)} />
+                                    <div className="absolute right-0 mt-2 w-64 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-2 z-[70] animate-in fade-in zoom-in-95 duration-200">
+                                        <div className="p-3 mb-2 border-b border-slate-800">
+                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Temas Disponibles</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 gap-1">
+                                            {THEMES.map(theme => (
+                                                <button
+                                                    key={theme.id}
+                                                    onClick={async () => {
+                                                        applyTheme(theme.id);
+                                                        localStorage.setItem('mechub-super-theme', theme.id);
+                                                        try {
+                                                            await superApi.post('/settings', { superadmin_theme: theme.id });
+                                                        } catch (e) { }
+                                                        setShowThemeSelector(false);
+                                                    }}
+                                                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-800 transition-all text-left group"
+                                                >
+                                                    <span className="text-xl">{theme.emoji}</span>
+                                                    <div className="flex-grow">
+                                                        <p className="text-xs font-black uppercase italic tracking-tighter group-hover:text-indigo-400">{theme.name}</p>
+                                                        <div className="flex gap-1 mt-1">
+                                                            <div className="w-3 h-1 rounded-full" style={{ backgroundColor: theme.preview.bg }}></div>
+                                                            <div className="w-3 h-1 rounded-full" style={{ backgroundColor: theme.preview.accent }}></div>
+                                                        </div>
+                                                    </div>
+                                                    {localStorage.getItem('mechub-super-theme') === theme.id && (
+                                                        <Check size={14} className="text-indigo-500" />
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => handleDownloadBackup()}
+                            className="bg-slate-800 hover:bg-emerald-600 p-2.5 rounded-xl transition-all group border border-slate-700 hover:border-emerald-500/50"
+                            title="Respaldar TODO el Sistema"
+                        >
+                            <Archive size={20} className="text-slate-400 group-hover:text-white transition-colors" />
+                        </button>
+
                         <button
                             onClick={() => router.push('/superadmin/settings')}
                             className="bg-slate-800 hover:bg-slate-700 p-2.5 rounded-xl transition-all group border border-slate-700 hover:border-indigo-500/50"
@@ -398,7 +630,18 @@ export default function SuperAdminDashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredWorkshops.map(w => (
                             <div key={w.id} className="bg-white border border-slate-100 rounded-[3rem] p-8 shadow-sm hover:shadow-2xl hover:shadow-slate-200/50 transition-all group relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-8">
+                                <div className="absolute top-0 right-0 p-8 flex gap-2">
+                                    <button
+                                        onClick={() => setShowLogsModal(w)}
+                                        className={`p-3 rounded-2xl transition-all border flex items-center gap-2 ${(w.error_count || 0) > 0
+                                            ? 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-100'
+                                            : 'bg-slate-50 text-slate-300 hover:bg-slate-100 hover:text-slate-500 border-slate-100'
+                                            }`}
+                                        title="Ver Logs de Sistema"
+                                    >
+                                        <Activity size={20} />
+                                        <span className="text-xs font-black">{w.error_count || 0}</span>
+                                    </button>
                                     <button
                                         onClick={() => { setShowManageModal(w); setShowToken(false); }}
                                         className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"
@@ -650,40 +893,141 @@ export default function SuperAdminDashboard() {
                                         </button>
                                     </div>
 
-                                    {/* Data Management Section */}
-                                    {showManageModal.environment === 'dev' && (
-                                        <div className="grid grid-cols-2 gap-6 animate-in fade-in zoom-in duration-300">
-                                            <div className="space-y-3">
-                                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Datos de Prueba</label>
+                                    {/* Advanced Backup & Restore System */}
+                                    <div className="bg-slate-50/50 rounded-[3rem] p-8 border border-slate-100 space-y-6">
+                                        <div className="flex items-center justify-between px-2">
+                                            <div>
+                                                <h3 className="text-slate-900 font-black text-sm uppercase tracking-widest italic leading-none">Gestión de Datos</h3>
+                                                <p className="text-slate-400 text-[9px] font-bold uppercase mt-1 tracking-widest">Respaldo y Restauración</p>
+                                            </div>
+                                            <div className="flex gap-4">
+                                                <label className="flex items-center gap-2 cursor-pointer group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={restoreOptions.db}
+                                                        onChange={(e) => setRestoreOptions({ ...restoreOptions, db: e.target.checked })}
+                                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                    <span className="text-[10px] font-black uppercase text-slate-500 group-hover:text-slate-900 transition-colors">Base</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={restoreOptions.uploads}
+                                                        onChange={(e) => setRestoreOptions({ ...restoreOptions, uploads: e.target.checked })}
+                                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                    <span className="text-[10px] font-black uppercase text-slate-500 group-hover:text-slate-900 transition-colors">Archivos</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <button
+                                                onClick={() => handleDownloadBackup(showManageModal.slug)}
+                                                className="bg-white hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 p-5 rounded-[2rem] font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-3 border border-slate-100 shadow-sm"
+                                            >
+                                                <Download size={18} />
+                                                Descargar ZIP
+                                            </button>
+
+                                            <div className="relative">
                                                 <button
-                                                    onClick={() => handleSeedData(showManageModal.slug)}
-                                                    className="w-full bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 p-5 rounded-3xl font-black text-sm transition-all flex items-center justify-center gap-2 border border-slate-100"
+                                                    onClick={() => backupInputRef.current?.click()}
+                                                    className="w-full bg-white hover:bg-indigo-50 text-slate-600 hover:text-indigo-700 p-5 rounded-[2rem] font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-3 border border-slate-100 shadow-sm"
                                                 >
-                                                    <Database size={18} />
-                                                    Sembrar Datos
+                                                    <Upload size={18} />
+                                                    Subir y Pisar
+                                                </button>
+                                                <input
+                                                    type="file"
+                                                    ref={backupInputRef}
+                                                    className="hidden"
+                                                    accept=".zip"
+                                                    onChange={() => handleRestoreWorkshop(showManageModal.slug, 'upload')}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div className="bg-white/80 rounded-[2.5rem] p-6 border border-slate-100/50 space-y-4">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Historial en Servidor</h4>
+                                                <button
+                                                    onClick={() => handleCreateServerBackup(showManageModal.slug)}
+                                                    className="bg-slate-900 text-white px-4 py-2 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-indigo-600 transition-all flex items-center gap-2"
+                                                >
+                                                    <RefreshCw size={12} />
+                                                    Nuevo Punto
                                                 </button>
                                             </div>
-                                            <div className="space-y-3">
-                                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Mantenimiento</label>
-                                                <div className="grid grid-cols-2 gap-3">
+
+                                            <div className="max-h-[200px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                                {loadingBackups ? (
+                                                    <div className="flex justify-center py-4">
+                                                        <RefreshCw className="animate-spin text-slate-300" size={20} />
+                                                    </div>
+                                                ) : workshopBackups.length > 0 ? (
+                                                    workshopBackups.map((bk, i) => (
+                                                        <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100 group hover:border-indigo-100 transition-all">
+                                                            <div>
+                                                                <p className="text-[10px] font-black text-slate-700 italic">{bk.name}</p>
+                                                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                                                                    {new Date(bk.created_at).toLocaleString()} • {(bk.size / 1024 / 1024).toFixed(2)} MB
+                                                                </p>
+                                                            </div>
+                                                            <div className="flex gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                                                                <button
+                                                                    onClick={() => handleRestoreWorkshop(showManageModal.slug, 'file', bk.name)}
+                                                                    title="Restaurar este punto"
+                                                                    className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                                >
+                                                                    <RefreshCw size={14} />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteBackup(showManageModal.slug, bk.name)}
+                                                                    title="Eliminar respaldo"
+                                                                    className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p className="text-center py-6 text-[10px] font-bold text-slate-300 uppercase tracking-widest italic">Sin respaldos locales</p>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {showManageModal.environment === 'dev' && (
+                                            <div className="pt-2">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block ml-2">Peligro: Limpieza Dev</label>
+                                                <div className="grid grid-cols-3 gap-2">
                                                     <button
                                                         onClick={() => handleClearData(showManageModal.slug)}
-                                                        className="w-full bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 p-5 rounded-3xl font-black text-[10px] transition-all flex flex-col items-center justify-center gap-2 border border-slate-100"
+                                                        className="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white p-3 rounded-2xl font-black text-[8px] uppercase tracking-widest transition-all border border-rose-100"
+                                                        title="Borrrar todo (Datos)"
                                                     >
-                                                        <RefreshCw size={18} />
-                                                        LIMPIAR DB
+                                                        Limpiar Base
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleSeedData(showManageModal.slug)}
+                                                        className="bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white p-3 rounded-2xl font-black text-[8px] uppercase tracking-widest transition-all border border-indigo-100"
+                                                        title="Generar Clientes/Órdenes"
+                                                    >
+                                                        Sembrar Mock
                                                     </button>
                                                     <button
                                                         onClick={() => handleReseedTemplates(showManageModal.slug)}
-                                                        className="w-full bg-slate-50 hover:bg-amber-50 text-slate-400 hover:text-amber-600 p-5 rounded-3xl font-black text-[10px] transition-all flex flex-col items-center justify-center gap-2 border border-slate-100 uppercase italic"
+                                                        className="bg-amber-50 hover:bg-amber-600 text-amber-600 hover:text-white p-3 rounded-2xl font-black text-[8px] uppercase tracking-widest transition-all border border-amber-100"
+                                                        title="Resetear Plantillas Mensajes"
                                                     >
-                                                        <MessageSquare size={18} />
-                                                        Reseed Mensajes
+                                                        Resetear Msg
                                                     </button>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
+                                    </div>
 
                                     {/* API Security Token */}
                                     <div className="bg-slate-950 rounded-[3rem] p-10 space-y-5 border border-slate-800 relative overflow-hidden group/tokenbox">
@@ -764,6 +1108,27 @@ export default function SuperAdminDashboard() {
                                             </button>
                                         </div>
                                         <p className="text-[9px] text-slate-400 font-bold ml-1 uppercase">Solo afecta al usuario 'admin' de este taller específico.</p>
+                                    </div>
+
+                                    <div className="bg-indigo-50/50 p-6 rounded-[2.5rem] border border-indigo-100 flex items-center justify-between">
+                                        <div>
+                                            <h4 className="text-[11px] font-black text-indigo-900 uppercase tracking-widest leading-none">Generar Log de Prueba</h4>
+                                            <p className="text-[9px] text-indigo-400 font-bold mt-1 uppercase">Validar sistema de reporte de errores</p>
+                                        </div>
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    await superApi.post(`/workshops/${showManageModal.slug}/test-error`);
+                                                    notify('success', 'Error de prueba registrado');
+                                                    fetchData();
+                                                } catch (e) {
+                                                    notify('error', 'Fallo al generar error');
+                                                }
+                                            }}
+                                            className="px-6 py-3 bg-slate-900 hover:bg-red-600 text-white rounded-2xl font-black text-[10px] uppercase italic tracking-widest transition-all"
+                                        >
+                                            Disparar Error
+                                        </button>
                                     </div>
 
                                     <div className="pt-10 flex gap-4">
@@ -864,6 +1229,223 @@ export default function SuperAdminDashboard() {
                         </div>
                     </div>
                 )}
+
+            {/* Workshop Logs Modal */}
+            {showLogsModal && (
+                <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[120] flex items-center justify-center p-4 overflow-hidden">
+                    <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[4rem] shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-12 duration-500">
+                        <div className="p-10 border-b border-slate-100 flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="p-4 bg-red-50 text-red-600 rounded-[1.5rem]">
+                                    <Activity size={32} />
+                                </div>
+                                <div>
+                                    <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">Logs de Sistema</h2>
+                                    <p className="text-slate-400 font-bold text-xs mt-2 uppercase tracking-widest leading-none">Taller: {showLogsModal.name} ({showLogsModal.slug})</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={() => fetchWorkshopLogs(showLogsModal.slug)}
+                                    className="p-4 bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl transition-all"
+                                    title="Refrescar"
+                                >
+                                    <RefreshCw size={24} className={loadingLogs ? 'animate-spin' : ''} />
+                                </button>
+                                {selectedLogs.length > 0 && (
+                                    <button
+                                        onClick={() => handlePurgeWorkshopLogs(showLogsModal.slug, 'all')}
+                                        className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
+                                    >
+                                        Purgar Todo
+                                    </button>
+                                )}
+                                {selectedLogs.length > 0 && (
+                                    <button
+                                        onClick={() => handleDeleteWorkshopLogs(showLogsModal.slug, selectedLogs)}
+                                        className="bg-slate-900 text-white hover:bg-black px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2"
+                                    >
+                                        <Trash2 size={14} />
+                                        Eliminar Seleccionados ({selectedLogs.length})
+                                    </button>
+                                )}
+                                {selectedLogs.length === 0 && (
+                                    <button
+                                        onClick={() => handlePurgeWorkshopLogs(showLogsModal.slug, 'all')}
+                                        className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
+                                    >
+                                        Purgar Todo
+                                    </button>
+                                )}
+                                <button
+                                    onClick={() => setShowLogsModal(null)}
+                                    className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-slate-900 transition-all"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="flex-grow overflow-y-auto p-10 space-y-12">
+                            {/* Log Filters */}
+                            <div className="flex flex-col md:flex-row gap-4 items-center bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
+                                <div className="flex-grow relative w-full">
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                    <input
+                                        type="text"
+                                        placeholder="Filtrar por mensaje o ruta..."
+                                        value={logSearchFilter}
+                                        onChange={(e) => setLogSearchFilter(e.target.value)}
+                                        className="bg-white border-2 border-slate-100 pl-12 pr-6 py-3 rounded-2xl w-full font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-indigo-500 transition-all text-sm"
+                                    />
+                                </div>
+                                <div className="flex gap-2 shrink-0">
+                                    {['all', 'info', 'warn', 'error'].map(level => (
+                                        <button
+                                            key={level}
+                                            onClick={() => setLogLevelFilter(level)}
+                                            className={`px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border ${logLevelFilter === level
+                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200'
+                                                : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
+                                                }`}
+                                        >
+                                            {level === 'all' ? 'Todos' : level}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* DB Logs */}
+                            <section className="space-y-6">
+                                <h3 className="text-xl font-black text-slate-800 uppercase italic tracking-widest flex items-center gap-2">
+                                    <Database size={20} className="text-indigo-500" />
+                                    Registros de Base de Datos
+                                </h3>
+                                <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
+                                    {filteredSystemLogs.length === 0 ? (
+                                        <div className="p-20 text-center">
+                                            <p className="text-slate-400 font-bold italic">No hay logs que coincidan con los filtros.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left">
+                                                <thead>
+                                                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                                                        <th className="px-6 py-4 w-10">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                                checked={filteredSystemLogs.length > 0 && selectedLogs.length === filteredSystemLogs.length}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setSelectedLogs(filteredSystemLogs.map(l => l.id));
+                                                                    } else {
+                                                                        setSelectedLogs([]);
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </th>
+                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
+                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nivel</th>
+                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Mensaje</th>
+                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ruta / Método</th>
+                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Usuario</th>
+                                                        <th className="px-6 py-4 text-right"></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-50">
+                                                    {filteredSystemLogs.map((log, i) => (
+                                                        <tr key={i} className={`hover:bg-slate-50/50 transition-colors group ${selectedLogs.includes(log.id) ? 'bg-indigo-50/30' : ''}`}>
+                                                            <td className="px-6 py-4">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                                    checked={selectedLogs.includes(log.id)}
+                                                                    onChange={(e) => {
+                                                                        if (e.target.checked) {
+                                                                            setSelectedLogs([...selectedLogs, log.id]);
+                                                                        } else {
+                                                                            setSelectedLogs(selectedLogs.filter(id => id !== log.id));
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </td>
+                                                            <td className="px-6 py-4 text-[10px] font-black text-slate-500 tabular-nums">
+                                                                {new Date(log.created_at).toLocaleString()}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase ${log.level === 'error' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                                    {log.level}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <p className="text-xs font-bold text-slate-800">{log.message}</p>
+                                                                {log.stack_trace && (
+                                                                    <details className="mt-2">
+                                                                        <summary className="text-[10px] text-slate-400 cursor-pointer hover:text-indigo-500 font-bold uppercase tracking-widest">Stack Trace</summary>
+                                                                        <pre className="mt-2 p-4 bg-slate-900 text-slate-300 text-[10px] rounded-xl overflow-x-auto font-mono max-h-40">
+                                                                            {log.stack_trace}
+                                                                        </pre>
+                                                                    </details>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="text-[9px] font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">{log.method}</span>
+                                                                    <span className="text-[10px] font-bold text-slate-500 truncate max-w-[150px]">{log.path}</span>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 text-xs font-bold text-slate-500">
+                                                                {log.user_name || 'Sistema'}
+                                                            </td>
+                                                            <td className="px-6 py-4 text-right">
+                                                                <button
+                                                                    onClick={() => handleDeleteWorkshopLogs(showLogsModal.slug, [log.id])}
+                                                                    className="p-2 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            </section>
+
+                            {/* File Logs */}
+                            <section className="space-y-6">
+                                <h3 className="text-xl font-black text-slate-800 uppercase italic tracking-widest flex items-center gap-2">
+                                    <AlertCircle size={20} className="text-red-500" />
+                                    Logs de Emergencia (Archivo)
+                                </h3>
+                                <div className="space-y-4">
+                                    {filteredFileLogs.length === 0 ? (
+                                        <div className="bg-white p-10 rounded-[2rem] border border-slate-100 text-center">
+                                            <p className="text-slate-400 font-bold italic">No hay logs de emergencia que coincidan.</p>
+                                        </div>
+                                    ) : (
+                                        filteredFileLogs.map((log, i) => (
+                                            <div key={i} className="bg-slate-900 rounded-3xl p-6 border border-slate-800 group hover:border-red-500/50 transition-all">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <span className="px-3 py-1 bg-red-500/10 text-red-500 rounded-full text-[9px] font-black uppercase tracking-widest">Critico - Error de Archivo</span>
+                                                    <span className="text-[10px] font-black text-slate-500 tabular-nums">{new Date(log.timestamp).toLocaleString()}</span>
+                                                </div>
+                                                <p className="text-red-400 font-black text-sm mb-4 leading-relaxed">{log.message}</p>
+                                                <pre className="p-4 bg-black/50 rounded-2xl text-[10px] text-slate-500 font-mono overflow-x-auto whitespace-pre-wrap">
+                                                    {log.stack}
+                                                </pre>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

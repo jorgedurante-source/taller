@@ -223,6 +223,17 @@ function initTenantDb(db, slug) {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL
         );
+
+        CREATE TABLE IF NOT EXISTS system_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            level TEXT DEFAULT 'info', -- 'info', 'warn', 'error'
+            message TEXT NOT NULL,
+            stack_trace TEXT,
+            path TEXT,
+            method TEXT,
+            user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
     `);
 
     // Clean up seeding
@@ -626,4 +637,12 @@ function deleteTenant(slug) {
     return { success: true };
 }
 
-module.exports = { getDb, createTenant, listTenants, tenantExists, getTenantDir, getTenantUploads, initTenantDb, deleteTenant };
+function closeDb(slug) {
+    if (dbCache[slug]) {
+        dbCache[slug].close();
+        delete dbCache[slug];
+        console.log(`[tenant] Closed DB connection for: ${slug}`);
+    }
+}
+
+module.exports = { getDb, closeDb, createTenant, listTenants, tenantExists, getTenantDir, getTenantUploads, initTenantDb, deleteTenant };

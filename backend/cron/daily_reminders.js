@@ -3,6 +3,7 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const { sendEmail } = require('../lib/mailer');
 const { generateOrderPDF } = require('../lib/pdfGenerator');
+const { logError } = require('../lib/logger');
 
 const tenantsDir = path.join(__dirname, '..', 'tenants');
 
@@ -66,11 +67,11 @@ async function processReminders() {
                     await sendOrderReminder(db, order.id, slug, config);
                     console.log(`[cron:${slug}] Sent reminder for order #${order.id}`);
                 } catch (sendErr) {
-                    console.error(`[cron:${slug}] Failed to send #${order.id}:`, sendErr.message);
+                    logError(db, slug, sendErr);
                 }
             }
         } catch (err) {
-            console.error(`[cron:${slug}] CRITICAL ERROR:`, err.message);
+            logError(db, slug, err);
         } finally {
             db.close();
         }

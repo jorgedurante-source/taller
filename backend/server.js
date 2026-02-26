@@ -41,6 +41,7 @@ tenantRouter.use('/users', require('./routes/users'));
 tenantRouter.use('/roles', require('./routes/roles'));
 tenantRouter.use('/suppliers', require('./routes/suppliers'));
 tenantRouter.use('/public/order', require('./routes/public_order'));
+tenantRouter.use('/logs', require('./routes/logs'));
 tenantRouter.use('/', require('./routes/api'));
 
 // ─── Public System Info ──────────────────────────────────────────────────────
@@ -66,8 +67,13 @@ app.get('/api/info', (req, res) => {
 // Mount tenant router
 app.use('/api/:slug', tenantMiddleware, tenantRouter);
 
+// --- Error Handling Middleware (MUST BE LAST) ---
+const errorHandler = require('./middleware/errorHandler');
+app.use(errorHandler);
+
 // ─── Scheduled Tasks (Cron) ──────────────────────────────────────────────────
 const { processReminders } = require('./cron/daily_reminders');
+require('./cron/backups');
 const cron = require('node-cron');
 
 // Correr al minuto 0 de cada hora (exactamente en punto)

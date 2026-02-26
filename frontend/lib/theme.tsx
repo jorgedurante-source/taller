@@ -90,8 +90,22 @@ export default function ThemeProvider({ children }: { children: React.ReactNode 
 
             if (isSuperAdmin) {
                 const stored = localStorage.getItem('mechub-super-theme');
-                const theme = config.superadmin_theme || stored || 'default';
+                // Priority: Config from DB (if not default) -> LocalStorage -> Config from DB (even if default) -> 'default' fallback
+                let theme = 'default';
+                if (config.superadmin_theme && config.superadmin_theme !== 'default') {
+                    theme = config.superadmin_theme;
+                } else if (stored) {
+                    theme = stored;
+                } else if (config.superadmin_theme) {
+                    theme = config.superadmin_theme;
+                }
+
                 applyTheme(theme);
+
+                // If it changed, keep localStorage in sync
+                if (theme !== stored) {
+                    localStorage.setItem('mechub-super-theme', theme);
+                }
                 return;
             }
 

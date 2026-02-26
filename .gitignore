@@ -16,6 +16,7 @@ backend/super.db*
 backend/tenants/
 backend/database.sqlite
 backend/*.sqlite
+backend/backups/
 backend/nodemon.log
 
 # Media/System artifacts
@@ -41,8 +42,16 @@ Thumbs.db
 .idea/
 
 # Testing
-**/coverage/
 *.test.js
 test_*.js
 debug_*.js
 check_*.js
+
+# Temp Scripts and Logs
+backend/logs/
+backend/*_fix.js
+backend/force_restore.js
+backend/inspect_*.js
+backend/verify_paths.js
+backend/raw_check.js
+tmp/

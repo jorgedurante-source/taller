@@ -117,17 +117,31 @@ function seedWorkshop(db) {
 }
 
 function clearWorkshop(db) {
-    const transaction = db.transaction(() => {
-        db.prepare("DELETE FROM order_history").run();
-        db.prepare("DELETE FROM order_items").run();
-        db.prepare("DELETE FROM orders").run();
-        db.prepare("DELETE FROM vehicle_km_history").run();
-        db.prepare("DELETE FROM vehicles").run();
-        db.prepare("DELETE FROM clients").run();
-        db.prepare("DELETE FROM service_catalog").run();
-        db.prepare("DELETE FROM budgets").run();
-    });
-    transaction();
+    // 1. Identify all tables EXCEPT config and internal ones
+    const tables = db.prepare(`
+        SELECT name FROM sqlite_master 
+        WHERE type='table' 
+        AND name NOT LIKE 'sqlite_%' 
+        AND name != 'config'
+    `).all().map(t => t.name);
+
+    // 2. Disable foreign keys OUTSIDE the transaction for it to take effect
+    db.pragma('foreign_keys = OFF');
+
+    try {
+        const transaction = db.transaction(() => {
+            for (const table of tables) {
+                const res = db.prepare(`DELETE FROM "${table}"`).run();
+                if (res.changes > 0) console.log(`[clear] Wiped table "${table}": Removed ${res.changes} rows`);
+            }
+            // Also reset all sequences
+            try { db.prepare("DELETE FROM sqlite_sequence").run(); } catch (e) { }
+        });
+        transaction();
+        console.log(`[clear] Workshop database wiped successfully (${tables.length} tables processed)`);
+    } finally {
+        db.pragma('foreign_keys = ON');
+    }
 }
 
 function reseedTemplates(db) {

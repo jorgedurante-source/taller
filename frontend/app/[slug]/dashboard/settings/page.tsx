@@ -30,7 +30,8 @@ import {
     Bell,
     AlertCircle,
     RefreshCw,
-    X
+    X,
+    Activity
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { THEMES, applyTheme, getStoredTheme } from '@/lib/theme';
@@ -121,6 +122,11 @@ export default function SettingsPage() {
     const [permissionsList] = useState([
         'dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos', 'proveedores'
     ]);
+
+    // Logs State
+    const [systemLogs, setSystemLogs] = useState<any[]>([]);
+    const [fileLogs, setFileLogs] = useState<any[]>([]);
+    const [loadingLogs, setLoadingLogs] = useState(false);
 
     const handleInsertToken = (token: string) => {
         if (lastFocusedId === null) {
@@ -344,6 +350,39 @@ export default function SettingsPage() {
         }
     };
 
+    const fetchSystemLogs = async () => {
+        setLoadingLogs(true);
+        try {
+            const [dbRes, fileRes] = await Promise.all([
+                api.get('/logs'),
+                api.get('/logs/file')
+            ]);
+            setSystemLogs(dbRes.data);
+            setFileLogs(fileRes.data);
+        } catch (err) {
+            console.error('Error fetching logs:', err);
+        } finally {
+            setLoadingLogs(false);
+        }
+    };
+
+    const handlePurgeLogs = async (mode: 'all' | 'old') => {
+        if (!confirm('¿Desea purgar los logs? Esta acción no se puede deshacer.')) return;
+        try {
+            await api.delete(`/logs?mode=${mode}`);
+            notify('success', 'Logs purgados correctamente');
+            fetchSystemLogs();
+        } catch (err) {
+            notify('error', 'Error al purgar logs');
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === 'logs') {
+            fetchSystemLogs();
+        }
+    }, [activeTab]);
+
     if (loading) return <div className="p-8 text-slate-500 font-medium">Cargando Ajustes del Sistema...</div>;
 
     return (
@@ -361,6 +400,9 @@ export default function SettingsPage() {
                 {hasPermission('usuarios') && <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<UserIcon size={18} />} label="Usuarios" />}
                 {hasPermission('roles') && <TabButton active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} icon={<Shield size={18} />} label="Roles" />}
                 <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')} icon={<Palette size={18} />} label="Apariencia" />
+                {currentUser?.isSuperuser && (
+                    <TabButton active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={<Activity size={18} />} label="Logs" />
+                )}
             </div>
 
             <div className="mt-8">
@@ -1237,6 +1279,141 @@ export default function SettingsPage() {
                                     <p className="text-xs text-slate-500 font-bold mt-0.5">El tema seleccionado se guarda en la configuración de tu taller y afecta a toda la plataforma para tus clientes y empleados.</p>
                                 </div>
                             </div>
+                        </div>
+                    )
+                }
+                {
+                    activeTab === 'logs' && (
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <section className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-8">
+                                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-50 pb-6">
+                                    <div className="flex items-center gap-4">
+                                        <div className="bg-slate-900 text-white p-3 rounded-2xl shadow-xl shadow-slate-900/10">
+                                            <Activity size={24} />
+                                        </div>
+                                        <div>
+                                            <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Historial de Sistema</h3>
+                                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">Visor de errores y logs técnicos por taller</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => handlePurgeLogs('old')}
+                                            className="bg-slate-100 text-slate-600 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
+                                        >
+                                            Limpiar {'>'} 1 mes
+                                        </button>
+                                        <button
+                                            onClick={() => handlePurgeLogs('all')}
+                                            className="bg-red-50 text-red-600 px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all"
+                                        >
+                                            Borrar Todo
+                                        </button>
+                                        <button
+                                            onClick={fetchSystemLogs}
+                                            className="bg-blue-600 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-900 shadow-lg shadow-blue-500/20 transition-all"
+                                        >
+                                            Refrescar
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-6">
+                                    {loadingLogs ? (
+                                        <div className="py-20 text-center">
+                                            <RefreshCw className="animate-spin mx-auto text-blue-500 mb-4" size={32} />
+                                            <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Cargando registros...</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="bg-blue-50/50 border border-blue-100 p-6 rounded-3xl">
+                                                <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                    <Shield size={14} /> Logs en Base de Datos
+                                                </h4>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full">
+                                                        <thead>
+                                                            <tr className="border-b border-blue-100/50">
+                                                                <th className="text-[10px] font-black text-blue-400 uppercase tracking-widest text-left py-4 px-2">Nivel</th>
+                                                                <th className="text-[10px] font-black text-blue-400 uppercase tracking-widest text-left py-4 px-2">Mensaje</th>
+                                                                <th className="text-[10px] font-black text-blue-400 uppercase tracking-widest text-left py-4 px-2">Ruta/Método</th>
+                                                                <th className="text-[10px] font-black text-blue-400 uppercase tracking-widest text-left py-4 px-2">Usuario</th>
+                                                                <th className="text-[10px] font-black text-blue-400 uppercase tracking-widest text-left py-4 px-2">Fecha</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-blue-50">
+                                                            {systemLogs.length === 0 ? (
+                                                                <tr>
+                                                                    <td colSpan={5} className="py-12 text-center text-slate-400 font-bold text-sm italic">No hay logs registrados en la base de datos</td>
+                                                                </tr>
+                                                            ) : (
+                                                                systemLogs.map(log => (
+                                                                    <tr key={log.id} className="hover:bg-blue-600/5 transition-colors group">
+                                                                        <td className="py-4 px-2">
+                                                                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${log.level === 'error' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'}`}>
+                                                                                {log.level}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="py-4 px-2 max-w-sm">
+                                                                            <p className="text-xs font-bold text-slate-800 break-words">{log.message}</p>
+                                                                            {log.stack_trace && (
+                                                                                <details className="mt-2 group/stack">
+                                                                                    <summary className="text-[9px] font-black text-slate-400 uppercase cursor-pointer hover:text-slate-600">Ver Stack Trace</summary>
+                                                                                    <pre className="mt-2 p-3 bg-slate-900 text-blue-400 text-[10px] rounded-xl overflow-x-auto font-mono leading-relaxed">
+                                                                                        {log.stack_trace}
+                                                                                    </pre>
+                                                                                </details>
+                                                                            )}
+                                                                        </td>
+                                                                        <td className="py-4 px-2">
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <span className="text-[10px] font-black text-slate-400">{log.method}</span>
+                                                                                <span className="text-[10px] font-bold text-slate-600 font-mono truncate max-w-[150px]">{log.path}</span>
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="py-4 px-2">
+                                                                            <span className="text-[10px] font-black text-slate-900 uppercase">@{log.user_name || 'System'}</span>
+                                                                        </td>
+                                                                        <td className="py-4 px-2 whitespace-nowrap">
+                                                                            <span className="text-[10px] font-bold text-slate-400 uppercase">{new Date(log.created_at).toLocaleString()}</span>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-amber-50/50 border border-amber-100 p-6 rounded-3xl">
+                                                <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                                                    <AlertCircle size={14} /> Fallback Logs (Archivo) - Fallos de DB
+                                                </h4>
+                                                <div className="space-y-3">
+                                                    {fileLogs.length === 0 ? (
+                                                        <p className="py-8 text-center text-slate-400 font-bold text-xs italic">No hay logs críticos registrados en el sistema de archivos</p>
+                                                    ) : (
+                                                        fileLogs.map((log, i) => (
+                                                            <div key={i} className="bg-white border border-amber-100 p-4 rounded-2xl shadow-sm text-xs">
+                                                                <div className="flex items-center justify-between mb-2">
+                                                                    <span className="text-[9px] font-black text-amber-600 uppercase bg-amber-100 px-2 py-0.5 rounded">CRITICAL / FILE</span>
+                                                                    <span className="text-[9px] font-bold text-slate-400 uppercase">{log.timestamp}</span>
+                                                                </div>
+                                                                <p className="font-bold text-slate-900 mb-1">{log.message}</p>
+                                                                {log.stack && (
+                                                                    <pre className="mt-2 p-3 bg-slate-900 text-amber-500 text-[9px] rounded-xl overflow-x-auto font-mono">
+                                                                        {log.stack}
+                                                                    </pre>
+                                                                )}
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </section>
                         </div>
                     )
                 }

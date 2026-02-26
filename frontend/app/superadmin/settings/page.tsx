@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Save, Shield, Mail, Package, AlertTriangle, CheckCircle2, ArrowLeft, Globe, DollarSign, Bell, Palette } from 'lucide-react';
+import { Save, Shield, Mail, Package, AlertTriangle, CheckCircle2, ArrowLeft, Globe, DollarSign, Bell, Palette, Archive } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { superApi } from '@/lib/api';
 import { useConfig } from '@/lib/config';
@@ -16,7 +16,10 @@ export default function SuperAdminSettings() {
         support_email: '',
         system_currency: '$',
         system_announcement: '',
-        superadmin_theme: 'default'
+        superadmin_theme: 'default',
+        backup_enabled: 'false',
+        backup_frequency: 'daily',
+        backup_retention: '7'
     });
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
@@ -252,6 +255,57 @@ export default function SuperAdminSettings() {
                                 </div>
                             ))}
                         </div>
+                    </div>
+
+                    {/* Automated Backups Section */}
+                    <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="p-4 bg-emerald-50 text-emerald-600 rounded-[1.5rem]">
+                                <Archive size={28} />
+                            </div>
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Backups Automáticos</h2>
+                                <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Respaldo Programado del Sistema</p>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                            <div className="space-y-3">
+                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Estado de Backups</label>
+                                <select
+                                    value={settings.backup_enabled}
+                                    onChange={(e) => setSettings({ ...settings, backup_enabled: e.target.value })}
+                                    className={`w-full bg-slate-50 border-none rounded-2xl p-5 text-slate-900 focus:ring-4 transition-all font-black uppercase text-xs tracking-widest ${settings.backup_enabled === 'true' ? 'text-emerald-600 focus:ring-emerald-100' : 'text-slate-400 focus:ring-slate-100'}`}
+                                >
+                                    <option value="false">DESACTIVADOS</option>
+                                    <option value="true">ACTIVADOS (DIARIO 3 AM)</option>
+                                </select>
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Frecuencia</label>
+                                <select
+                                    disabled
+                                    value={settings.backup_frequency}
+                                    className="w-full bg-slate-50 border-none rounded-2xl p-5 text-slate-300 transition-all font-black uppercase text-xs tracking-widest cursor-not-allowed"
+                                >
+                                    <option value="daily">DIARIO (FIJO)</option>
+                                </select>
+                            </div>
+                            <div className="space-y-3">
+                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Retención (Copias)</label>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="30"
+                                    value={settings.backup_retention}
+                                    onChange={(e) => setSettings({ ...settings, backup_retention: e.target.value })}
+                                    className="w-full bg-slate-50 border-none rounded-2xl p-4 text-slate-900 focus:ring-4 focus:ring-indigo-100 transition-all font-black"
+                                />
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-slate-400 italic mt-4 ml-1">
+                            * Los backups se almacenan localmente en el servidor. Recomendamos descargar backups externos regularmente para mayor seguridad.
+                        </p>
                     </div>
 
                     <div className="flex justify-end pt-8">

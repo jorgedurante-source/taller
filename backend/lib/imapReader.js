@@ -1,5 +1,6 @@
 const imaps = require('imap-simple');
 const { simpleParser } = require('mailparser');
+const { logError } = require('./logger');
 
 /**
  * Connects to IMAP and checks for response emails related to orders or part inquiries.
@@ -28,13 +29,19 @@ async function checkEmails(db, slug) {
 
     try {
         const connection = await imaps.connect(imapConfig);
+
+        // Handle connection errors to prevent process crash
+        connection.on('error', (err) => {
+            console.error(`[imap:${slug}] Connection error event:`, err.message);
+        });
+
         await connection.openBox('INBOX');
 
         // Search for unseen messages from the last 2 days
         const delay = 24 * 3600 * 1000 * 2;
         const yesterday = new Date(Date.now() - delay).toISOString();
-        const searchCriteria = [['SINCE', yesterday]]; // Modified: Removed 'UNSEEN' to include all messages
-        const fetchOptions = { bodies: ['HEADER', ''], markSeen: false }; // Don't mark as seen automatically
+        const searchCriteria = [['SINCE', yesterday]];
+        const fetchOptions = { bodies: ['HEADER', ''], markSeen: false };
 
         const messages = await connection.search(searchCriteria, fetchOptions);
 
@@ -44,21 +51,25 @@ async function checkEmails(db, slug) {
             const fullBodyPart = message.parts.find(p => p.which === '');
             const fullSubject = header.body.subject ? header.body.subject[0] : '';
 
-            // Try to extract Order ID from subject: "(Orden #123)"
             const orderMatch = fullSubject.match(/\(Orden\s*#(\d+)\)/i);
 
             if (orderMatch && fullBodyPart) {
                 const orderId = orderMatch[1];
+
+                // --- Fix: Verify order exists to avoid FK constraint failure ---
+                const orderExists = db.prepare('SELECT id FROM orders WHERE id = ?').get(orderId);
+                if (!orderExists) {
+                    console.warn(`[imap:${slug}] Received reply for non-existent order #${orderId}`);
+                    continue;
+                }
+
                 const parsed = await simpleParser(fullBodyPart.body);
                 let text = parsed.text || '';
                 const fromRaw = parsed.from ? parsed.from.text : 'Desconocido';
                 const fromEmail = (parsed.from && parsed.from.value && parsed.from.value[0]) ? parsed.from.value[0].address : null;
 
-                // Mark as seen in the server since we found a matching order
-                // This informs the server that our system has "consumed" this message
                 connection.addFlags(uid, '\\Seen').catch(err => console.error('Error marking seen:', err));
 
-                // Limpiar el texto: Solo queremos la respuesta nueva, no el hilo anterior
                 const replyDelimiters = [
                     /^El\s+.*escribió:$/m,
                     /^On\s+.*wrote:$/m,
@@ -78,7 +89,6 @@ async function checkEmails(db, slug) {
 
                 if (!cleanText) cleanText = text.substring(0, 300);
 
-                // EVITAR DUPLICADOS
                 const sample = cleanText.substring(0, 100);
                 const exists = db.prepare(`
                     SELECT id FROM order_history
@@ -96,8 +106,8 @@ async function checkEmails(db, slug) {
                         'Respuesta Recibida',
                         `Respuesta de ${fromRaw}:\n${cleanText}`,
                         fromEmail,
-                        null, // System generated
-                        0 // is_read = 0 (unread in dashboard)
+                        null,
+                        0
                     );
                 }
             }
@@ -105,7 +115,7 @@ async function checkEmails(db, slug) {
 
         connection.end();
     } catch (err) {
-        console.error(`[imap:${slug}] Error checking emails:`, err.message);
+        logError(db, slug, err);
     }
 }
 
