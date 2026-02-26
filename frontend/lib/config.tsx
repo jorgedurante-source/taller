@@ -33,7 +33,7 @@ export const ConfigProvider = ({ children }: { children: React.ReactNode }) => {
 
     const fetchConfig = async () => {
         try {
-            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api';
             const res = await axios.get(`${apiBase}/info`);
             setConfig(res.data);
         } catch (err) {
