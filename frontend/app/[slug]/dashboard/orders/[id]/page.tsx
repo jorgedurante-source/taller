@@ -187,8 +187,10 @@ export default function OrderDetailsPage() {
         fetchOrder();
         fetchCatalog();
         fetchInquiries();
-        fetchSuppliers();
-    }, [fetchOrder, fetchInquiries]);
+        if (hasPermission('proveedores')) {
+            fetchSuppliers();
+        }
+    }, [fetchOrder, fetchInquiries, hasPermission]);
 
     const handleStatusUpdate = async () => {
         setUpdating(true);
@@ -771,15 +773,17 @@ export default function OrderDetailsPage() {
                                                         <span className="text-[9px] font-black uppercase tracking-widest text-blue-600">Chat con</span>
                                                         <span className="text-xs font-black text-slate-900 uppercase">{threads[selectedThread].name}</span>
                                                     </div>
-                                                    <button
-                                                        onClick={() => {
-                                                            setReplyingTo({ reply_to: selectedThread });
-                                                            setReplyMessage('');
-                                                        }}
-                                                        className="bg-blue-600 hover:bg-slate-900 text-white px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
-                                                    >
-                                                        Responder
-                                                    </button>
+                                                    {hasPermission('proveedores') && (
+                                                        <button
+                                                            onClick={() => {
+                                                                setReplyingTo({ reply_to: selectedThread });
+                                                                setReplyMessage('');
+                                                            }}
+                                                            className="bg-blue-600 hover:bg-slate-900 text-white px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
+                                                        >
+                                                            Responder
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 <div className="flex-1 overflow-y-auto p-8 space-y-6 max-h-[450px] bg-slate-50/10">
                                                     {threads[selectedThread].messages.slice().reverse().map((msg: any) => (
@@ -873,7 +877,7 @@ export default function OrderDetailsPage() {
                                             )}
                                             {h.status === 'Respuesta Recibida' && h.reply_to && (
                                                 <div className="flex items-center gap-2">
-                                                    {replyingTo?.id !== h.id && (
+                                                    {replyingTo?.id !== h.id && hasPermission('proveedores') && (
                                                         <button
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
@@ -973,7 +977,7 @@ export default function OrderDetailsPage() {
                             </div>
 
                             {/* Shortcut to Suppliers when waiting for parts */}
-                            {order.status === 'Esperando Repuestos' && (
+                            {order.status === 'Esperando Repuestos' && hasPermission('proveedores') && (
                                 <button
                                     onClick={() => {
                                         const vInfo = `${order.year || ''} ${order.brand} ${order.model}`.trim().replace(/\s+/g, '_');
