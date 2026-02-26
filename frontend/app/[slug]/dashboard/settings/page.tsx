@@ -1152,7 +1152,12 @@ export default function SettingsPage() {
                                     <RoleCard
                                         key={role.id}
                                         role={role}
-                                        permissionsList={permissionsList.filter(p => config.enabled_modules?.includes(p))}
+                                        permissionsList={permissionsList.filter(p => {
+                                            const isModuleEnabled = config.enabled_modules?.includes(p);
+                                            const isAdminUser = currentUser?.isSuperuser || (currentUser?.role && (currentUser.role.toLowerCase() === 'admin' || currentUser.role.toLowerCase() === 'administrador'));
+                                            const hasPerm = isAdminUser || (currentUser?.permissions && currentUser.permissions.includes(p));
+                                            return isModuleEnabled && hasPerm;
+                                        })}
                                         onUpdate={handleUpdateRole}
                                         onDelete={handleDeleteRole}
                                     />

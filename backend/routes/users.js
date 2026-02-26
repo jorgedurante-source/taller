@@ -40,10 +40,18 @@ router.post('/', auth, hasPermission('usuarios'), async (req, res) => {
         const normalizedRoleId = role_id === '' ? null : Number(role_id);
         const isAdminUser = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'administrador'));
 
-        // Enforce: Only Admin (or Superuser) can create another Admin
-        const targetRole = req.db.prepare('SELECT name FROM roles WHERE id = ?').get(normalizedRoleId);
+        const targetRole = req.db.prepare('SELECT * FROM roles WHERE id = ?').get(normalizedRoleId);
         if (targetRole && (targetRole.name.toLowerCase() === 'admin' || targetRole.name.toLowerCase() === 'administrador') && !isAdminUser) {
             return res.status(403).json({ message: 'Solo un Administrador puede crear otros usuarios Administradores' });
+        }
+
+        // Check if non-admin is assigning a role with more permissions than they have
+        if (targetRole && !isAdminUser) {
+            const rolePerms = JSON.parse(targetRole.permissions || '[]');
+            const userPerms = req.user.permissions || [];
+            if (!rolePerms.every(p => userPerms.includes(p))) {
+                return res.status(403).json({ message: 'No puedes asignar un rol con más permisos que los tuyos' });
+            }
         }
 
         const userExists = req.db.prepare('SELECT * FROM users WHERE username = ?').get(username);
@@ -82,12 +90,21 @@ router.put('/:id', auth, hasPermission('usuarios'), async (req, res) => {
             return res.status(403).json({ message: 'No se puede editar el usuario administrador principal' });
         }
 
-        const isAdminUser = req.user.isSuperuser || (req.user.role && req.user.role.toLowerCase() === 'admin');
+        const isAdminUser = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'administrador'));
 
         // Enforce: Only Admin can promote someone to Admin or edit an Admin
-        const targetRole = req.db.prepare('SELECT name FROM roles WHERE id = ?').get(role_id || user.role_id);
-        if (targetRole && targetRole.name.toLowerCase() === 'admin' && !isAdminUser) {
+        const targetRole = req.db.prepare('SELECT * FROM roles WHERE id = ?').get(role_id || user.role_id);
+        if (targetRole && (targetRole.name.toLowerCase() === 'admin' || targetRole.name.toLowerCase() === 'administrador') && !isAdminUser) {
             return res.status(403).json({ message: 'Solo un Administrador puede asignar el rol de Administrador' });
+        }
+
+        // Check if non-admin is assigning a role with more permissions than they have
+        if (targetRole && !isAdminUser) {
+            const rolePerms = JSON.parse(targetRole.permissions || '[]');
+            const userPerms = req.user.permissions || [];
+            if (!rolePerms.every(p => userPerms.includes(p))) {
+                return res.status(403).json({ message: 'No puedes asignar un rol con más permisos que los tuyos' });
+            }
         }
 
         const roleName = targetRole ? targetRole.name.toLowerCase() : 'mecánico';
@@ -136,7 +153,7 @@ router.delete('/:id', auth, hasPermission('usuarios'), (req, res) => {
             return res.status(403).json({ message: 'El usuario admin principal no se puede eliminar' });
         }
 
-        const isAdminUser = req.user.isSuperuser || (req.user.role && req.user.role.toLowerCase() === 'admin');
+        const isAdminUser = req.user.isSuperuser || (req.user.role && (req.user.role.toLowerCase() === 'admin' || req.user.role.toLowerCase() === 'administrador'));
         const targetRole = req.db.prepare('SELECT name FROM roles WHERE id = ?').get(user.role_id);
 
         if (targetRole && targetRole.name.toLowerCase() === 'admin' && !isAdminUser) {
