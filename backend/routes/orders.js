@@ -628,7 +628,6 @@ router.post('/send-manual-template', auth, hasPermission('ordenes'), async (req,
 
 // @route   POST api/orders/:id/reply
 router.post('/:id/reply', auth, hasPermission('proveedores'), async (req, res) => {
-    const { orderId } = req.params;
     const { to, message } = req.body;
 
     try {
@@ -668,10 +667,11 @@ router.post('/:id/reply', auth, hasPermission('proveedores'), async (req, res) =
         await sendEmail(req.db, to, subject, fullMessage, []);
 
         // Guardar en el historial
+        const actingUserId = req.user.isSuperuser ? null : req.user.id;
         req.db.prepare(`
             INSERT INTO order_history (order_id, status, notes, user_id, reply_to, is_read)
             VALUES (?, ?, ?, ?, ?, 1)
-        `).run(req.params.id, 'Respuesta Enviada', `Respuesta a ${to}:\n${message}`, req.user.id, to);
+        `).run(req.params.id, 'Respuesta Enviada', `Respuesta a ${to}:\n${message}`, actingUserId, to);
 
         res.json({ message: 'Respuesta enviada correctamente' });
     } catch (err) {
