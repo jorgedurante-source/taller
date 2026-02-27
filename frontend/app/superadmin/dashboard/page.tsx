@@ -97,6 +97,7 @@ export default function SuperAdminDashboard() {
     const [loadingWorkshopAudit, setLoadingWorkshopAudit] = useState(false);
     const [expandedAuditIds, setExpandedAuditIds] = useState<number[]>([]);
     const [systemHealth, setSystemHealth] = useState<any>(null);
+    const [showHealthMonitor, setShowHealthMonitor] = useState(false);
     const [workshopEmailStatus, setWorkshopEmailStatus] = useState<Record<string, any>>({});
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
     const [fileLogs, setFileLogs] = useState<any[]>([]);
@@ -595,6 +596,14 @@ export default function SuperAdminDashboard() {
                         </div>
 
                         <button
+                            onClick={() => setShowHealthMonitor(!showHealthMonitor)}
+                            className={`p-2.5 rounded-xl transition-all group border ${showHealthMonitor ? 'bg-emerald-600 border-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white hover:border-emerald-500/50'}`}
+                            title="Monitoreo de Salud del Sistema"
+                        >
+                            <Activity size={20} className={showHealthMonitor ? 'animate-pulse' : ''} />
+                        </button>
+
+                        <button
                             onClick={() => handleDownloadBackup()}
                             className="bg-slate-800 hover:bg-emerald-600 p-2.5 rounded-xl transition-all group border border-slate-700 hover:border-emerald-500/50"
                             title="Respaldar TODO el Sistema"
@@ -633,102 +642,106 @@ export default function SuperAdminDashboard() {
 
             <main className="max-w-[1600px] mx-auto p-8 pt-10">
                 {/* System Vital Signs */}
-                <div className="flex items-center gap-3 mb-6">
-                    <div className="h-px flex-grow bg-slate-100"></div>
-                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-full border border-slate-100">
-                        <Activity size={14} className="text-emerald-500 animate-pulse" />
-                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Monitoreo de Infraestructura en Tiempo Real</span>
-                    </div>
-                    <div className="h-px flex-grow bg-slate-100"></div>
-                </div>
+                {showHealthMonitor && (
+                    <div className="animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="h-px flex-grow bg-slate-100"></div>
+                            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-full border border-slate-100">
+                                <Activity size={14} className="text-emerald-500 animate-pulse" />
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Monitoreo de Infraestructura en Tiempo Real</span>
+                            </div>
+                            <div className="h-px flex-grow bg-slate-100"></div>
+                        </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
-                        <div className="absolute -right-4 -top-4 text-indigo-50 group-hover:text-indigo-100 transition-colors -rotate-12">
-                            <Cpu size={100} />
-                        </div>
-                        <div className="relative z-10">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Carga del Procesador</p>
-                            <div className="flex items-end gap-2 mb-2">
-                                <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
-                                    {((systemHealth?.system?.cpuLoad?.[0] || 0) * 10).toFixed(1)}%
-                                </h4>
-                                <span className="text-[10px] font-bold text-slate-400 mb-1">/ {systemHealth?.system?.cpus || 0} Cores</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full transition-all duration-1000 ${(systemHealth?.system?.cpuLoad?.[0] || 0) * 10 > 80 ? 'bg-red-500' : 'bg-indigo-600'}`}
-                                    style={{ width: `${Math.min(((systemHealth?.system?.cpuLoad?.[0] || 0) * 10), 100)}%` }}
-                                ></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
-                        <div className="absolute -right-4 -top-4 text-emerald-50 group-hover:text-emerald-100 transition-colors -rotate-12">
-                            <Zap size={100} />
-                        </div>
-                        <div className="relative z-10">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Memoria del Sistema</p>
-                            <div className="flex items-end gap-2 mb-2">
-                                <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
-                                    {(systemHealth?.system?.memory?.used / 1024 / 1024 / 1024 || 0).toFixed(1)} GB
-                                </h4>
-                                <span className="text-[10px] font-bold text-slate-400 mb-1">Uso Actual</span>
-                            </div>
-                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-emerald-500 transition-all duration-1000"
-                                    style={{ width: `${systemHealth?.system?.memory?.percent || 0}%` }}
-                                ></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
-                        <div className="absolute -right-4 -top-4 text-amber-50 group-hover:text-amber-100 transition-colors -rotate-12">
-                            <HardDrive size={100} />
-                        </div>
-                        <div className="relative z-10">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Bases de Datos y Archivos</p>
-                            <div className="flex items-end gap-2 mb-2">
-                                <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
-                                    {(systemHealth?.storage?.total / 1024 / 1024 || 0).toFixed(1)} MB
-                                </h4>
-                                <span className="text-[10px] font-bold text-slate-400 mb-1">Ocupado</span>
-                            </div>
-                            <div className="flex gap-4">
-                                <div className="flex items-center gap-1.5">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
-                                    <span className="text-[9px] font-bold text-slate-500 uppercase">Tenants: {(systemHealth?.storage?.tenants / 1024 / 1024 || 0).toFixed(0)}MB</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+                                <div className="absolute -right-4 -top-4 text-indigo-50 group-hover:text-indigo-100 transition-colors -rotate-12">
+                                    <Cpu size={100} />
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
-                                    <span className="text-[9px] font-bold text-slate-500 uppercase">Backup: {(systemHealth?.storage?.backups / 1024 / 1024 || 0).toFixed(0)}MB</span>
+                                <div className="relative z-10">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Carga del Procesador</p>
+                                    <div className="flex items-end gap-2 mb-2">
+                                        <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                            {((systemHealth?.system?.cpuLoad?.[0] || 0) * 10).toFixed(1)}%
+                                        </h4>
+                                        <span className="text-[10px] font-bold text-slate-400 mb-1">/ {systemHealth?.system?.cpus || 0} Cores</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className={`h-full transition-all duration-1000 ${(systemHealth?.system?.cpuLoad?.[0] || 0) * 10 > 80 ? 'bg-red-500' : 'bg-indigo-600'}`}
+                                            style={{ width: `${Math.min(((systemHealth?.system?.cpuLoad?.[0] || 0) * 10), 100)}%` }}
+                                        ></div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
-                        <div className="absolute -right-4 -top-4 text-sky-50 group-hover:text-sky-100 transition-colors -rotate-12">
-                            <Server size={100} />
-                        </div>
-                        <div className="relative z-10">
-                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Estabilidad del Servidor</p>
-                            <div className="flex items-end gap-2 mb-2">
-                                <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
-                                    {Math.floor((systemHealth?.system?.uptime || 0) / 3600)}h {Math.floor(((systemHealth?.system?.uptime || 0) % 3600) / 60)}m
-                                </h4>
-                                <span className="text-[10px] font-bold text-slate-400 mb-1">Uptime</span>
+                            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+                                <div className="absolute -right-4 -top-4 text-emerald-50 group-hover:text-emerald-100 transition-colors -rotate-12">
+                                    <Zap size={100} />
+                                </div>
+                                <div className="relative z-10">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Memoria del Sistema</p>
+                                    <div className="flex items-end gap-2 mb-2">
+                                        <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                            {(systemHealth?.system?.memory?.used / 1024 / 1024 / 1024 || 0).toFixed(1)} GB
+                                        </h4>
+                                        <span className="text-[10px] font-bold text-slate-400 mb-1">Uso Actual</span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-emerald-500 transition-all duration-1000"
+                                            style={{ width: `${systemHealth?.system?.memory?.percent || 0}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
-                                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Servidor Online</span>
+
+                            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+                                <div className="absolute -right-4 -top-4 text-amber-50 group-hover:text-amber-100 transition-colors -rotate-12">
+                                    <HardDrive size={100} />
+                                </div>
+                                <div className="relative z-10">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Bases de Datos y Archivos</p>
+                                    <div className="flex items-end gap-2 mb-2">
+                                        <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                            {(systemHealth?.storage?.total / 1024 / 1024 || 0).toFixed(1)} MB
+                                        </h4>
+                                        <span className="text-[10px] font-bold text-slate-400 mb-1">Ocupado</span>
+                                    </div>
+                                    <div className="flex gap-4">
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
+                                            <span className="text-[9px] font-bold text-slate-500 uppercase">Tenants: {(systemHealth?.storage?.tenants / 1024 / 1024 || 0).toFixed(0)}MB</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
+                                            <span className="text-[9px] font-bold text-slate-500 uppercase">Backup: {(systemHealth?.storage?.backups / 1024 / 1024 || 0).toFixed(0)}MB</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+                                <div className="absolute -right-4 -top-4 text-sky-50 group-hover:text-sky-100 transition-colors -rotate-12">
+                                    <Server size={100} />
+                                </div>
+                                <div className="relative z-10">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Estabilidad del Servidor</p>
+                                    <div className="flex items-end gap-2 mb-2">
+                                        <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                            {Math.floor((systemHealth?.system?.uptime || 0) / 3600)}h {Math.floor(((systemHealth?.system?.uptime || 0) % 3600) / 60)}m
+                                        </h4>
+                                        <span className="text-[10px] font-bold text-slate-400 mb-1">Uptime</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
+                                        <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Servidor Online</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
+                )}
 
                 {/* Global Stats Overview */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-12">
