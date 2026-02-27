@@ -7,6 +7,7 @@ const fs = require('fs');
 // Auth middlewares
 const { auth, hasPermission } = require('../middleware/auth');
 const bcrypt = require('bcrypt');
+const { logActivity } = require('../lib/auditLogger');
 
 // Multer storage for vehicle photos
 const storage = multer.diskStorage({
@@ -62,6 +63,7 @@ router.post('/', auth, hasPermission('clientes'), (req, res) => {
     try {
         const clientId = transaction({ first_name, last_name, nickname, phone, email, address, notes, vehicle });
         res.json({ id: clientId, first_name, last_name, email });
+        logActivity(req.slug, req.user, 'CREATE_CLIENT', 'client', clientId, { first_name, last_name, email, hasVehicle: !!vehicle }, req);
     } catch (err) {
         if (err.message.includes('plate')) {
             return res.status(400).json({ message: 'La patente ya está registrada' });
@@ -80,6 +82,7 @@ router.put('/:id', auth, hasPermission('clientes'), (req, res) => {
             WHERE id = ?
         `).run(first_name, last_name, nickname, phone, email, address, notes, req.params.id);
         res.json({ message: 'Cliente actualizado' });
+        logActivity(req.slug, req.user, 'UPDATE_CLIENT', 'client', req.params.id, { first_name, last_name, email }, req);
     } catch (err) {
         res.status(500).send('Server error');
     }
@@ -129,14 +132,14 @@ router.post('/:id/vehicles', auth, hasPermission('vehiculos'), (req, res) => {
             req.params.id, plate, brand, model, year, km, JSON.stringify(photos || [])
         );
 
+        res.json({ id: result.lastInsertRowid, plate, brand, model });
+        logActivity(req.slug, req.user, 'ADD_VEHICLE', 'vehicle', result.lastInsertRowid, { plate, brand, model, clientId: req.params.id }, req);
         // Log initial km
         if (km && parseInt(km) > 0) {
             req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)').run(
                 result.lastInsertRowid, parseInt(km), 'Kilometraje inicial al registrar vehículo'
             );
         }
-
-        res.json({ id: result.lastInsertRowid, plate, brand, model });
     } catch (err) {
         if (err.message && err.message.includes('plate')) {
             return res.status(400).json({ message: 'La patente ya está registrada' });
@@ -228,6 +231,7 @@ router.delete('/vehicles/:vid', auth, hasPermission('vehiculos'), (req, res) => 
 
         req.db.prepare('DELETE FROM vehicles WHERE id = ?').run(req.params.vid);
         res.json({ message: 'Vehículo eliminado' });
+        logActivity(req.slug, req.user, 'DELETE_VEHICLE', 'vehicle', req.params.vid, {}, req);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');

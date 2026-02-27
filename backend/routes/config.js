@@ -88,6 +88,8 @@ router.put('/', auth, hasPermission('configuracion'), (req, res) => {
             imap_enabled || 0
         );
         res.json({ message: 'Configuración actualizada correctamente' });
+        const { logActivity } = require('../lib/auditLogger');
+        logActivity(req.slug, req.user, 'UPDATE_CONFIG', 'config', 1, req.body, req);
     } catch (err) {
         console.error('Error updating config:', err);
         res.status(500).json({ message: 'Error al actualizar configuración: ' + err.message });

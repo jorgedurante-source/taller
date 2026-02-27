@@ -32,6 +32,19 @@ db.exec(`
         key TEXT PRIMARY KEY,
         value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS system_audit_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        super_user_id INTEGER,
+        super_user_name TEXT,
+        action TEXT NOT NULL,
+        entity_type TEXT, -- 'workshop', 'settings', etc.
+        entity_id TEXT,
+        details TEXT,
+        ip_address TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (super_user_id) REFERENCES super_users(id) ON DELETE SET NULL
+    );
 `);
 
 // 2. Incremental Migrations

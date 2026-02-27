@@ -38,6 +38,7 @@ import { THEMES, applyTheme, getStoredTheme } from '@/lib/theme';
 import { useSlug } from '@/lib/slug';
 import Link from 'next/link';
 import { useNotification } from '@/lib/notification';
+import { useRouter } from 'next/navigation';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('global');
@@ -49,6 +50,7 @@ export default function SettingsPage() {
     const [copiedPortal, setCopiedPortal] = useState(false);
     const { notify } = useNotification();
     const [isLogoOpen, setIsLogoOpen] = useState(false);
+    const router = useRouter();
 
     // Load stored theme on mount
     React.useEffect(() => {
@@ -400,6 +402,13 @@ export default function SettingsPage() {
                 {hasPermission('usuarios') && <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<UserIcon size={18} />} label="Usuarios" />}
                 {hasPermission('roles') && <TabButton active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} icon={<Shield size={18} />} label="Roles" />}
                 <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')} icon={<Palette size={18} />} label="Apariencia" />
+                <button
+                    onClick={() => router.push(`/${slug}/dashboard/admin/audit`)}
+                    className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                >
+                    <Activity size={18} />
+                    Auditoría
+                </button>
                 {currentUser?.isSuperuser && (
                     <TabButton active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={<Activity size={18} />} label="Logs" />
                 )}

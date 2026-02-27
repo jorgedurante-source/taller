@@ -234,6 +234,19 @@ function initTenantDb(db, slug) {
             user_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            user_name TEXT,
+            action TEXT NOT NULL,
+            entity_type TEXT, -- 'order', 'client', 'user', etc.
+            entity_id TEXT,
+            details TEXT, -- JSON or descriptive text
+            ip_address TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
     `);
 
     // Clean up seeding

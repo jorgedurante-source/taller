@@ -4,6 +4,7 @@ const router = express.Router();
 // Each route reads db from req.db
 function getDb(req) { return req.db; }
 const { auth, isAdmin, hasPermission } = require('../middleware/auth');
+const { logActivity } = require('../lib/auditLogger');
 
 // @route   GET api/roles
 router.get('/', auth, (req, res, next) => {
@@ -52,6 +53,7 @@ router.post('/', auth, hasPermission('roles'), (req, res, next) => {
         JSON.stringify(permissions || [])
     );
     res.json({ id: result.lastInsertRowid, name, permissions });
+    logActivity(req.slug, req.user, 'CREATE_ROLE', 'role', result.lastInsertRowid, { name, permissions }, req);
 });
 
 // @route   PUT api/roles/:id
@@ -81,6 +83,7 @@ router.put('/:id', auth, hasPermission('roles'), (req, res, next) => {
             req.params.id
         );
         res.json({ message: 'Rol actualizado correctamente' });
+        logActivity(req.slug, req.user, 'UPDATE_ROLE', 'role', req.params.id, { name, permissions }, req);
     } catch (err) {
         res.status(500).send('Server error');
     }
@@ -104,6 +107,7 @@ router.delete('/:id', auth, hasPermission('roles'), (req, res, next) => {
 
         req.db.prepare('DELETE FROM roles WHERE id = ?').run(req.params.id);
         res.json({ message: 'Rol eliminado' });
+        logActivity(req.slug, req.user, 'DELETE_ROLE', 'role', req.params.id, { name: role.name }, req);
     } catch (err) {
         res.status(500).send('Server error');
     }

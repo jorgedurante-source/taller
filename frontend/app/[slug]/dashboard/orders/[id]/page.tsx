@@ -426,7 +426,7 @@ export default function OrderDetailsPage() {
         }
     };
 
-    const totalOrder = order.items?.reduce((acc: number, item: any) => acc + (item.labor_price || 0) + (item.parts_price || 0), 0) || 0;
+    const totalOrder = order.items?.reduce((acc: number, item: any) => acc + (item.labor_price || 0) + (item.parts_price || 0) + (item.parts_profit || 0), 0) || 0;
 
     return (
         <div className="space-y-8 pb-20 max-w-7xl mx-auto">

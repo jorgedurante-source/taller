@@ -5,6 +5,7 @@ const bcrypt = require('bcrypt');
 // Each route reads db from req.db
 function getDb(req) { return req.db; }
 const { auth, isAdmin, hasPermission } = require('../middleware/auth');
+const { logActivity } = require('../lib/auditLogger');
 
 // @route   GET api/users
 router.get('/', auth, hasPermission('usuarios'), (req, res) => {
@@ -71,6 +72,7 @@ router.post('/', auth, hasPermission('usuarios'), async (req, res) => {
             username, hashedPassword, first_name || null, last_name || null, normalizedRoleId, legacyRole
         );
         res.json({ id: result.lastInsertRowid, username, role_id: normalizedRoleId });
+        logActivity(req.slug, req.user, 'CREATE_USER', 'user', result.lastInsertRowid, { username, role: legacyRole }, req);
     } catch (err) {
         console.error('Error creating user:', err);
         res.status(500).json({ message: 'Error interno: ' + err.message });
@@ -136,6 +138,11 @@ router.put('/:id', auth, hasPermission('usuarios'), async (req, res) => {
 
         req.db.prepare(query).run(...params);
         res.json({ message: 'Usuario actualizado' });
+        logActivity(req.slug, req.user, 'UPDATE_USER', 'user', req.params.id, { 
+            username: username || user.username,
+            roleChanged: !!role_id,
+            passwordChanged: !!password
+        }, req);
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -162,6 +169,7 @@ router.delete('/:id', auth, hasPermission('usuarios'), (req, res) => {
 
         req.db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
         res.json({ message: 'Usuario eliminado' });
+        logActivity(req.slug, req.user, 'DELETE_USER', 'user', req.params.id, { username: user.username }, req);
     } catch (err) {
         res.status(500).send('Server error');
     }

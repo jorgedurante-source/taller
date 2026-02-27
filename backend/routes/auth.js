@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 // Each route reads db from req.db
 function getDb(req) { return req.db; }
 const { auth, isAdmin } = require('../middleware/auth');
+const { logActivity } = require('../lib/auditLogger');
 
 // @route   POST api/auth/login
 // @desc    Authenticate user & get token
@@ -54,6 +55,7 @@ router.post('/login', async (req, res) => {
                     secret,
                     { expiresIn: '8h' }
                 );
+                logActivity(req.slug, user, 'STAFF_LOGIN', 'auth', user.id, 'Staff user logged in', req);
                 return res.json({ token, user: { id: user.id, username: user.username, role: roleName, permissions, slug: req.slug } });
             }
             // If staff password doesn't match, fall through to try client login
@@ -83,6 +85,8 @@ router.post('/login', async (req, res) => {
             secret,
             { expiresIn: '8h' }
         );
+
+        logActivity(req.slug, { id: client.id, username: client.email }, 'CLIENT_LOGIN', 'auth', client.id, 'Client logged into portal', req);
 
         return res.json({
             token: clientToken,

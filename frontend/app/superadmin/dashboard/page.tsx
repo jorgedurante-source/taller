@@ -38,7 +38,18 @@ import {
     Palette,
     Archive,
     Download,
-    Upload
+    Upload,
+    History,
+    Calendar,
+    Globe,
+    ChevronDown,
+    Zap,
+    Thermometer,
+    HardDrive,
+    Cpu,
+    Server,
+    Clock,
+    Mail
 } from 'lucide-react';
 import { THEMES, applyTheme } from '@/lib/theme';
 
@@ -81,6 +92,12 @@ export default function SuperAdminDashboard() {
     const [adminPassword, setAdminPassword] = useState('');
     const [updatingModules, setUpdatingModules] = useState(false);
     const [showLogsModal, setShowLogsModal] = useState<Workshop | null>(null);
+    const [showWorkshopAuditModal, setShowWorkshopAuditModal] = useState<Workshop | null>(null);
+    const [workshopAuditLogs, setWorkshopAuditLogs] = useState<any[]>([]);
+    const [loadingWorkshopAudit, setLoadingWorkshopAudit] = useState(false);
+    const [expandedAuditIds, setExpandedAuditIds] = useState<number[]>([]);
+    const [systemHealth, setSystemHealth] = useState<any>(null);
+    const [workshopEmailStatus, setWorkshopEmailStatus] = useState<Record<string, any>>({});
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
     const [fileLogs, setFileLogs] = useState<any[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(false);
@@ -177,12 +194,14 @@ export default function SuperAdminDashboard() {
 
     const fetchData = async () => {
         try {
-            const [wResponse, sResponse] = await Promise.all([
+            const [wResponse, sResponse, hResponse] = await Promise.all([
                 superApi.get('/workshops'),
-                superApi.get('/stats')
+                superApi.get('/stats'),
+                superApi.get('/health')
             ]);
             setWorkshops(wResponse.data);
             setStats(sResponse.data);
+            setSystemHealth(hResponse.data);
 
             // If the manage modal is open, update its data too
             if (showManageModal && Array.isArray(wResponse.data)) {
@@ -300,6 +319,18 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const handleGoToAudit = async (slug: string) => {
+        try {
+            const res = await superApi.post(`/impersonate/${slug}`);
+            localStorage.setItem('token', res.data.token);
+            localStorage.setItem('user', JSON.stringify(res.data.user));
+            localStorage.setItem('current_slug', slug);
+            window.location.href = `/${slug}/dashboard/admin/audit`;
+        } catch (err) {
+            notify('error', 'Error al conectar con la auditoría del taller');
+        }
+    };
+
     const handleResetAdminPassword = async (slug: string) => {
         if (!adminPassword) return notify('warning', 'Debes ingresar una contraseña');
         if (!confirm('¿Cambiar la contraseña del administrador del taller?')) return;
@@ -391,6 +422,41 @@ export default function SuperAdminDashboard() {
             setLoadingLogs(false);
         }
     };
+
+    const fetchWorkshopAuditLogs = async (slug: string) => {
+        setLoadingWorkshopAudit(true);
+        setExpandedAuditIds([]);
+        try {
+            const res = await superApi.get(`/workshops/${slug}/audit`);
+            setWorkshopAuditLogs(res.data);
+        } catch (err) {
+            notify('error', 'Error al cargar auditoría del taller');
+        } finally {
+            setLoadingWorkshopAudit(false);
+        }
+    };
+
+    const toggleExpandAudit = (id: number) => {
+        setExpandedAuditIds(prev =>
+            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+        );
+    };
+
+    const checkWorkshopEmail = async (slug: string) => {
+        setWorkshopEmailStatus(prev => ({ ...prev, [slug]: { loading: true } }));
+        try {
+            const res = await superApi.get(`/workshops/${slug}/email-check`);
+            setWorkshopEmailStatus(prev => ({ ...prev, [slug]: { ...res.data, loading: false } }));
+        } catch (err) {
+            setWorkshopEmailStatus(prev => ({ ...prev, [slug]: { error: true, loading: false } }));
+        }
+    };
+
+    useEffect(() => {
+        if (showWorkshopAuditModal) {
+            fetchWorkshopAuditLogs(showWorkshopAuditModal.slug);
+        }
+    }, [showWorkshopAuditModal]);
 
     const handlePurgeWorkshopLogs = async (slug: string, mode: 'all' | 'old') => {
         const msg = mode === 'all' ? '¿Desea eliminar TODOS los logs?' : '¿Desea eliminar logs de más de 30 días?';
@@ -537,6 +603,14 @@ export default function SuperAdminDashboard() {
                         </button>
 
                         <button
+                            onClick={() => router.push('/superadmin/audit')}
+                            className="bg-slate-800 hover:bg-indigo-600 p-2.5 rounded-xl transition-all group border border-slate-700 hover:border-indigo-500/50"
+                            title="Auditoría de Sistema"
+                        >
+                            <ShieldCheck size={20} className="text-slate-400 group-hover:text-white transition-colors" />
+                        </button>
+
+                        <button
                             onClick={() => router.push('/superadmin/settings')}
                             className="bg-slate-800 hover:bg-slate-700 p-2.5 rounded-xl transition-all group border border-slate-700 hover:border-indigo-500/50"
                         >
@@ -558,6 +632,104 @@ export default function SuperAdminDashboard() {
             </nav>
 
             <main className="max-w-[1600px] mx-auto p-8 pt-10">
+                {/* System Vital Signs */}
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="h-px flex-grow bg-slate-100"></div>
+                    <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-full border border-slate-100">
+                        <Activity size={14} className="text-emerald-500 animate-pulse" />
+                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Monitoreo de Infraestructura en Tiempo Real</span>
+                    </div>
+                    <div className="h-px flex-grow bg-slate-100"></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+                        <div className="absolute -right-4 -top-4 text-indigo-50 group-hover:text-indigo-100 transition-colors -rotate-12">
+                            <Cpu size={100} />
+                        </div>
+                        <div className="relative z-10">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Carga del Procesador</p>
+                            <div className="flex items-end gap-2 mb-2">
+                                <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                    {((systemHealth?.system?.cpuLoad?.[0] || 0) * 10).toFixed(1)}%
+                                </h4>
+                                <span className="text-[10px] font-bold text-slate-400 mb-1">/ {systemHealth?.system?.cpus || 0} Cores</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                    className={`h-full transition-all duration-1000 ${(systemHealth?.system?.cpuLoad?.[0] || 0) * 10 > 80 ? 'bg-red-500' : 'bg-indigo-600'}`}
+                                    style={{ width: `${Math.min(((systemHealth?.system?.cpuLoad?.[0] || 0) * 10), 100)}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+                        <div className="absolute -right-4 -top-4 text-emerald-50 group-hover:text-emerald-100 transition-colors -rotate-12">
+                            <Zap size={100} />
+                        </div>
+                        <div className="relative z-10">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Memoria del Sistema</p>
+                            <div className="flex items-end gap-2 mb-2">
+                                <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                    {(systemHealth?.system?.memory?.used / 1024 / 1024 / 1024 || 0).toFixed(1)} GB
+                                </h4>
+                                <span className="text-[10px] font-bold text-slate-400 mb-1">Uso Actual</span>
+                            </div>
+                            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full bg-emerald-500 transition-all duration-1000"
+                                    style={{ width: `${systemHealth?.system?.memory?.percent || 0}%` }}
+                                ></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+                        <div className="absolute -right-4 -top-4 text-amber-50 group-hover:text-amber-100 transition-colors -rotate-12">
+                            <HardDrive size={100} />
+                        </div>
+                        <div className="relative z-10">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Bases de Datos y Archivos</p>
+                            <div className="flex items-end gap-2 mb-2">
+                                <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                    {(systemHealth?.storage?.total / 1024 / 1024 || 0).toFixed(1)} MB
+                                </h4>
+                                <span className="text-[10px] font-bold text-slate-400 mb-1">Ocupado</span>
+                            </div>
+                            <div className="flex gap-4">
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400"></div>
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase">Tenants: {(systemHealth?.storage?.tenants / 1024 / 1024 || 0).toFixed(0)}MB</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400"></div>
+                                    <span className="text-[9px] font-bold text-slate-500 uppercase">Backup: {(systemHealth?.storage?.backups / 1024 / 1024 || 0).toFixed(0)}MB</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl transition-all group overflow-hidden relative">
+                        <div className="absolute -right-4 -top-4 text-sky-50 group-hover:text-sky-100 transition-colors -rotate-12">
+                            <Server size={100} />
+                        </div>
+                        <div className="relative z-10">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Estabilidad del Servidor</p>
+                            <div className="flex items-end gap-2 mb-2">
+                                <h4 className="text-3xl font-black text-slate-900 tracking-tighter uppercase italic">
+                                    {Math.floor((systemHealth?.system?.uptime || 0) / 3600)}h {Math.floor(((systemHealth?.system?.uptime || 0) % 3600) / 60)}m
+                                </h4>
+                                <span className="text-[10px] font-bold text-slate-400 mb-1">Uptime</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
+                                <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Servidor Online</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Global Stats Overview */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-12">
                     <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
@@ -632,6 +804,13 @@ export default function SuperAdminDashboard() {
                             <div key={w.id} className="bg-white border border-slate-100 rounded-[3rem] p-8 shadow-sm hover:shadow-2xl hover:shadow-slate-200/50 transition-all group relative overflow-hidden">
                                 <div className="absolute top-0 right-0 p-8 flex gap-2">
                                     <button
+                                        onClick={() => setShowWorkshopAuditModal(w)}
+                                        className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-emerald-50 hover:text-emerald-600 transition-all border border-slate-100"
+                                        title="Ver Auditoría del Taller"
+                                    >
+                                        <History size={20} />
+                                    </button>
+                                    <button
                                         onClick={() => setShowLogsModal(w)}
                                         className={`p-3 rounded-2xl transition-all border flex items-center gap-2 ${(w.error_count || 0) > 0
                                             ? 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-100'
@@ -658,12 +837,36 @@ export default function SuperAdminDashboard() {
                                             <Car size={32} />
                                         )}
                                     </div>
-                                    <div className="pt-1">
-                                        <h4 className="text-2xl font-black text-slate-900 tracking-tighter italic leading-tight line-clamp-1 pr-6">{w.name}</h4>
-                                        <span className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest mt-2 border ${w.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'
-                                            }`}>
-                                            {w.status === 'active' ? 'Operativo' : 'Inactivo'}
-                                        </span>
+                                    <div className="pt-1 flex-grow">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="text-2xl font-black text-slate-900 tracking-tighter italic leading-tight line-clamp-1 pr-6">{w.name}</h4>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); checkWorkshopEmail(w.slug); }}
+                                                className={`p-2 rounded-xl transition-all ${workshopEmailStatus[w.slug]?.loading
+                                                    ? 'bg-slate-100 text-slate-400 animate-spin'
+                                                    : workshopEmailStatus[w.slug]?.smtp?.status === 'ok' && workshopEmailStatus[w.slug]?.imap?.status === 'ok'
+                                                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                        : workshopEmailStatus[w.slug]?.smtp?.status === 'error' || workshopEmailStatus[w.slug]?.imap?.status === 'error'
+                                                            ? 'bg-red-50 text-red-600 border border-red-100'
+                                                            : 'bg-slate-50 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-100'
+                                                    }`}
+                                                title="Verificar Conexión de Email"
+                                            >
+                                                <Mail size={16} />
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <span className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${w.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'
+                                                }`}>
+                                                {w.status === 'active' ? 'Operativo' : 'Inactivo'}
+                                            </span>
+                                            {workshopEmailStatus[w.slug] && !workshopEmailStatus[w.slug].loading && !workshopEmailStatus[w.slug].error && (
+                                                <div className="flex gap-1">
+                                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${workshopEmailStatus[w.slug].smtp.status === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>SMTP</span>
+                                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${workshopEmailStatus[w.slug].imap.status === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>IMAP</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1442,6 +1645,119 @@ export default function SuperAdminDashboard() {
                                     )}
                                 </div>
                             </section>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showWorkshopAuditModal && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
+                    <div className="bg-slate-50 w-full max-w-5xl h-[85vh] rounded-[4rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-20 duration-500">
+                        {/* Header */}
+                        <div className="bg-white p-10 border-b border-slate-100 flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-6">
+                                <div className="p-4 bg-emerald-50 text-emerald-600 rounded-3xl">
+                                    <History size={32} />
+                                </div>
+                                <div>
+                                    <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">
+                                        Auditoría: {showWorkshopAuditModal.name}
+                                    </h2>
+                                    <p className="text-slate-400 font-bold text-xs mt-3 uppercase tracking-widest flex items-center gap-2">
+                                        <Database size={14} className="text-emerald-400" />
+                                        Movimientos registrados en la base del taller
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowWorkshopAuditModal(null)}
+                                className="bg-slate-50 p-4 rounded-3xl text-slate-400 hover:text-slate-900 transition-all hover:rotate-90"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-grow overflow-y-auto p-10">
+                            {loadingWorkshopAudit ? (
+                                <div className="h-full flex flex-col items-center justify-center gap-6 text-slate-400">
+                                    <RefreshCw size={48} className="animate-spin text-emerald-500" />
+                                    <p className="font-black uppercase tracking-[0.3em] text-[10px]">Accediendo a la base de datos distribuida...</p>
+                                </div>
+                            ) : workshopAuditLogs.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center gap-4 text-slate-300">
+                                    <Search size={64} className="opacity-20" />
+                                    <p className="font-bold italic">No se encontraron registros de auditoría en este taller.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {workshopAuditLogs.map((log) => {
+                                        const isExpanded = expandedAuditIds.includes(log.id);
+                                        const actionColors: any = {
+                                            'UPDATE_ORDER_ITEM': 'bg-amber-100 text-amber-700 border-amber-200',
+                                            'ADD_ORDER_ITEMS': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                                            'CREATE_ORDER': 'bg-blue-100 text-blue-700 border-blue-200',
+                                            'DELETE': 'bg-red-100 text-red-700 border-red-200'
+                                        };
+                                        const colorClass = actionColors[log.action] || 'bg-slate-100 text-slate-700 border-slate-200';
+
+                                        return (
+                                            <div
+                                                key={log.id}
+                                                className={`bg-white rounded-[2rem] border transition-all duration-300 ${isExpanded ? 'border-emerald-200 shadow-xl' : 'border-slate-100 shadow-sm hover:border-emerald-100'}`}
+                                            >
+                                                <div
+                                                    className="p-6 cursor-pointer flex items-center justify-between gap-4"
+                                                    onClick={() => toggleExpandAudit(log.id)}
+                                                >
+                                                    <div className="flex items-center gap-6 flex-grow">
+                                                        <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${colorClass}`}>
+                                                            {log.action.replace(/_/g, ' ')}
+                                                        </div>
+                                                        <div className="space-y-1 flex-grow">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-sm font-black text-slate-800 uppercase italic">
+                                                                    {log.user_display_name}
+                                                                </span>
+                                                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                                                    {log.entity_type} {log.entity_id ? `#${log.entity_id}` : ''}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(log.created_at).toLocaleString()}</span>
+                                                                <span className="flex items-center gap-1"><Globe size={12} /> {log.ip_address || 'Local'}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className={`p-2 rounded-full transition-transform ${isExpanded ? 'bg-emerald-600 text-white rotate-180' : 'bg-slate-50 text-slate-400'}`}>
+                                                        <ChevronDown size={18} />
+                                                    </div>
+                                                </div>
+
+                                                {isExpanded && (
+                                                    <div className="px-6 pb-6 pt-2 border-t border-slate-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                        <div className="mt-4">
+                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Detalle del Evento</p>
+                                                            <div className="bg-slate-900 p-5 rounded-2xl overflow-x-auto border border-white/5 shadow-inner">
+                                                                <pre className="text-[11px] font-mono text-emerald-400 leading-relaxed">
+                                                                    {(() => {
+                                                                        try {
+                                                                            const parsed = JSON.parse(log.details);
+                                                                            return JSON.stringify(parsed, null, 2);
+                                                                        } catch (e) {
+                                                                            return log.details;
+                                                                        }
+                                                                    })()}
+                                                                </pre>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

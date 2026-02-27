@@ -9,7 +9,9 @@ const { createTenant, listTenants, getDb, closeDb, tenantExists, getTenantDir } 
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { LOGS_DIR } = require('../lib/logger');
+const { logSystemActivity, logActivity } = require('../lib/auditLogger');
 
 const BACKUPS_DIR = path.resolve(__dirname, '../backups');
 if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR, { recursive: true });
@@ -59,6 +61,8 @@ router.post('/login', async (req, res) => {
             { expiresIn: '12h' }
         );
 
+        logSystemActivity(user, 'LOGIN', 'auth', user.id, 'Superadmin logged in', req);
+
         res.json({ token, user: { id: user.id, username: user.username, role: 'superusuario' } });
     } catch (err) {
         console.error(err);
@@ -107,6 +111,7 @@ router.post('/workshops', superAuth, (req, res) => {
     if (!slug || !name) return res.status(400).json({ message: 'slug y name son requeridos' });
     try {
         const result = createTenant(slug, name);
+        logSystemActivity(req.superUser, 'CREATE_WORKSHOP', 'workshop', slug, `Created workshop: ${name}`, req);
         res.json(result);
     } catch (err) {
         res.status(400).json({ message: err.message });
@@ -127,6 +132,7 @@ router.patch('/workshops/:slug', superAuth, (req, res) => {
                 slug
             );
         }
+        logSystemActivity(req.superUser, 'UPDATE_WORKSHOP', 'workshop', slug, req.body, req);
         res.json({ message: 'Taller actualizado' });
     } catch (err) {
         res.status(500).send('Server error');
@@ -145,6 +151,7 @@ router.post('/workshops/:slug/seed', superAuth, (req, res) => {
         const db = getDb(slug);
         const { seedWorkshop } = require('../utils/seeder');
         seedWorkshop(db);
+        logSystemActivity(req.superUser, 'SEED_WORKSHOP', 'workshop', slug, 'Inserted test data (development mode)', req);
         res.json({ message: 'Datos de prueba insertados' });
     } catch (err) {
         console.error(err);
@@ -164,6 +171,7 @@ router.post('/workshops/:slug/clear', superAuth, (req, res) => {
         const db = getDb(slug);
         const { clearWorkshop } = require('../utils/seeder');
         clearWorkshop(db);
+        logSystemActivity(req.superUser, 'CLEAR_WORKSHOP', 'workshop', slug, 'Database wiped (development mode)', req);
         res.json({ message: 'Base de datos del taller limpia' });
     } catch (err) {
         console.error(err);
@@ -286,6 +294,27 @@ router.get('/workshops/:slug/logs', superAuth, (req, res) => {
         res.json(logs);
     } catch (err) {
         res.status(500).json({ message: 'Error al obtener logs' });
+    }
+});
+
+// ─── GET /api/super/workshops/:slug/audit ─────────────────────────────────────
+router.get('/workshops/:slug/audit', superAuth, (req, res) => {
+    const { slug } = req.params;
+    try {
+        const db = getDb(slug);
+        const limit = parseInt(req.query.limit) || 100;
+        const offset = parseInt(req.query.offset) || 0;
+        const logs = db.prepare(`
+            SELECT a.*, COALESCE(u.username, a.user_name, 'Sistema') as user_display_name
+            FROM audit_logs a
+            LEFT JOIN users u ON a.user_id = u.id
+            ORDER BY a.created_at DESC
+            LIMIT ? OFFSET ?
+        `).all(limit, offset);
+        res.json(logs);
+    } catch (err) {
+        console.error(`[super:/audit/${slug}] Error:`, err);
+        res.status(500).json({ message: 'Error al obtener auditoría del taller' });
     }
 });
 
@@ -510,6 +539,7 @@ router.post('/workshops/:slug/backups/create', superAuth, (req, res) => {
     if (fs.existsSync(uploadsPath)) archive.directory(uploadsPath, 'uploads');
 
     archive.finalize();
+    logSystemActivity(req.superUser, 'CREATE_MANUAL_BACKUP', 'backup', slug, { filename }, req);
 });
 
 // ─── DELETE /api/super/workshops/:slug/backups/:filename ────────────────────
@@ -523,6 +553,7 @@ router.delete('/workshops/:slug/backups/:filename', superAuth, (req, res) => {
 
     try {
         fs.unlinkSync(filePath);
+        logSystemActivity(req.superUser, 'DELETE_BACKUP', 'backup', slug, { filename }, req);
         res.json({ message: 'Respaldo eliminado correctamente' });
     } catch (err) {
         res.status(500).json({ message: 'Error al eliminar respaldo' });
@@ -731,6 +762,14 @@ router.post('/workshops/:slug/restore', superAuth, upload.single('backup'), asyn
         }
 
         console.log(`[restore] SUCCESS for ${slug}: DB=${dbRestored}, Files=${uploadsCount}`);
+
+        logSystemActivity(req.superUser, 'RESTORE_BACKUP', 'backup', slug, {
+            source: req.file ? 'upload' : req.body.filename,
+            restoreDb,
+            restoreUploads,
+            filesExtracted: uploadsCount
+        }, req);
+
         res.json({
             message: 'Restauración completada con éxito',
             summary: {
@@ -781,6 +820,171 @@ router.get('/system/backup', superAuth, async (req, res) => {
     }
 
     archive.finalize();
+    logSystemActivity(req.superUser, 'CREATE_SYSTEM_BACKUP', 'system', 'all', { filename }, req);
+});
+
+// ─── GET /api/super/audit ───────────────────────────────────────────────────
+router.get('/audit', superAuth, (req, res) => {
+    try {
+        const limit = parseInt(req.query.limit) || 100;
+        const offset = parseInt(req.query.offset) || 0;
+        const logs = superDb.prepare(`
+            SELECT l.*, COALESCE(u.username, l.super_user_name, 'System') as user_name
+            FROM system_audit_logs l
+            LEFT JOIN super_users u ON l.super_user_id = u.id
+            ORDER BY l.created_at DESC
+            LIMIT ? OFFSET ?
+        `).all(limit, offset);
+        res.json(logs);
+    } catch (err) {
+        console.error('[super:/audit] Error fetching system audit logs:', err);
+        res.status(500).json({ message: 'Error interno al obtener logs de auditoría' });
+    }
+});
+
+// ─── Health & Resources ──────────────────────────────────────────────────────
+
+const getDirSize = (dirPath) => {
+    let size = 0;
+    try {
+        const files = fs.readdirSync(dirPath);
+        for (const file of files) {
+            const filePath = path.join(dirPath, file);
+            const stats = fs.statSync(filePath);
+            if (stats.isDirectory()) {
+                size += getDirSize(filePath);
+            } else {
+                size += stats.size;
+            }
+        }
+    } catch (e) { }
+    return size;
+};
+
+router.get('/health', superAuth, (req, res) => {
+    try {
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const usedMem = totalMem - freeMem;
+        const uptime = os.uptime();
+        const cpuLoad = os.loadavg();
+        const cpus = os.cpus().length;
+
+        const processUsage = process.memoryUsage();
+
+        // Database sizes
+        const superDbPath = path.resolve(__dirname, '../super.db');
+        const superDbSize = fs.existsSync(superDbPath) ? fs.statSync(superDbPath).size : 0;
+
+        const tenantsDir = path.resolve(__dirname, '../tenants');
+        const tenantsSize = fs.existsSync(tenantsDir) ? getDirSize(tenantsDir) : 0;
+
+        const backupsDir = path.resolve(__dirname, '../backups');
+        const backupsSize = fs.existsSync(backupsDir) ? getDirSize(backupsDir) : 0;
+
+        res.json({
+            system: {
+                platform: os.platform(),
+                release: os.release(),
+                uptime,
+                cpus,
+                cpuLoad,
+                memory: {
+                    total: totalMem,
+                    free: freeMem,
+                    used: usedMem,
+                    percent: (usedMem / totalMem) * 100
+                }
+            },
+            process: {
+                memory: processUsage.rss,
+                uptime: process.uptime()
+            },
+            storage: {
+                superDb: superDbSize,
+                tenants: tenantsSize,
+                backups: backupsSize,
+                total: superDbSize + tenantsSize + backupsSize
+            }
+        });
+    } catch (err) {
+        console.error('[super:/health] Error:', err);
+        res.status(500).json({ message: 'Error al obtener estado del sistema' });
+    }
+});
+
+// ─── Workshop Email Check ────────────────────────────────────────────────────
+const nodemailer = require('nodemailer');
+const imaps = require('imap-simple');
+
+router.get('/workshops/:slug/email-check', superAuth, async (req, res) => {
+    const { slug } = req.params;
+    try {
+        const db = getDb(slug);
+        const config = db.prepare('SELECT smtp_host, smtp_port, smtp_user, smtp_pass, imap_host, imap_port, imap_user, imap_pass FROM config LIMIT 1').get();
+
+        if (!config || (!config.smtp_host && !config.imap_host)) {
+            return res.json({
+                smtp: { status: 'none', message: 'No configurado' },
+                imap: { status: 'none', message: 'No configurado' }
+            });
+        }
+
+        const results = {
+            smtp: { status: 'pending' },
+            imap: { status: 'pending' }
+        };
+
+        // Test SMTP
+        if (config.smtp_host) {
+            try {
+                const transporter = nodemailer.createTransport({
+                    host: config.smtp_host,
+                    port: config.smtp_port,
+                    secure: config.smtp_port === 465,
+                    auth: {
+                        user: config.smtp_user,
+                        pass: config.smtp_pass
+                    },
+                    connectionTimeout: 5000
+                });
+                await transporter.verify();
+                results.smtp = { status: 'ok', message: 'Conexión exitosa' };
+            } catch (err) {
+                results.smtp = { status: 'error', message: err.message };
+            }
+        } else {
+            results.smtp = { status: 'none', message: 'No configurado' };
+        }
+
+        // Test IMAP
+        if (config.imap_host) {
+            try {
+                const imapConfig = {
+                    imap: {
+                        user: config.imap_user,
+                        password: config.imap_pass,
+                        host: config.imap_host,
+                        port: config.imap_port,
+                        tls: true,
+                        authTimeout: 5000
+                    }
+                };
+                const connection = await imaps.connect(imapConfig);
+                connection.end();
+                results.imap = { status: 'ok', message: 'Conexión exitosa' };
+            } catch (err) {
+                results.imap = { status: 'error', message: err.message };
+            }
+        } else {
+            results.imap = { status: 'none', message: 'No configurado' };
+        }
+
+        res.json(results);
+    } catch (err) {
+        console.error(`[super:/email-check/${slug}] Error:`, err);
+        res.status(500).json({ message: 'Error al verificar conexión de email' });
+    }
 });
 
 module.exports = router;

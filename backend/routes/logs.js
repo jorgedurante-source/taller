@@ -23,6 +23,25 @@ router.get('/', auth, isAdmin, (req, res, next) => {
     }
 });
 
+// @route   GET api/:slug/logs/audit
+// @desc    Get audit logs from DB
+router.get('/audit', auth, isAdmin, (req, res, next) => {
+    try {
+        const limit = parseInt(req.query.limit) || 100;
+        const offset = parseInt(req.query.offset) || 0;
+        const logs = req.db.prepare(`
+            SELECT a.*, COALESCE(u.username, a.user_name, 'Sistema') as user_name
+            FROM audit_logs a
+            LEFT JOIN users u ON a.user_id = u.id
+            ORDER BY a.created_at DESC
+            LIMIT ? OFFSET ?
+        `).all(limit, offset);
+        res.json(logs);
+    } catch (err) {
+        next(err);
+    }
+});
+
 // @route   GET api/:slug/logs/file
 // @desc    Get fallback error logs from file
 router.get('/file', auth, isAdmin, (req, res, next) => {

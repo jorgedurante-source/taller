@@ -8,6 +8,7 @@ function getDb(req) { return req.db; }
 const { auth, hasPermission } = require('../middleware/auth');
 const { sendEmail } = require('../lib/mailer');
 const { generateOrderPDF } = require('../lib/pdfGenerator');
+const { logActivity } = require('../lib/auditLogger');
 
 // Multer setup for photos - using tenant-specific persistent storage
 const { getTenantDir } = require('../tenantManager');
@@ -56,14 +57,18 @@ router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
 
         if (data.items && data.items.length > 0) {
             data.items.forEach(item => {
-                const subtotal = (parseFloat(item.labor_price) || 0) + (parseFloat(item.parts_price) || 0);
+                const labor = parseFloat(item.labor_price) || 0;
+                const parts = parseFloat(item.parts_price) || 0;
+                const profit = parseFloat(item.parts_profit) || 0;
+                const subtotal = labor + parts + profit;
+
                 insertItem.run(
                     orderId,
                     item.service_id || null,
                     item.description,
-                    item.labor_price || 0,
-                    item.parts_price || 0,
-                    item.parts_profit || 0,
+                    labor,
+                    parts,
+                    profit,
                     subtotal
                 );
             });
@@ -132,6 +137,7 @@ router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
         }
 
         res.json({ id: orderId, message: 'Order created successfully' });
+        logActivity(req.slug, req.user, 'CREATE_ORDER', 'order', orderId, { description, client_id, vehicle_id }, req);
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error creating order' });
@@ -220,9 +226,9 @@ router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
                 const includeParts = config.income_include_parts ?? 1;
                 const partsPercentage = (config.parts_profit_percentage ?? 100) / 100.0;
                 const totalRow = req.db.prepare(`
-                    SELECT SUM(labor_price + (CASE WHEN ? = 1 THEN parts_price * ? ELSE 0 END)) as total
+                    SELECT SUM(labor_price + (CASE WHEN ? = 1 THEN (parts_price + parts_profit) ELSE 0 END)) as total
                     FROM order_items WHERE order_id = ?
-                `).get(includeParts, partsPercentage, req.params.id);
+                `).get(includeParts, req.params.id);
                 const orderTotal = totalRow?.total || 0;
                 req.db.prepare("UPDATE orders SET payment_status = 'cobrado', payment_amount = ? WHERE id = ?")
                     .run(orderTotal, req.params.id);
@@ -297,6 +303,11 @@ router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
         }
 
         res.json({ message: 'Status updated and notification triggered' });
+        logActivity(req.slug, req.user, 'UPDATE_ORDER_STATUS', 'order', req.params.id, {
+            oldStatus: currentOrder.status,
+            newStatus: status,
+            autoPaid: (status === 'Entregado' && (!currentOrder.payment_status || currentOrder.payment_status === 'sin_cobrar'))
+        }, req);
     } catch (err) {
         console.error('Error updating order status:', err);
         res.status(500).json({ message: 'Error interno: ' + err.message });
@@ -318,6 +329,7 @@ router.put('/:id/payment', auth, hasPermission('ordenes'), (req, res) => {
             .run(req.params.id, `Cobro: ${payment_status}`, `Monto cobrado: $${payment_amount || 0}`, actingUserId);
 
         res.json({ message: 'Cobro actualizado' });
+        logActivity(req.slug, req.user, 'UPDATE_PAYMENT', 'order', req.params.id, { payment_status, payment_amount }, req);
     } catch (err) {
         console.error('Error updating payment:', err);
         res.status(500).json({ message: 'Error interno: ' + err.message });
@@ -398,6 +410,7 @@ router.post('/:id/budget', auth, hasPermission('ordenes'), (req, res) => {
     })();
 
     res.json({ id: result.lastInsertRowid, total });
+    logActivity(req.slug, req.user, 'CREATE_BUDGET', 'order', req.params.id, { total, tax, subtotal }, req);
 });
 
 router.use('/photos', express.static('uploads'));
@@ -407,26 +420,32 @@ router.post('/:id/items', auth, hasPermission('ordenes'), (req, res) => {
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
-        data.forEach(item => {
-            const subtotal = (parseFloat(item.labor_price) || 0) + (parseFloat(item.parts_price) || 0);
+        const itemsToInsert = Array.isArray(data) ? data : (data.items || []);
+        itemsToInsert.forEach(item => {
+            const labor = parseFloat(item.labor_price) || 0;
+            const parts = parseFloat(item.parts_price) || 0;
+            const profit = parseFloat(item.parts_profit) || 0;
+            const subtotal = labor + parts + profit;
+
             insertItem.run(
                 req.params.id,
                 item.service_id || null,
                 item.description,
-                item.labor_price || 0,
-                item.parts_price || 0,
-                item.parts_profit || 0,
+                labor,
+                parts,
+                profit,
                 subtotal
             );
         });
     });
 
     try {
-        transaction(items);
+        transaction(req.body);
         const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('UPDATE orders SET modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             .run(actingUserId, req.params.id);
         res.json({ message: 'Items agregados correctamente' });
+        logActivity(req.slug, req.user, 'ADD_ORDER_ITEMS', 'order', req.params.id, { itemsCount: (req.body.items || req.body).length }, req);
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error agregando items' });
@@ -436,7 +455,11 @@ router.post('/:id/items', auth, hasPermission('ordenes'), (req, res) => {
 // @route   PUT api/orders/items/:itemId
 router.put('/items/:itemId', auth, hasPermission('ordenes'), (req, res) => {
     const { description, labor_price, parts_price, parts_profit } = req.body;
-    const subtotal = (parseFloat(labor_price) || 0) + (parseFloat(parts_price) || 0);
+    const labor = parseFloat(labor_price) || 0;
+    const parts = parseFloat(parts_price) || 0;
+    const profit = parseFloat(parts_profit) || 0;
+    const subtotal = labor + parts + profit;
+
     try {
         const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
         if (!item) return res.status(404).json({ message: 'Item no encontrado' });
@@ -445,11 +468,20 @@ router.put('/items/:itemId', auth, hasPermission('ordenes'), (req, res) => {
             UPDATE order_items 
             SET description = ?, labor_price = ?, parts_price = ?, parts_profit = ?, subtotal = ? 
             WHERE id = ?
-        `).run(description, labor_price, parts_price, parts_profit || 0, subtotal, req.params.itemId);
+        `).run(description, labor, parts, profit, subtotal, req.params.itemId);
 
         const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('UPDATE orders SET modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             .run(actingUserId, item.order_id);
+
+        logActivity(req.slug, req.user, 'UPDATE_ORDER_ITEM', 'order', item.order_id, {
+            itemId: req.params.itemId,
+            description,
+            labor_price: labor,
+            parts_price: parts,
+            parts_profit: profit,
+            total_item: subtotal
+        }, req);
 
         res.json({ message: 'Item actualizado' });
     } catch (err) {

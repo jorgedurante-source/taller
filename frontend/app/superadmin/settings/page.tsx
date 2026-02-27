@@ -213,49 +213,6 @@ export default function SuperAdminSettings() {
                         </div>
                     </div>
 
-                    {/* Theme Customization */}
-                    <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all">
-                        <div className="flex items-center gap-4 mb-8">
-                            <div className="p-4 bg-indigo-50 text-indigo-600 rounded-[1.5rem]">
-                                <Palette size={28} />
-                            </div>
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Estilo del Panel</h2>
-                                <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">SuperAdmin Interface Theme</p>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {THEMES.map((theme) => (
-                                <div
-                                    key={theme.id}
-                                    onClick={() => setSettings({ ...settings, superadmin_theme: theme.id })}
-                                    className={`relative p-6 rounded-[2rem] border-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98] ${settings.superadmin_theme === theme.id
-                                        ? 'border-indigo-600 bg-indigo-50/30'
-                                        : 'border-slate-100 bg-slate-50/30 hover:border-slate-200'
-                                        }`}
-                                >
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <span className="text-2xl">{theme.emoji}</span>
-                                        <div>
-                                            <h4 className="font-black text-slate-900 uppercase italic tracking-tighter text-sm leading-none">{theme.name}</h4>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{theme.description}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-1.5 h-6">
-                                        <div className="flex-1 rounded-full border border-slate-200" style={{ backgroundColor: theme.preview.bg }}></div>
-                                        <div className="flex-1 rounded-full border border-slate-200" style={{ backgroundColor: theme.preview.accent }}></div>
-                                        <div className="flex-1 rounded-full border border-slate-200" style={{ backgroundColor: theme.preview.sidebar }}></div>
-                                    </div>
-                                    {settings.superadmin_theme === theme.id && (
-                                        <div className="absolute top-4 right-4 text-indigo-600">
-                                            <CheckCircle2 size={20} />
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
 
                     {/* Automated Backups Section */}
                     <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all">
