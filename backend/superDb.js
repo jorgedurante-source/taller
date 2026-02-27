@@ -45,6 +45,15 @@ db.exec(`
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (super_user_id) REFERENCES super_users(id) ON DELETE SET NULL
     );
+
+    CREATE TABLE IF NOT EXISTS announcements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        type TEXT DEFAULT 'info', -- 'info', 'warning', 'success', 'error'
+        is_active INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 `);
 
 // 2. Incremental Migrations

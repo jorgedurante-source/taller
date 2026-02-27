@@ -11,6 +11,7 @@ interface Config {
     superadmin_theme?: string;
     system_announcement?: string;
     workshops: Array<{ slug: string, name: string, logo_path?: string }>;
+    announcements?: Array<{ id: number, title: string, content: string, type: string }>;
 }
 
 interface ConfigContextType {

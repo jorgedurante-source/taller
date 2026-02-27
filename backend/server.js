@@ -59,9 +59,13 @@ app.get('/api/info', (req, res) => {
         // Also list of active workshops (slug + name only) for public selector if needed
         const workshops = superDb.prepare("SELECT slug, name, logo_path FROM workshops WHERE status = 'active'").all();
 
+        // Get active global announcements
+        const announcements = superDb.prepare("SELECT * FROM announcements WHERE is_active = 1 ORDER BY created_at DESC").all();
+
         res.json({
             ...config,
-            workshops
+            workshops,
+            announcements
         });
     } catch (err) {
         res.status(500).json({ message: 'Error fetching system info' });

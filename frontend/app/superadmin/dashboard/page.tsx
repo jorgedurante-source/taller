@@ -50,7 +50,12 @@ import {
     Server,
     Clock,
     Mail,
-    Wand2
+    Wand2,
+    Bell,
+    Megaphone,
+    AlertTriangle,
+    Info,
+    CalendarCheck
 } from 'lucide-react';
 import { THEMES, applyTheme } from '@/lib/theme';
 
@@ -101,6 +106,10 @@ export default function SuperAdminDashboard() {
     const [showHealthMonitor, setShowHealthMonitor] = useState(false);
     const [workshopEmailStatus, setWorkshopEmailStatus] = useState<Record<string, any>>({});
     const [runningMigration, setRunningMigration] = useState(false);
+    const [anomalies, setAnomalies] = useState<any[]>([]);
+    const [announcements, setAnnouncements] = useState<any[]>([]);
+    const [showAnnouncementsModal, setShowAnnouncementsModal] = useState(false);
+    const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', type: 'info' });
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
     const [fileLogs, setFileLogs] = useState<any[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(false);
@@ -197,14 +206,18 @@ export default function SuperAdminDashboard() {
 
     const fetchData = async () => {
         try {
-            const [wResponse, sResponse, hResponse] = await Promise.all([
+            const [wResponse, sResponse, hResponse, aResponse, annResponse] = await Promise.all([
                 superApi.get('/workshops'),
                 superApi.get('/stats'),
-                superApi.get('/health')
+                superApi.get('/health'),
+                superApi.get('/anomalies'),
+                superApi.get('/announcements')
             ]);
             setWorkshops(wResponse.data);
             setStats(sResponse.data);
             setSystemHealth(hResponse.data);
+            setAnomalies(aResponse.data);
+            setAnnouncements(annResponse.data);
 
             // If the manage modal is open, update its data too
             if (showManageModal && Array.isArray(wResponse.data)) {
@@ -526,6 +539,38 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const handleCreateAnnouncement = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            await superApi.post('/announcements', newAnnouncement);
+            setNewAnnouncement({ title: '', content: '', type: 'info' });
+            fetchData();
+            notify('success', 'Anuncio publicado correctamente');
+        } catch (err) {
+            notify('error', 'Error al publicar anuncio');
+        }
+    };
+
+    const handleToggleAnnouncement = async (id: number) => {
+        try {
+            await superApi.put(`/announcements/${id}/toggle`);
+            fetchData();
+        } catch (err) {
+            notify('error', 'Error al modificar anuncio');
+        }
+    };
+
+    const handleDeleteAnnouncement = async (id: number) => {
+        if (!confirm('¿Eliminar este anuncio permanentemente?')) return;
+        try {
+            await superApi.delete(`/announcements/${id}`);
+            fetchData();
+            notify('success', 'Anuncio eliminado');
+        } catch (err) {
+            notify('error', 'Error al eliminar anuncio');
+        }
+    };
+
     const handleMigrateAll = async () => {
         if (!confirm('¿Desea propagar cambios de estructura a TODOS los talleres? Esta operación inicializará todas las bases de datos con las últimas migraciones.')) return;
         setRunningMigration(true);
@@ -613,6 +658,19 @@ export default function SuperAdminDashboard() {
                                 </>
                             )}
                         </div>
+
+                        <button
+                            onClick={() => setShowAnnouncementsModal(true)}
+                            className="bg-slate-800 hover:bg-rose-600 p-2.5 rounded-xl transition-all group border border-slate-700 hover:border-rose-500/50 relative"
+                            title="Gestionar Anuncios Globales"
+                        >
+                            <Bell size={20} className="text-slate-400 group-hover:text-white transition-colors" />
+                            {announcements.filter(a => a.is_active).length > 0 && (
+                                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white text-[10px] font-black flex items-center justify-center rounded-full animate-bounce">
+                                    {announcements.filter(a => a.is_active).length}
+                                </span>
+                            )}
+                        </button>
 
                         <button
                             onClick={() => setShowHealthMonitor(!showHealthMonitor)}
@@ -767,6 +825,35 @@ export default function SuperAdminDashboard() {
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Anomalies & Critical Alerts */}
+                {anomalies.length > 0 && (
+                    <div className="mb-12 animate-in fade-in slide-in-from-left-4 duration-500">
+                        <div className="flex items-center gap-3 mb-4">
+                            <AlertTriangle size={18} className="text-rose-500" />
+                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest italic">Alertas de Seguridad y Salud</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {anomalies.map((a, idx) => (
+                                <div key={idx} className="bg-rose-50 border border-rose-100 p-4 rounded-3xl flex items-start gap-4 hover:shadow-lg hover:shadow-rose-500/10 transition-all cursor-default">
+                                    <div className={`p-2 rounded-xl ${a.severity === 'warning' ? 'bg-amber-500 text-white' : 'bg-rose-500 text-white'}`}>
+                                        {a.type === 'inactivity' ? <Clock size={16} /> : a.type === 'storage' ? <HardDrive size={16} /> : <AlertCircle size={16} />}
+                                    </div>
+                                    <div className="flex-grow">
+                                        <div className="flex justify-between items-start">
+                                            <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-tight">{a.name}</h4>
+                                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">/{a.slug}</span>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-slate-600 mt-1 uppercase tracking-widest">{a.message}</p>
+                                        {a.last_seen && (
+                                            <p className="text-[9px] text-slate-400 mt-2 font-black italic">Visto por última vez: {new Date(a.last_seen).toLocaleDateString()}</p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 )}
@@ -1799,6 +1886,124 @@ export default function SuperAdminDashboard() {
                                     })}
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Global Announcements Modal */}
+            {showAnnouncementsModal && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-end p-6 bg-slate-950/40 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="w-full max-w-xl h-full bg-white rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-500">
+                        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-rose-600 text-white">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md">
+                                    <Megaphone size={24} />
+                                </div>
+                                <div>
+                                    <h2 className="text-2xl font-black uppercase tracking-tighter italic">Central de Comunicaciones</h2>
+                                    <p className="text-[10px] font-black text-rose-100 uppercase tracking-widest mt-1">Anuncios en Tiempo Real</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowAnnouncementsModal(false)}
+                                className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"
+                            >
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="flex-grow overflow-y-auto p-8 space-y-8">
+                            {/* Create New Announcement */}
+                            <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 italic flex items-center gap-2">
+                                    <PlusCircle size={16} className="text-rose-600" />
+                                    Nuevo Anuncio Global
+                                </h3>
+                                <form onSubmit={handleCreateAnnouncement} className="space-y-4">
+                                    <input
+                                        type="text"
+                                        value={newAnnouncement.title}
+                                        onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                                        placeholder="Título del anuncio..."
+                                        className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-sm uppercase tracking-tight focus:border-rose-500 outline-none transition-all"
+                                        required
+                                    />
+                                    <textarea
+                                        value={newAnnouncement.content}
+                                        onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
+                                        placeholder="Contenido del mensaje..."
+                                        className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-xs focus:border-rose-500 outline-none transition-all min-h-[100px]"
+                                        required
+                                    />
+                                    <div className="flex gap-2">
+                                        {['info', 'warning', 'success', 'error'].map(t => (
+                                            <button
+                                                key={t}
+                                                type="button"
+                                                onClick={() => setNewAnnouncement({ ...newAnnouncement, type: t })}
+                                                className={`flex-grow p-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${newAnnouncement.type === t
+                                                    ? 'bg-slate-900 text-white border-slate-900'
+                                                    : 'bg-white text-slate-500 border-slate-100 hover:border-slate-300'
+                                                    }`}
+                                            >
+                                                {t}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        className="w-full bg-rose-600 hover:bg-rose-700 text-white p-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-rose-500/20"
+                                    >
+                                        Publicar en toda la Red
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* Existing Announcements */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 italic">Historial de Anuncios</h3>
+                                {announcements.length === 0 ? (
+                                    <div className="text-center p-12 bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-200">
+                                        <Info size={32} className="mx-auto text-slate-300 mb-2" />
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay anuncios registrados</p>
+                                    </div>
+                                ) : (
+                                    announcements.map((a: any) => (
+                                        <div key={a.id} className={`p-5 rounded-[2rem] border transition-all ${a.is_active ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-transparent grayscale opacity-60'}`}>
+                                            <div className="flex justify-between items-start gap-4">
+                                                <div className="flex-grow">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className={`w-2 h-2 rounded-full ${a.type === 'error' ? 'bg-rose-500' :
+                                                            a.type === 'warning' ? 'bg-amber-500' :
+                                                                a.type === 'success' ? 'bg-emerald-500' : 'bg-indigo-500'
+                                                            }`}></span>
+                                                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">{a.title}</h4>
+                                                    </div>
+                                                    <p className="text-[10px] font-bold text-slate-600 line-clamp-2">{a.content}</p>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase mt-2 tracking-widest">{new Date(a.created_at).toLocaleString()}</p>
+                                                </div>
+                                                <div className="flex flex-col gap-2">
+                                                    <button
+                                                        onClick={() => handleToggleAnnouncement(a.id)}
+                                                        className={`p-2 rounded-xl transition-all ${a.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}
+                                                        title={a.is_active ? "Desactivar" : "Activar"}
+                                                    >
+                                                        {a.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteAnnouncement(a.id)}
+                                                        className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all"
+                                                        title="Eliminar"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>

@@ -17,7 +17,11 @@ import {
     Bell,
     Settings,
     Clock,
-    MessageSquare
+    MessageSquare,
+    Megaphone,
+    AlertTriangle,
+    Info,
+    CheckCircle
 } from 'lucide-react';
 import {
     BarChart,
@@ -33,10 +37,12 @@ import {
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
+import { useConfig } from '@/lib/config';
 
 export default function DashboardPage() {
     const { user, hasPermission } = useAuth();
     const { slug } = useSlug();
+    const { config } = useConfig();
     const router = useRouter();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -126,6 +132,36 @@ export default function DashboardPage() {
                     </Link>
                 </div>
             </header>
+
+            {/* Global Announcements from Superadmin */}
+            {config.announcements && config.announcements.length > 0 && (
+                <div className="space-y-4 animate-in slide-in-from-top-4 duration-500">
+                    {config.announcements.map((ann) => (
+                        <div
+                            key={ann.id}
+                            className={`p-6 rounded-[2.5rem] border flex items-center gap-6 shadow-sm transition-all hover:shadow-md ${ann.type === 'error' ? 'bg-rose-50 border-rose-100 text-rose-900' :
+                                ann.type === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-900' :
+                                    ann.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-900' :
+                                        'bg-blue-50 border-blue-100 text-blue-900'
+                                }`}
+                        >
+                            <div className={`p-4 rounded-3xl ${ann.type === 'error' ? 'bg-rose-600 text-white' :
+                                ann.type === 'warning' ? 'bg-amber-600 text-white' :
+                                    ann.type === 'success' ? 'bg-emerald-600 text-white' :
+                                        'bg-blue-600 text-white'
+                                }`}>
+                                {ann.type === 'error' ? <AlertTriangle size={24} /> :
+                                    ann.type === 'warning' ? <Megaphone size={24} /> :
+                                        ann.type === 'success' ? <CheckCircle size={24} /> : <Info size={24} />}
+                            </div>
+                            <div className="flex-grow">
+                                <h4 className="font-black uppercase tracking-tighter text-lg leading-none mb-1 italic">{ann.title}</h4>
+                                <p className="text-sm font-bold opacity-80">{ann.content}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
 
             {/* Main Stats Grid */}
             <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${hasPermission('turnos') ? 'xl:grid-cols-5' : ''} gap-6`}>

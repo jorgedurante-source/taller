@@ -874,6 +874,130 @@ router.post('/workshops/migrate', superAuth, async (req, res) => {
     }
 });
 
+// ─── Anomalies & Alerts ──────────────────────────────────────────────────────
+router.get('/anomalies', superAuth, (req, res) => {
+    try {
+        const workshops = listTenants();
+        const anomalies = [];
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        for (const w of workshops) {
+            try {
+                const db = getDb(w.slug);
+
+                // 1. Check Inactivity (Last order or audit log)
+                const lastOrder = db.prepare('SELECT created_at FROM orders ORDER BY created_at DESC LIMIT 1').get();
+                const lastAudit = db.prepare('SELECT created_at FROM audit_logs ORDER BY created_at DESC LIMIT 1').get();
+
+                const lastActivity = [
+                    lastOrder ? new Date(lastOrder.created_at) : new Date(0),
+                    lastAudit ? new Date(lastAudit.created_at) : new Date(0)
+                ].sort((a, b) => b - a)[0];
+
+                if (lastActivity < thirtyDaysAgo) {
+                    anomalies.push({
+                        slug: w.slug,
+                        name: w.name,
+                        type: 'inactivity',
+                        severity: 'warning',
+                        message: 'Sin actividad en más de 30 días',
+                        last_seen: lastActivity.toISOString()
+                    });
+                }
+
+                // 2. Check Storage (Individual Tenant)
+                const dbPath = path.resolve(__dirname, `../tenants/${w.slug}/taller.db`);
+                if (fs.existsSync(dbPath)) {
+                    const size = fs.statSync(dbPath).size;
+                    const sizeMB = size / 1024 / 1024;
+                    if (sizeMB > 50) { // Alert if > 50MB
+                        anomalies.push({
+                            slug: w.slug,
+                            name: w.name,
+                            type: 'storage',
+                            severity: 'info',
+                            message: `Base de datos grande (${sizeMB.toFixed(1)} MB)`
+                        });
+                    }
+                }
+
+                // 3. Check Email Config
+                const emailConfig = db.prepare('SELECT smtp_host, imap_host FROM config LIMIT 1').get();
+                if (!emailConfig || (!emailConfig.smtp_host && !emailConfig.imap_host)) {
+                    anomalies.push({
+                        slug: w.slug,
+                        name: w.name,
+                        type: 'config',
+                        severity: 'info',
+                        message: 'Email no configurado'
+                    });
+                }
+
+            } catch (err) {
+                console.error(`[super:anomalies] Error scanning ${w.slug}:`, err);
+            }
+        }
+
+        res.json(anomalies);
+    } catch (err) {
+        console.error('[super:/anomalies] Error:', err);
+        res.status(500).json({ message: 'Error al escanear anomalías' });
+    }
+});
+
+// ─── Global Announcements ───────────────────────────────────────────────────
+router.get('/announcements', superAuth, (req, res) => {
+    try {
+        const list = superDb.prepare('SELECT * FROM announcements ORDER BY created_at DESC').all();
+        res.json(list);
+    } catch (err) {
+        res.status(500).json({ message: 'Error al obtener anuncios' });
+    }
+});
+
+router.post('/announcements', superAuth, (req, res) => {
+    const { title, content, type } = req.body;
+    try {
+        const info = superDb.prepare(`
+            INSERT INTO announcements (title, content, type)
+            VALUES (?, ?, ?)
+        `).run(title, content, type || 'info');
+
+        logSystemActivity(req.superUser, 'CREATE_ANNOUNCEMENT', 'announcement', info.lastInsertRowid, `Created: ${title}`, req);
+        res.json({ id: info.lastInsertRowid });
+    } catch (err) {
+        res.status(500).json({ message: 'Error al crear anuncio' });
+    }
+});
+
+router.put('/announcements/:id/toggle', superAuth, (req, res) => {
+    const { id } = req.params;
+    try {
+        const item = superDb.prepare('SELECT is_active FROM announcements WHERE id = ?').get(id);
+        if (!item) return res.status(404).json({ message: 'No encontrado' });
+
+        const newValue = item.is_active ? 0 : 1;
+        superDb.prepare('UPDATE announcements SET is_active = ? WHERE id = ?').run(newValue, id);
+
+        logSystemActivity(req.superUser, 'TOGGLE_ANNOUNCEMENT', 'announcement', id, `New status: ${newValue}`, req);
+        res.json({ success: true, is_active: newValue });
+    } catch (err) {
+        res.status(500).json({ message: 'Error al modificar anuncio' });
+    }
+});
+
+router.delete('/announcements/:id', superAuth, (req, res) => {
+    const { id } = req.params;
+    try {
+        superDb.prepare('DELETE FROM announcements WHERE id = ?').run(id);
+        logSystemActivity(req.superUser, 'DELETE_ANNOUNCEMENT', 'announcement', id, 'Deleted announcement', req);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ message: 'Error al eliminar anuncio' });
+    }
+});
+
 // ─── Health & Resources ──────────────────────────────────────────────────────
 
 const getDirSize = (dirPath) => {
