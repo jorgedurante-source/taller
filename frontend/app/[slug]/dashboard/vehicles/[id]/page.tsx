@@ -31,7 +31,7 @@ export default function VehicleDetailsPage() {
     const { notify } = useNotification();
     const { hasPermission } = useAuth();
 
-    if (!hasPermission('vehiculos')) {
+    if (!hasPermission('vehicles')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
                 <Car size={48} className="mb-4 opacity-20" />

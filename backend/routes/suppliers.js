@@ -3,10 +3,11 @@ const router = express.Router();
 const { auth, hasPermission } = require('../middleware/auth');
 const { sendEmail } = require('../lib/mailer');
 const path = require('path');
+const { processTemplate } = require('../lib/templateProcessor');
 
 // @route   GET api/:slug/suppliers
 // @desc    Get all suppliers
-router.get('/', auth, hasPermission('proveedores'), (req, res) => {
+router.get('/', auth, hasPermission('suppliers'), (req, res) => {
     try {
         const suppliers = req.db.prepare('SELECT * FROM suppliers ORDER BY name ASC').all();
         res.json(suppliers);
@@ -18,7 +19,7 @@ router.get('/', auth, hasPermission('proveedores'), (req, res) => {
 
 // @route   POST api/:slug/suppliers
 // @desc    Create a supplier
-router.post('/', auth, hasPermission('proveedores'), (req, res) => {
+router.post('/', auth, hasPermission('suppliers'), (req, res) => {
     const { name, email, phone, notes } = req.body;
     try {
         const result = req.db.prepare(
@@ -37,7 +38,7 @@ router.post('/', auth, hasPermission('proveedores'), (req, res) => {
 
 // @route   PUT api/:slug/suppliers/:id
 // @desc    Update a supplier
-router.put('/:id', auth, hasPermission('proveedores'), (req, res) => {
+router.put('/:id', auth, hasPermission('suppliers'), (req, res) => {
     const { name, email, phone, notes } = req.body;
     try {
         req.db.prepare(
@@ -53,7 +54,7 @@ router.put('/:id', auth, hasPermission('proveedores'), (req, res) => {
 
 // @route   DELETE api/:slug/suppliers/:id
 // @desc    Delete a supplier
-router.delete('/:id', auth, hasPermission('proveedores'), (req, res) => {
+router.delete('/:id', auth, hasPermission('suppliers'), (req, res) => {
     try {
         req.db.prepare('DELETE FROM suppliers WHERE id = ?').run(req.params.id);
         res.json({ message: 'Proveedor eliminado' });
@@ -65,7 +66,7 @@ router.delete('/:id', auth, hasPermission('proveedores'), (req, res) => {
 
 // @route   POST api/:slug/suppliers/inquiry
 // @desc    Send part inquiry to multiple suppliers
-router.post('/inquiry', auth, hasPermission('proveedores'), async (req, res) => {
+router.post('/inquiry', auth, hasPermission('suppliers'), async (req, res) => {
     const { supplierIds, partDescription, vehicleInfo, orderId } = req.body;
 
     try {
@@ -83,7 +84,7 @@ router.post('/inquiry', auth, hasPermission('proveedores'), async (req, res) => 
         const userName = `${user.first_name || user.username || 'Taller'} ${user.last_name || ''}`.trim();
 
         // Buscar plantilla para consulta a proveedor
-        const template = req.db.prepare('SELECT * FROM templates WHERE trigger_status = ?').get('proveedores_consulta');
+        const template = req.db.prepare('SELECT * FROM templates WHERE trigger_status = ?').get('supplier_inquiry');
 
         // Guardar registro de la consulta
         const supplierNames = suppliers.map(s => s.name);
@@ -109,13 +110,7 @@ router.post('/inquiry', auth, hasPermission('proveedores'), async (req, res) => 
                         'orden_id': orderId || '---'
                     };
 
-                    messageBody = template.content;
-                    Object.keys(replacements).forEach(key => {
-                        const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
-                        messageBody = messageBody.replace(regex, replacements[key]);
-                    });
-
-                    messageBody = messageBody.replace(/\n/g, '<br/>');
+                    messageBody = processTemplate(template.content, replacements).replace(/\n/g, '<br/>');
                 } else {
                     messageBody = `
                         <h3>Consulta de Presupuesto de Repuesto</h3>
@@ -151,8 +146,8 @@ router.post('/inquiry', auth, hasPermission('proveedores'), async (req, res) => 
 // @route   GET api/:slug/suppliers/inquiries/order/:orderId
 // @desc    Get all inquiries for a specific order
 router.get('/inquiries/order/:orderId', auth, (req, res) => {
-    // Permisos: Solo si tiene 'proveedores' o al menos 'ordenes' para ver el historial
-    if (!req.user.permissions.includes('proveedores') && !req.user.permissions.includes('ordenes')) {
+    // Permisos: Solo si tiene 'suppliers' o al menos 'orders' para ver el historial
+    if (!req.user.permissions.includes('suppliers') && !req.user.permissions.includes('orders')) {
         return res.status(403).json({ message: 'No tienes permiso' });
     }
     try {

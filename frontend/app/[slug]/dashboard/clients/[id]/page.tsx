@@ -34,7 +34,7 @@ export default function ClientDetailsPage() {
     const { notify } = useNotification();
     const { hasPermission } = useAuth();
 
-    if (!hasPermission('clientes')) {
+    if (!hasPermission('clients')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
                 <User size={48} className="mb-4 opacity-20" />

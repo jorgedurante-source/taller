@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState } from 'react';
 import { useConfig } from '@/lib/config';
+import { useTranslation } from '@/lib/i18n';
 
 const Footer = () => {
     const [year, setYear] = useState<number | null>(null);
     const { config } = useConfig();
+    const { t } = useTranslation();
 
     useEffect(() => {
         setYear(new Date().getFullYear());
@@ -27,7 +29,7 @@ const Footer = () => {
                 </div>
                 <div className="flex flex-col items-center gap-1 text-sm text-slate-500">
                     <p className="font-medium italic text-slate-400">Powered by SurForge</p>
-                    <p>© {year || '...'} {config.product_name}. Todos los derechos reservados.</p>
+                    <p>© {year || '...'} {config.product_name}. {t('rights_reserved')}</p>
                 </div>
             </div>
         </footer>

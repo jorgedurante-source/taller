@@ -55,9 +55,11 @@ function initTenantDb(db, slug) {
             password TEXT NOT NULL,
             first_name TEXT,
             last_name TEXT,
+            language TEXT DEFAULT 'es',
             role_id INTEGER,
             client_id INTEGER,
             role TEXT,
+            last_activity DATETIME,
             FOREIGN KEY (role_id) REFERENCES roles(id),
             FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
         );
@@ -89,7 +91,8 @@ function initTenantDb(db, slug) {
             reminder_enabled INTEGER DEFAULT 1,
             reminder_time TEXT DEFAULT '09:00',
             messages_enabled INTEGER DEFAULT 1,
-            enabled_modules TEXT DEFAULT '["clientes", "vehiculos", "ordenes", "ingresos", "configuracion", "dashboard", "recordatorios", "turnos"]'
+            client_portal_language TEXT DEFAULT 'es',
+            enabled_modules TEXT DEFAULT '["clients", "vehicles", "orders", "income", "settings", "dashboard", "reminders", "appointments"]'
         );
 
         CREATE TABLE IF NOT EXISTS clients (
@@ -115,7 +118,7 @@ function initTenantDb(db, slug) {
             km INTEGER,
             image_path TEXT,
             photos TEXT,
-            status TEXT CHECK(status IN ('Activo', 'Inactivo')) DEFAULT 'Activo',
+            status TEXT CHECK(status IN ('active', 'inactive')) DEFAULT 'active',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
         );
@@ -132,8 +135,8 @@ function initTenantDb(db, slug) {
             client_id INTEGER NOT NULL,
             vehicle_id INTEGER NOT NULL,
             description TEXT,
-            status TEXT DEFAULT 'Pendiente',
-            payment_status TEXT DEFAULT 'sin_cobrar',
+            status TEXT DEFAULT 'pending',
+            payment_status TEXT DEFAULT 'unpaid',
             payment_amount REAL DEFAULT 0,
             photos TEXT,
             share_token TEXT,
@@ -142,6 +145,7 @@ function initTenantDb(db, slug) {
             reminder_days INTEGER,
             reminder_status TEXT DEFAULT 'pending',
             reminder_sent_at DATETIME,
+            appointment_date DATETIME,
             created_by_id INTEGER,
             modified_by_id INTEGER,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -180,7 +184,9 @@ function initTenantDb(db, slug) {
             name TEXT UNIQUE NOT NULL,
             content TEXT NOT NULL,
             trigger_status TEXT,
-            include_pdf INTEGER DEFAULT 0
+            include_pdf INTEGER DEFAULT 0,
+            send_whatsapp INTEGER DEFAULT 0,
+            send_email INTEGER DEFAULT 1
         );
 
         CREATE TABLE IF NOT EXISTS order_history (
@@ -217,7 +223,7 @@ function initTenantDb(db, slug) {
         CREATE TABLE IF NOT EXISTS part_inquiries (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             order_id INTEGER,
-            supplier_ids TEXT NOT NULL, -- JSON array of supplier names or IDs
+            supplier_ids TEXT NOT NULL,
             part_description TEXT NOT NULL,
             vehicle_info TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -226,7 +232,7 @@ function initTenantDb(db, slug) {
 
         CREATE TABLE IF NOT EXISTS system_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            level TEXT DEFAULT 'info', -- 'info', 'warn', 'error'
+            level TEXT DEFAULT 'info',
             message TEXT NOT NULL,
             stack_trace TEXT,
             path TEXT,
@@ -240,349 +246,99 @@ function initTenantDb(db, slug) {
             user_id INTEGER,
             user_name TEXT,
             action TEXT NOT NULL,
-            entity_type TEXT, -- 'order', 'client', 'user', etc.
+            entity_type TEXT,
             entity_id TEXT,
-            details TEXT, -- JSON or descriptive text
+            details TEXT,
             ip_address TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         );
     `);
 
-    // Clean up seeding
-    const adminRole = db.prepare("SELECT permissions FROM roles WHERE name = 'Admin'").get();
-    if (adminRole) {
-        let perms = JSON.parse(adminRole.permissions || '[]');
-        let modified = false;
-        if (!perms.includes('recordatorios')) { perms.push('recordatorios'); modified = true; }
-        if (!perms.includes('turnos')) { perms.push('turnos'); modified = true; }
-
-        if (modified) {
-            db.prepare("UPDATE roles SET permissions = ? WHERE name = 'Admin'").run(JSON.stringify(perms));
-        }
-    } else {
-        db.prepare("INSERT INTO roles (name, permissions) VALUES ('Admin', ?)").run(
-            JSON.stringify(['dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos', 'proveedores'])
-        );
-    }
-
-    const mecanicoRole = db.prepare("SELECT permissions FROM roles WHERE name = 'Mecánico'").get();
-    if (mecanicoRole) {
-        let perms = JSON.parse(mecanicoRole.permissions || '[]');
-        let modified = false;
-        if (!perms.includes('recordatorios')) { perms.push('recordatorios'); modified = true; }
-        if (!perms.includes('turnos')) { perms.push('turnos'); modified = true; }
-
-        if (modified) {
-            db.prepare("UPDATE roles SET permissions = ? WHERE name = 'Mecánico'").run(JSON.stringify(perms));
-        }
-    } else {
-        db.prepare("INSERT INTO roles (name, permissions) VALUES ('Mecánico', ?)").run(
-            JSON.stringify(['dashboard', 'clientes', 'vehiculos', 'ordenes', 'recordatorios', 'turnos'])
-        );
-    }
-
-    // --- DATA MIGRATION: Normalize enabled_modules and role permissions to Spanish ---
-    try {
-        const config = db.prepare('SELECT id, enabled_modules FROM config LIMIT 1').get();
-        if (config && config.enabled_modules) {
-            let modules = JSON.parse(config.enabled_modules || '[]');
-            let migrated = false;
-            const mapping = {
-                'inventory': ['clientes', 'vehiculos'],
-                'appointments': ['turnos'],
-                'income': ['ingresos'],
-                'reports': ['recordatorios'],
-                'settings': ['configuracion', 'usuarios', 'roles'],
-                'clients': ['clientes'],
-                'vehicles': ['vehiculos'],
-                'orders': ['ordenes'],
-                'reminders': ['recordatorios'],
-                'suppliers': ['proveedores']
-            };
-
-            // Add 'dashboard' if missing
-            if (!modules.includes('dashboard')) {
-                modules.push('dashboard');
-                migrated = true;
-            }
-
-            let newModules = [];
-            modules.forEach(m => {
-                if (mapping[m]) {
-                    newModules.push(...mapping[m]);
-                    migrated = true;
-                } else if (!newModules.includes(m)) {
-                    newModules.push(m);
-                }
-            });
-
-            // Extra check: if 'configuracion' is enabled, ensure 'usuarios' and 'roles' are too
-            if (newModules.includes('configuracion')) {
-                if (!newModules.includes('usuarios')) { newModules.push('usuarios'); migrated = true; }
-                if (!newModules.includes('roles')) { newModules.push('roles'); migrated = true; }
-            }
-
-            if (migrated) {
-                // Deduplicate
-                const finalModules = Array.from(new Set(newModules));
-                db.prepare('UPDATE config SET enabled_modules = ? WHERE id = ?').run(JSON.stringify(finalModules), config.id);
-                console.log(`[tenant:${slug}] Migrated enabled_modules to Spanish`);
-            }
-        }
-    } catch (e) {
-        console.error(`[tenant:${slug}] Error migrating enabled_modules:`, e.message);
-    }
-
-    try {
-        const roles = db.prepare('SELECT id, permissions FROM roles').all();
-        const permMapping = {
-            'inventory': ['clientes', 'vehiculos'],
-            'appointments': ['turnos'],
-            'income': ['ingresos'],
-            'reports': ['recordatorios'],
-            'settings': ['configuracion', 'usuarios', 'roles'],
-            'manage_users': ['usuarios'],
-            'manage_roles': ['roles'],
-            'clients': ['clientes'],
-            'vehicles': ['vehiculos'],
-            'orders': ['ordenes'],
-            'reminders': ['recordatorios'],
-            'suppliers': ['proveedores']
-        };
-
-        roles.forEach(role => {
-            let perms = JSON.parse(role.permissions || '[]');
-            let migrated = false;
-            let newPerms = [];
-
-            perms.forEach(p => {
-                if (permMapping[p]) {
-                    newPerms.push(...permMapping[p]);
-                    migrated = true;
-                } else {
-                    newPerms.push(p);
-                }
-            });
-
-            if (migrated) {
-                const finalPerms = Array.from(new Set(newPerms));
-                db.prepare('UPDATE roles SET permissions = ? WHERE id = ?').run(JSON.stringify(finalPerms), role.id);
-                console.log(`[tenant:${slug}] Migrated role '${role.id}' permissions to Spanish`);
-            }
-        });
-    } catch (e) {
-        console.error(`[tenant:${slug}] Error migrating role permissions:`, e.message);
-    }
-
-    const adminRoleId = db.prepare("SELECT id FROM roles WHERE name = 'Admin'").get()?.id;
-    const admin = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
-    if (!admin && adminRoleId) {
-        const hashed = bcrypt.hashSync('admin123', 10);
-        db.prepare("INSERT INTO users (username, password, role_id, role) VALUES (?, ?, ?, 'administrador')").run('admin', hashed, adminRoleId);
-        console.log(`[${slug}] Seeded admin user: admin / admin123`);
-    }
-
-    // Incremental Migrations
+    // Incremental Migrations Helper
     const addColumn = (table, column, type) => {
         try {
             db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
             console.log(`[tenant:${slug}] Migration: Added ${column} to ${table}`);
-        } catch (e) {
-            // Ignore if column exists
-        }
+        } catch (e) { }
     };
+
+    // Ensure columns exist (for manual migrations on existing dbs)
+    addColumn('users', 'language', "TEXT DEFAULT 'es'");
+    addColumn('users', 'last_activity', "DATETIME");
+    addColumn('config', 'enabled_modules', "TEXT");
     addColumn('config', 'theme_id', "TEXT DEFAULT 'default'");
-    addColumn('vehicles', 'image_path', "TEXT");
-    addColumn('orders', 'created_by_id', "INTEGER");
-    addColumn('orders', 'modified_by_id', "INTEGER");
-    addColumn('orders', 'reminder_at', "DATETIME");
-    addColumn('orders', 'delivered_at', "DATETIME");
-    addColumn('orders', 'reminder_days', "INTEGER");
-    addColumn('orders', 'reminder_status', "TEXT DEFAULT 'pending'");
-    addColumn('orders', 'reminder_sent_at', "DATETIME");
-    addColumn('orders', 'share_token', "TEXT");
+    addColumn('config', 'client_portal_language', "TEXT DEFAULT 'es'");
     addColumn('orders', 'appointment_date', "DATETIME");
-    addColumn('order_history', 'user_id', "INTEGER");
-    addColumn('templates', 'send_whatsapp', "INTEGER DEFAULT 0");
-    addColumn('templates', 'send_email', "INTEGER DEFAULT 1");
-    addColumn('config', 'reminder_enabled', "INTEGER DEFAULT 1");
-    addColumn('config', 'reminder_time', "TEXT DEFAULT '09:00'");
-    addColumn('config', 'mail_provider', "TEXT DEFAULT 'smtp'");
-    addColumn('config', 'resend_api_key', "TEXT");
-    addColumn('config', 'messages_enabled', "INTEGER DEFAULT 1");
-    addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
-    addColumn('users', 'first_name', "TEXT");
-    addColumn('users', 'last_name', "TEXT");
-    addColumn('config', 'imap_host', "TEXT");
-    addColumn('config', 'imap_port', "INTEGER");
-    addColumn('config', 'imap_user', "TEXT");
-    addColumn('config', 'imap_pass', "TEXT");
-    addColumn('config', 'imap_enabled', "INTEGER DEFAULT 0");
-    addColumn('order_history', 'reply_to', "TEXT");
-    addColumn('order_history', 'is_read', "INTEGER DEFAULT 0");
+    addColumn('orders', 'payment_status', "TEXT DEFAULT 'unpaid'");
+    addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
 
-    // Self-reparative migration for parts_profit on existing items
-    try {
-        const configMigration = db.prepare('SELECT parts_profit_percentage FROM config LIMIT 1').get();
-        if (configMigration && configMigration.parts_profit_percentage > 0) {
-            const countToUpdate = db.prepare('SELECT COUNT(*) as count FROM order_items WHERE (parts_profit = 0 OR parts_profit IS NULL) AND parts_price > 0').get().count;
-            if (countToUpdate > 0) {
-                db.prepare(`
-                    UPDATE order_items 
-                    SET parts_profit = ROUND(parts_price * (? / 100.0))
-                    WHERE (parts_profit = 0 OR parts_profit IS NULL) AND parts_price > 0
-                `).run(configMigration.parts_profit_percentage);
-                console.log(`[tenant:${slug}] Migration: Populated parts_profit for ${countToUpdate} items`);
-            }
+    // Roles Seeding
+    const roles = [
+        { name: 'Admin', permissions: ['dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'users', 'roles', 'reminders', 'appointments', 'suppliers'] },
+        { name: 'Technician', permissions: ['dashboard', 'clients', 'vehicles', 'orders', 'reminders', 'appointments'] }
+    ];
+
+    roles.forEach(r => {
+        const exists = db.prepare("SELECT id FROM roles WHERE name = ?").get(r.name);
+        if (!exists) {
+            db.prepare("INSERT INTO roles (name, permissions) VALUES (?, ?)").run(r.name, JSON.stringify(r.permissions));
+        } else {
+            // Update permissions to English keys
+            db.prepare("UPDATE roles SET permissions = ? WHERE name = ?").run(JSON.stringify(r.permissions), r.name);
         }
-    } catch (e) {
-        console.error(`[tenant:${slug}] Error in parts_profit migration:`, e.message);
-    }
+    });
 
+    // Config Seeding
     const configCount = db.prepare('SELECT COUNT(*) as count FROM config').get().count;
     if (configCount === 0) {
         db.prepare(`
-            INSERT INTO config(workshop_name, footer_text, address, phone, email, whatsapp, business_hours)
-            VALUES(?, 'Powered by SurForge', '-', '-', '-', '-', ?)
-        `).run(slug, JSON.stringify({ mon_fri: '09:00 - 18:00', sat: '09:00 - 13:00', sun: 'Cerrado' }));
+            INSERT INTO config(workshop_name, footer_text, address, phone, email, whatsapp, business_hours, enabled_modules)
+            VALUES(?, 'Powered by SurForge', '-', '-', '-', '-', ?, ?)
+        `).run(slug, JSON.stringify({ mon_fri: '09:00 - 18:00', sat: '09:00 - 13:00', sun: 'Closed' }),
+            JSON.stringify(['clients', 'vehicles', 'orders', 'income', 'settings', 'dashboard', 'reminders', 'appointments']));
     }
+
+    // Default Templates (English Identifiers)
+    const templateIds = [
+        { name: 'vehicle_reception', trigger: 'pending', desc: 'Recepción de Vehículo' },
+        { name: 'budget_review', trigger: 'quoted', desc: 'Presupuesto para Revisión' },
+        { name: 'work_in_progress', trigger: 'approved', desc: 'Trabajo en Marcha' },
+        { name: 'vehicle_ready', trigger: 'ready', desc: 'Vehículo Listo' },
+        { name: 'delivery_thanks', trigger: 'delivered', desc: 'Agradecimiento y Entrega' },
+        { name: 'follow_up', trigger: 'reminder', desc: 'Seguimiento Preventivo' },
+        { name: 'document_send', trigger: null, desc: 'Envío de Documento' },
+        { name: 'appointment_assigned', trigger: 'appointment', desc: 'Turno Asignado' }
+    ];
 
     const templateCount = db.prepare('SELECT COUNT(*) as count FROM templates').get().count;
     if (templateCount === 0) {
-        const defaultTemplates = [
-            {
-                name: 'Recepción de Vehículo',
-                content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Podés seguir el progreso en tiempo real aquí: [link]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id].\n\nSaludos,\n[usuario]',
-                trigger_status: 'Pendiente',
-                include_pdf: 0,
-                send_email: 1,
-                send_whatsapp: 0
-            },
-            {
-                name: 'Presupuesto para Revisión',
-                content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes. Avisanos si estás de acuerdo para comenzar con el trabajo.\n\nSaludos,\n[usuario]',
-                trigger_status: 'Presupuestado',
-                include_pdf: 1,
-                send_email: 1,
-                send_whatsapp: 0
-            },
-            {
-                name: 'Trabajo en Marcha',
-                content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [items]. Te avisamos en cuanto esté finalizado.\n\nSaludos,\n[usuario]',
-                trigger_status: 'Aprobado',
-                include_pdf: 0,
-                send_email: 1,
-                send_whatsapp: 0
-            },
-            {
-                name: 'Vehículo Listo',
-                content: '¡Buenas noticias [apodo]! Tu [vehiculo] ya está listo para ser retirado. Podés pasar por [taller] en nuestros horarios de atención. ¡Te esperamos!\n\nSaludos,\n[usuario]',
-                trigger_status: 'Listo para entrega',
-                include_pdf: 0,
-                send_email: 1,
-                send_whatsapp: 0
-            },
-            {
-                name: 'Agradecimiento y Entrega',
-                content: 'Muchas gracias [apodo] por confiar en [taller]. Acabamos de registrar la entrega de tu [vehiculo] con [km] km. Esperamos que disfrutes del andar y cualquier duda estamos a tu disposición.\n\nSaludos,\n[usuario]',
-                trigger_status: 'Entregado',
-                include_pdf: 1,
-                send_email: 1,
-                send_whatsapp: 0
-            },
-            {
-                name: 'Seguimiento Preventivo',
-                content: 'Hola [apodo], hace unos meses realizamos el servicio de [items] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva y asegurar que todo siga funcionando perfecto. ¡Te esperamos!\n\nSaludos,\n[usuario]',
-                trigger_status: 'Recordatorio',
-                include_pdf: 0,
-                send_email: 1,
-                send_whatsapp: 0
-            },
-            {
-                name: 'Envío de Documento',
-                content: 'Hola [apodo], te enviamos adjunto el documento solicitado relacionado con tu [vehiculo] desde [taller]. Quedamos a tu disposición por cualquier consulta.\n\nSaludos,\n[usuario]',
-                trigger_status: null,
-                include_pdf: 1,
-                send_email: 1,
-                send_whatsapp: 0
-            },
-            {
-                name: 'Turno Asignado',
-                content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\nSaludos,\n[usuario]',
-                trigger_status: 'Turno asignado',
-                include_pdf: 0,
-                send_email: 1,
-                send_whatsapp: 0
-            }
-        ];
-
-        const insertStmt = db.prepare(`
-            INSERT INTO templates (name, content, trigger_status, include_pdf, send_email, send_whatsapp) 
-            VALUES (?, ?, ?, ?, ?, ?)
-        `);
-
-        for (const t of defaultTemplates) {
-            insertStmt.run(t.name, t.content, t.trigger_status, t.include_pdf, t.send_email, t.send_whatsapp);
-        }
+        const insertTpl = db.prepare("INSERT INTO templates (name, content, trigger_status, include_pdf) VALUES (?, ?, ?, ?)");
+        insertTpl.run('vehicle_reception', 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Podés seguir el progreso aquí: [link]. Orden: #[orden_id].', 'pending', 0);
+        insertTpl.run('budget_review', 'Hola [apodo], el presupuesto para tu [vehiculo] ya está disponible. Podés verlo adjunto o en el portal.', 'quoted', 1);
+        insertTpl.run('vehicle_ready', '¡Buenas noticias [apodo]! Tu [vehiculo] ya está listo para retirar.', 'ready', 0);
+        insertTpl.run('delivery_thanks', 'Gracias por confiar en [taller]. Registramos la entrega de tu [vehiculo] con [km] km.', 'delivered', 1);
+        insertTpl.run('appointment_assigned', 'Hola [apodo], tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha].', 'appointment', 0);
     }
 
-    // Migration to auto-append 'Saludos, [usuario]' to templates that lack any [usuario] token
-    try {
-        db.prepare(`
-            UPDATE templates 
-            SET content = content || char(10) || char(10) || 'Saludos,' || char(10) || '[usuario]'
-            WHERE content NOT LIKE '%[usuario]%' AND content NOT LIKE '%[usuario_nombre]%'
-        `).run();
-    } catch (e) {
-        console.error(`[tenant:${slug}] Error migrating templates with [usuario] token:`, e.message);
-    }
-
-    // Migration to add 'Turno Asignado' using correct trigger_status
-    try {
-        const turnoTemplateNew = db.prepare("SELECT COUNT(*) as count FROM templates WHERE trigger_status = 'Turno asignado'").get().count;
-        if (turnoTemplateNew === 0) {
-            db.prepare("DELETE FROM templates WHERE name = 'Turno Asignado' AND trigger_status = 'En proceso'").run();
-            db.prepare(`
-                INSERT INTO templates (name, content, trigger_status, include_pdf, send_email, send_whatsapp) 
-                VALUES (?, ?, ?, 0, 1, 0)
-            `).run(
-                'Turno Asignado',
-                'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\nSaludos,\n[usuario]',
-                'Turno asignado'
-            );
-        }
-    } catch (e) {
-        console.error(`[tenant:${slug}] Error adding Turno Asignado template:`, e.message);
-    }
-
-    // Migration to wipe CHECK constraints cleanly (SQLite 3 magic bypass)
-    try {
-        const tableSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='orders'").get()?.sql || '';
-        if (tableSql.includes("CHECK(status IN")) {
-            const fixedSql = tableSql.replace(/CHECK\s*\(\s*status\s*IN\s*\([^)]+\)\s*\)/ig, "");
-            db.prepare("PRAGMA writable_schema = 1").run();
-            db.prepare("UPDATE sqlite_master SET sql = ? WHERE type='table' AND name='orders'").run(fixedSql);
-            db.prepare("PRAGMA writable_schema = 0").run();
-        }
-    } catch (e) {
-        console.error(`[tenant:${slug}] Migration to remove CHECK status failed`, e);
+    // Seed Admin User
+    const adminRoleId = db.prepare("SELECT id FROM roles WHERE name = 'Admin'").get()?.id;
+    const adminExists = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
+    if (!adminExists && adminRoleId) {
+        const hashed = bcrypt.hashSync('admin123', 10);
+        db.prepare("INSERT INTO users (username, password, role_id, role) VALUES (?, ?, ?, 'admin')").run('admin', hashed, adminRoleId);
     }
 }
 
 /**
  * Returns a cached DB instance for the given slug.
- * Creates the tenant directory and DB if it doesn't exist.
  */
 function getDb(slug) {
     if (!slug) throw new Error('Tenant slug is required');
-
     if (dbCache[slug] && !dbCache[slug].closed) return dbCache[slug];
 
     const tenantDir = getTenantDir(slug);
     const dbPath = getTenantDbPath(slug);
-
-    // Refreshing db connections after migrate
 
     if (!fs.existsSync(tenantDir)) {
         const uploads = getTenantUploads(slug);

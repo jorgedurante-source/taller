@@ -8,7 +8,9 @@ interface User {
     username: string;
     role: string;
     permissions: string[];
+    language?: 'en' | 'es';
     isSuperuser?: boolean;
+    superId?: number;
 }
 
 interface AuthContextType {
@@ -49,11 +51,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const login = (token: string, user: User) => {
         localStorage.setItem('token', token);
         localStorage.setItem('user', JSON.stringify(user));
+        if (user.language) {
+            localStorage.setItem('language', user.language);
+        }
         setUser(user);
 
         const slug = localStorage.getItem('current_slug') || 'demo';
 
-        if (user.isSuperuser || user.role === 'superusuario' || user.role === 'superuser') {
+        if (user.isSuperuser || user.role === 'superusuario' || user.role === 'superuser' || user.role === 'superadmin') {
             router.push('/superadmin/dashboard');
         } else {
             router.push(`/${slug}/dashboard`);
@@ -87,6 +92,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const hasPermission = (permission: string) => {
         if (!user) return false;
+        // Superuser always has access to audit logs
+        if (user.isSuperuser && permission === 'audit') return true;
+
+        // If superuser is impersonating, permissions array contains enabled modules
+        if (user.isSuperuser && user.permissions && user.permissions.length > 0) {
+            return user.permissions.includes(permission);
+        }
         if (user.isSuperuser) return true;
         return Array.isArray(user.permissions) && user.permissions.includes(permission);
     };

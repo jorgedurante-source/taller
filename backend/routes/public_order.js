@@ -15,7 +15,8 @@ router.get('/:token', (req, res) => {
                    (SELECT phone FROM config LIMIT 1) as workshop_phone,
                    (SELECT address FROM config LIMIT 1) as workshop_address,
                    (SELECT logo_path FROM config LIMIT 1) as logo_path,
-                   (SELECT enabled_modules FROM config LIMIT 1) as enabled_modules
+                   (SELECT enabled_modules FROM config LIMIT 1) as enabled_modules,
+                   (SELECT client_portal_language FROM config LIMIT 1) as client_portal_language
             FROM orders o
             LEFT JOIN vehicles v ON o.vehicle_id = v.id
             WHERE o.share_token = ?
@@ -32,7 +33,7 @@ router.get('/:token', (req, res) => {
         const history = req.db.prepare(`
             SELECT status, notes, created_at 
             FROM order_history 
-            WHERE order_id = ? AND status NOT IN ('Respuesta Recibida', 'Respuesta Enviada')
+            WHERE order_id = ? AND status NOT IN ('response_received', 'response_sent')
             ORDER BY created_at DESC
         `).all(order.id);
 

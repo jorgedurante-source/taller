@@ -43,20 +43,21 @@ router.post('/login', async (req, res) => {
                     permissions = permissions.filter(p => req.enabledModules.includes(p));
                 }
 
-                let roleName = user.role_name || user.role || 'empleado';
-                // Normalización de roles legacy
-                if (roleName === 'admin') roleName = 'administrador';
-                if (roleName === 'mechanic') roleName = 'mecanico';
-                if (roleName === 'staff') roleName = 'empleado';
+                let roleName = user.role_name || user.role || 'technician';
+                // Role normalization (English)
+                if (roleName === 'administrador' || roleName === 'Admin') roleName = 'admin';
+                if (roleName === 'mecanico' || roleName === 'Mecánico' || roleName === 'technician' || roleName === 'Technician') roleName = 'technician';
+                if (roleName === 'empleado' || roleName === 'staff' || roleName === 'Staff') roleName = 'staff';
 
                 const secret = req.tenantSecret || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
                 const token = jwt.sign(
-                    { id: user.id, username: user.username, role: roleName, permissions, slug: req.slug },
+                    { id: user.id, username: user.username, role: roleName, permissions, slug: req.slug, language: user.language || 'es' },
                     secret,
                     { expiresIn: '8h' }
                 );
+                req.db.prepare('UPDATE users SET last_activity = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
                 logActivity(req.slug, user, 'STAFF_LOGIN', 'auth', user.id, 'Staff user logged in', req);
-                return res.json({ token, user: { id: user.id, username: user.username, role: roleName, permissions, slug: req.slug } });
+                return res.json({ token, user: { id: user.id, username: user.username, role: roleName, permissions, slug: req.slug, language: user.language || 'es' } });
             }
             // If staff password doesn't match, fall through to try client login
             // if the username looks like an email
@@ -81,7 +82,7 @@ router.post('/login', async (req, res) => {
 
         const secret = req.tenantSecret || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const clientToken = jwt.sign(
-            { id: client.id, username: client.email, role: 'cliente', permissions: [], clientId: client.id, slug: req.slug },
+            { id: client.id, username: client.email, role: 'client', permissions: [], clientId: client.id, slug: req.slug },
             secret,
             { expiresIn: '8h' }
         );
@@ -93,7 +94,7 @@ router.post('/login', async (req, res) => {
             user: {
                 id: client.id,
                 username: client.email,
-                role: 'cliente',
+                role: 'client',
                 permissions: [],
                 slug: req.slug,
                 name: `${client.first_name} ${client.last_name}`.trim()
@@ -120,18 +121,18 @@ router.post('/register', auth, isAdmin, async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const role = req.db.prepare('SELECT name FROM roles WHERE id = ?').get(role_id);
-        const roleName = role ? role.name.toLowerCase() : 'mecánico';
+        const roleName = role ? role.name.toLowerCase() : 'technician';
 
-        let legacyRole = 'mecanico';
-        if (roleName === 'admin' || roleName === 'administrador') legacyRole = 'administrador';
-        else if (roleName === 'mecánico' || roleName === 'mecanico' || roleName === 'mechanic') legacyRole = 'mecanico';
-        else if (roleName === 'empleado' || roleName === 'staff') legacyRole = 'empleado';
+        let mappedRole = 'technician';
+        if (roleName === 'admin' || roleName === 'administrador') mappedRole = 'admin';
+        else if (roleName === 'mecánico' || roleName === 'mecanico' || roleName === 'technician') mappedRole = 'technician';
+        else if (roleName === 'empleado' || roleName === 'staff') mappedRole = 'staff';
 
         const result = req.db.prepare('INSERT INTO users (username, password, role_id, role) VALUES (?, ?, ?, ?)').run(
             username,
             hashedPassword,
             role_id,
-            legacyRole
+            mappedRole
         );
 
         res.json({ id: result.lastInsertRowid, username, role_id });

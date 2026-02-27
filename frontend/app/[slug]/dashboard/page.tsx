@@ -38,9 +38,11 @@ import {
 import { formatCurrency } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useConfig } from '@/lib/config';
+import { useTranslation } from '@/lib/i18n';
 
 export default function DashboardPage() {
     const { user, hasPermission } = useAuth();
+    const { t } = useTranslation();
     const { slug } = useSlug();
     const { config } = useConfig();
     const router = useRouter();
@@ -54,12 +56,12 @@ export default function DashboardPage() {
                 <div className="bg-blue-600/20 p-8 rounded-[2.5rem] mb-8 ring-1 ring-blue-500/30">
                     <EyeOff size={64} className="text-blue-400" />
                 </div>
-                <h2 className="text-4xl font-black text-white uppercase italic tracking-tighter mb-4 placeholder:">Panel Restringido</h2>
+                <h2 className="text-4xl font-black text-white uppercase italic tracking-tighter mb-4 placeholder:">{t('restricted_panel')}</h2>
                 <p className="text-slate-400 font-black uppercase tracking-[0.2em] text-[11px] max-w-md mx-auto leading-loose opacity-70">
-                    Tu plan actual o el rol de tu usuario no tiene habilitado el módulo de estadísticas y Panel de Control.
+                    {t('restricted_panel_desc')}
                 </p>
                 <div className="mt-12 group cursor-pointer" onClick={() => window.location.reload()}>
-                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] group-hover:text-blue-400 transition-colors">Volver a intentar</p>
+                    <p className="text-[10px] font-black text-blue-500 uppercase tracking-[0.3em] group-hover:text-blue-400 transition-colors">{t('try_again')}</p>
                     <div className="h-[2px] w-12 bg-blue-600 mx-auto mt-2 group-hover:w-20 transition-all duration-500" />
                 </div>
             </div>
@@ -95,7 +97,7 @@ export default function DashboardPage() {
     }, [user]);
 
     if (loading) {
-        return <div style={{ color: 'var(--text-muted)' }} className="p-8">Cargando estadísticas...</div>;
+        return <div style={{ color: 'var(--text-muted)' }} className="p-8 font-bold uppercase tracking-widest text-xs">{t('loading_stats')}</div>;
     }
 
     const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
@@ -109,14 +111,14 @@ export default function DashboardPage() {
             <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                 <div>
                     <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">
-                        Panel de Control
+                        {t('dashboard')}
                     </h2>
                     <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">
-                        Hola, {user?.username} · Resumen operativo de {slug}
+                        {t('welcome')}, {user?.username} · {t('operational_summary')} {slug}
                     </p>
                 </div>
                 <div className="flex items-center gap-3 w-full md:w-auto">
-                    {hasPermission('ingresos') && (
+                    {hasPermission('income') && (
                         <button
                             onClick={togglePrivacy}
                             className="bg-white p-3 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all text-slate-400 hover:text-slate-900"
@@ -127,102 +129,72 @@ export default function DashboardPage() {
                     <Link href={`/${slug}/dashboard/orders/create`} className="flex-1 md:flex-none">
                         <button className="w-full bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-2xl flex items-center justify-center gap-3 shadow-xl transition-all text-xs font-black uppercase tracking-widest">
                             <Plus size={20} />
-                            Nueva Orden
+                            {t('create_order')}
                         </button>
                     </Link>
                 </div>
             </header>
 
-            {/* Global Announcements from Superadmin */}
-            {config.announcements && config.announcements.length > 0 && (
-                <div className="space-y-4 animate-in slide-in-from-top-4 duration-500">
-                    {config.announcements.map((ann) => (
-                        <div
-                            key={ann.id}
-                            className={`p-6 rounded-[2.5rem] border flex items-center gap-6 shadow-sm transition-all hover:shadow-md ${ann.type === 'error' ? 'bg-rose-50 border-rose-100 text-rose-900' :
-                                ann.type === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-900' :
-                                    ann.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-900' :
-                                        'bg-blue-50 border-blue-100 text-blue-900'
-                                }`}
-                        >
-                            <div className={`p-4 rounded-3xl ${ann.type === 'error' ? 'bg-rose-600 text-white' :
-                                ann.type === 'warning' ? 'bg-amber-600 text-white' :
-                                    ann.type === 'success' ? 'bg-emerald-600 text-white' :
-                                        'bg-blue-600 text-white'
-                                }`}>
-                                {ann.type === 'error' ? <AlertTriangle size={24} /> :
-                                    ann.type === 'warning' ? <Megaphone size={24} /> :
-                                        ann.type === 'success' ? <CheckCircle size={24} /> : <Info size={24} />}
-                            </div>
-                            <div className="flex-grow">
-                                <h4 className="font-black uppercase tracking-tighter text-lg leading-none mb-1 italic">{ann.title}</h4>
-                                <p className="text-sm font-bold opacity-80">{ann.content}</p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
-
             {/* Main Stats Grid */}
-            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${hasPermission('turnos') ? 'xl:grid-cols-5' : ''} gap-6`}>
+            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${hasPermission('appointments') ? 'xl:grid-cols-5' : ''} gap-6`}>
                 <StatCard
-                    title="Órdenes Activas"
+                    title={t('active_orders')}
                     value={data?.ordersByStatus
-                        .filter((item: any) => !['Pendiente', 'Entregado', 'Entregada', 'Turno asignado'].includes(item.status))
+                        .filter((item: any) => !['pending', 'delivered', 'appointment'].includes(item.status))
                         .reduce((acc: number, item: any) => acc + item.count, 0) || 0}
                     icon={<ClipboardList size={24} />}
                     color="blue"
-                    description="Trabajos en curso"
+                    description={t('work_in_progress')}
                     onClick={() => router.push(`/${slug}/dashboard/orders`)}
                 />
                 <StatCard
-                    title="Clientes Nuevos"
+                    title={t('new_clients')}
                     value={data?.newClientsThisMonth || 0}
                     icon={<Users size={24} />}
                     color="amber"
-                    description="Registrados este mes"
+                    description={t('registered_this_month')}
                     onClick={() => router.push(`/${slug}/dashboard/clients`)}
                 />
                 <StatCard
-                    title="Esperando Presupuesto"
-                    value={data?.ordersByStatus.find((s: any) => s.status === 'Pendiente')?.count || 0}
+                    title={t('waiting_budget')}
+                    value={data?.ordersByStatus.find((s: any) => s.status === 'pending')?.count || 0}
                     icon={<Clock size={24} />}
                     color="indigo"
-                    description="Nuevos presupuestos"
-                    onClick={() => router.push(`/${slug}/dashboard/orders?status=Pendiente`)}
+                    description={t('new_budgets')}
+                    onClick={() => router.push(`/${slug}/dashboard/orders?status=pending`)}
                 />
-                {hasPermission('turnos') && (
+                {hasPermission('appointments') && (
                     <StatCard
-                        title="Turnos Asignados"
+                        title={t('assigned_appointments')}
                         value={data?.assignedAppointmentsCount || 0}
                         icon={<Bell size={24} />}
                         color="purple"
-                        description="Citas programadas"
+                        description={t('scheduled_appointments')}
                         onClick={() => router.push(`/${slug}/dashboard/appointments`)}
                     />
                 )}
                 <StatCard
-                    title="Mensajes Nuevos"
+                    title={t('new_messages')}
                     value={data?.unreadMessagesCount || 0}
                     icon={<MessageSquare size={24} />}
                     color={data?.unreadMessagesCount > 0 ? "orange" : "slate"}
-                    description="Respuestas sin leer"
+                    description={t('unread_replies')}
                     onClick={() => router.push(`/${slug}/dashboard/orders?filter=unread`)}
                 />
                 <StatCard
-                    title="Listos para entrega"
-                    value={data?.ordersByStatus.find((s: any) => s.status === 'Listo para entrega')?.count || 0}
+                    title={t('ready_for_delivery')}
+                    value={data?.ordersByStatus.find((s: any) => s.status === 'ready')?.count || 0}
                     icon={<Car size={24} />}
                     color="emerald"
-                    description="Vehículos terminados"
-                    onClick={() => router.push(`/${slug}/dashboard/orders?status=Listo para entrega`)}
+                    description={t('finished_vehicles')}
+                    onClick={() => router.push(`/${slug}/dashboard/orders?status=ready`)}
                 />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Status Distribution */}
                 <div className="lg:col-span-1 bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
-                    <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight mb-8">Estado del Taller</h3>
+                    <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight mb-8">{t('workshop_status')}</h3>
                     <div className="h-[250px] relative">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
@@ -248,7 +220,7 @@ export default function DashboardPage() {
                             <span className="text-3xl font-black text-slate-900">
                                 {data?.ordersByStatus.reduce((acc: number, item: any) => acc + item.count, 0) || 0}
                             </span>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Órdenes</span>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('orders')}</span>
                         </div>
                     </div>
                     <div className="mt-8 space-y-3">
@@ -256,7 +228,7 @@ export default function DashboardPage() {
                             <div key={item.status} className="flex items-center justify-between group cursor-pointer hover:bg-slate-50 p-2 rounded-xl transition-all" onClick={() => router.push(`/${slug}/dashboard/orders?status=${item.status}`)}>
                                 <div className="flex items-center gap-3">
                                     <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                                    <span className="text-xs font-bold text-slate-500 group-hover:text-slate-900 transition-colors uppercase tracking-tight">{item.status}</span>
+                                    <span className="text-xs font-bold text-slate-500 group-hover:text-slate-900 transition-colors uppercase tracking-tight">{t(item.status)}</span>
                                 </div>
                                 <span className="text-xs font-black text-slate-900">{item.count}</span>
                             </div>
@@ -267,8 +239,8 @@ export default function DashboardPage() {
                 {/* Common Services */}
                 <div className="lg:col-span-2 bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
                     <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-                        <h3 className="text-lg font-black text-slate-900 uppercase italic">Servicios frecuentes</h3>
-                        <div className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-blue-600 border border-slate-100 uppercase tracking-widest">Global</div>
+                        <h3 className="text-lg font-black text-slate-900 uppercase italic">{t('common_services')}</h3>
+                        <div className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-blue-600 border border-slate-100 uppercase tracking-widest">{t('global')}</div>
                     </div>
                     <div className="p-4">
                         <table className="w-full text-left">
@@ -285,7 +257,7 @@ export default function DashboardPage() {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <span className="bg-slate-50 border border-slate-100 text-slate-800 px-3 py-1 rounded-lg text-xs font-black group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-all">
-                                                {service.count} <span className="text-[10px] ml-0.5 opacity-60">VEH.</span>
+                                                {service.count} <span className="text-[10px] ml-0.5 opacity-60">{t('veh')}</span>
                                             </span>
                                         </td>
                                     </tr>
@@ -302,29 +274,29 @@ export default function DashboardPage() {
                 <div className="grid grid-cols-2 gap-4">
                     <ShortcutCard
                         href={`/${slug}/dashboard/orders?filter=active_work`}
-                        title="Seguimientos"
-                        subtitle="Unidades en taller"
+                        title={t('tracking')}
+                        subtitle={t('units_in_workshop')}
                         icon={<Car className="text-blue-500" />}
                         color="blue"
                     />
                     <ShortcutCard
                         href={`/${slug}/dashboard/income`}
-                        title="Informes"
-                        subtitle="Ingresos y reportes"
+                        title={t('reports')}
+                        subtitle={t('income_and_reports')}
                         icon={<TrendingUp className="text-indigo-500" />}
                         color="indigo"
                     />
                     <ShortcutCard
                         href={`/${slug}/dashboard/reminders`}
-                        title="Recordatorios"
-                        subtitle="Mantenimiento preventivo"
+                        title={t('reminders')}
+                        subtitle={t('preventive_maintenance')}
                         icon={<Bell className="text-emerald-500" />}
                         color="emerald"
                     />
                     <ShortcutCard
                         href={`/${slug}/dashboard/settings`}
-                        title="Ajustes"
-                        subtitle="Configuración taller"
+                        title={t('settings')}
+                        subtitle={t('workshop_configuration')}
                         icon={<Settings className="text-slate-500" />}
                         color="slate"
                     />

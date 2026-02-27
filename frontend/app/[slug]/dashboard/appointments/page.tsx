@@ -78,7 +78,7 @@ export default function AppointmentsPage() {
     };
 
     useEffect(() => {
-        if (!hasPermission('turnos')) {
+        if (!hasPermission('appointments')) {
             router.push(`/${slug}/dashboard`);
             return;
         }

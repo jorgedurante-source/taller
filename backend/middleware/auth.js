@@ -19,6 +19,40 @@ const auth = (req, res, next) => {
 
         req.user = decoded;
 
+        // --- Session Timeout Check & Activity Update ---
+        try {
+            const superDb = require('../superDb');
+            const now = new Date();
+
+            if (decoded.isSuperuser && decoded.superId) {
+                const sUser = superDb.prepare('SELECT last_activity FROM super_users WHERE id = ?').get(decoded.superId);
+                if (sUser && sUser.last_activity) {
+                    const timeout = parseInt(superDb.prepare("SELECT value FROM global_settings WHERE key = 'superadmin_session_timeout'").get()?.value || '120');
+                    const lastActivity = new Date(sUser.last_activity.replace(' ', 'T') + 'Z');
+                    const diffMins = (now - lastActivity) / (1000 * 60);
+
+                    if (diffMins > timeout) {
+                        return res.status(401).json({ message: 'Sesión de Superusuario expirada por inactividad', timeout: true });
+                    }
+                }
+                superDb.prepare('UPDATE super_users SET last_activity = CURRENT_TIMESTAMP WHERE id = ?').run(decoded.superId);
+            } else if (req.db && decoded.id && decoded.role !== 'cliente') {
+                const uRec = req.db.prepare('SELECT last_activity FROM users WHERE id = ?').get(decoded.id);
+                if (uRec && uRec.last_activity) {
+                    const timeout = parseInt(superDb.prepare("SELECT value FROM global_settings WHERE key = 'user_session_timeout'").get()?.value || '60');
+                    const lastActivity = new Date(uRec.last_activity.replace(' ', 'T') + 'Z');
+                    const diffMins = (now - lastActivity) / (1000 * 60);
+
+                    if (diffMins > timeout) {
+                        return res.status(401).json({ message: 'Sesión expirada por inactividad', timeout: true });
+                    }
+                }
+                req.db.prepare('UPDATE users SET last_activity = CURRENT_TIMESTAMP WHERE id = ?').run(decoded.id);
+            }
+        } catch (e) {
+            console.error('[authMiddleware] Timeout check error:', e.message);
+        }
+
         // --- Maintenance Mode Enforcement ---
         if (req.maintenanceMode && !req.user.isSuperuser) {
             return res.status(503).json({

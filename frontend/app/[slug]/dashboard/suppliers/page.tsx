@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth';
 import { useSlug } from '@/lib/slug';
 import api from '@/lib/api';
 import { useNotification } from '@/lib/notification';
+import { useTranslation } from '@/lib/i18n';
 import {
     Truck,
     Plus,
@@ -30,6 +31,7 @@ export default function SuppliersPage() {
     const { hasPermission } = useAuth();
     const { slug } = useSlug();
     const { notify } = useNotification();
+    const { t } = useTranslation();
     const searchParams = useSearchParams();
     const urlOrderId = searchParams.get('orderId');
     const urlVehicleInfo = searchParams.get('vehicleInfo');
@@ -67,14 +69,14 @@ export default function SuppliersPage() {
         }
     };
 
-    if (!hasPermission('proveedores')) {
+    if (!hasPermission('suppliers')) {
         return (
             <div className="min-h-[70vh] flex flex-col items-center justify-center text-center p-12 bg-white rounded-[3rem] border border-slate-100 shadow-sm">
                 <div className="bg-rose-50 p-6 rounded-3xl mb-6">
                     <AlertCircle size={48} className="text-rose-500" />
                 </div>
-                <h2 className="text-2xl font-black text-slate-900 uppercase italic">Módulo no habilitado</h2>
-                <p className="text-slate-500 font-bold text-sm mt-2 max-w-sm">No tenés permisos para gestionar proveedores o el módulo está desactivado.</p>
+                <h2 className="text-2xl font-black text-slate-900 uppercase italic">{t('module_not_enabled')}</h2>
+                <p className="text-slate-500 font-bold text-sm mt-2 max-w-sm">{t('contact_admin_to_activate')}</p>
             </div>
         );
     }
@@ -87,7 +89,7 @@ export default function SuppliersPage() {
                 notify('success', 'Proveedor actualizado');
             } else {
                 await api.post('/suppliers', formData);
-                notify('success', 'Proveedor creado');
+                notify('success', t('success'));
             }
             setShowCreateModal(false);
             setEditingSupplier(null);
@@ -99,7 +101,7 @@ export default function SuppliersPage() {
     };
 
     const handleDelete = async (id: number) => {
-        if (!confirm('¿Estás seguro de eliminar este proveedor?')) return;
+        if (!confirm(t('confirm_delete_supplier'))) return;
         try {
             await api.delete(`/suppliers/${id}`);
             notify('success', 'Proveedor eliminado');
@@ -119,7 +121,7 @@ export default function SuppliersPage() {
                 orderId: urlOrderId,
                 ...inquiryData
             });
-            notify('success', `Consulta enviada a ${selectedIds.length} proveedores`);
+            notify('success', t('inquiry_sent_success').replace('{count}', selectedIds.length.toString()));
             setShowInquiryModal(false);
             setInquiryData({ partDescription: '', vehicleInfo: '' });
             setSelectedIds([]);
@@ -151,7 +153,7 @@ export default function SuppliersPage() {
                             <Truck size={24} />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">Consultando para Orden #{urlOrderId}</p>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80">{t('consulting_for_order')} #{urlOrderId}</p>
                             <h3 className="text-xl font-black uppercase italic tracking-tight leading-tight">
                                 {urlVehicleInfo?.replace(/_/g, ' ')}
                             </h3>
@@ -161,7 +163,7 @@ export default function SuppliersPage() {
                         onClick={() => router.push(`/${slug}/dashboard/orders/${urlOrderId}`)}
                         className="bg-white text-emerald-600 px-6 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-emerald-50 transition-all shrink-0"
                     >
-                        Volver a la Orden
+                        {t('back_to_order')}
                     </button>
                 </div>
             )}
@@ -170,10 +172,10 @@ export default function SuppliersPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
                     <h1 className="text-4xl font-black text-slate-900 uppercase italic tracking-tighter flex items-center gap-4">
-                        <Truck size={40} className="text-blue-600" /> Gestión de Proveedores
+                        <Truck size={40} className="text-blue-600" /> {t('suppliers_management')}
                     </h1>
                     <p className="text-slate-500 font-bold text-sm mt-1">
-                        Administrá tu red de contactos y consultá presupuestos de repuestos.
+                        {t('suppliers_description')}
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -182,7 +184,7 @@ export default function SuppliersPage() {
                             onClick={() => setShowInquiryModal(true)}
                             className="bg-emerald-600 text-white px-6 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-emerald-700 shadow-lg shadow-emerald-100 flex items-center gap-2 animate-in zoom-in duration-300"
                         >
-                            <Send size={16} /> Consultar ({selectedIds.length})
+                            <Send size={16} /> {t('consult')} ({selectedIds.length})
                         </button>
                     )}
                     <button
@@ -193,7 +195,7 @@ export default function SuppliersPage() {
                         }}
                         className="bg-slate-900 text-white px-6 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black shadow-lg flex items-center gap-2"
                     >
-                        <Plus size={16} /> Nuevo Proveedor
+                        <Plus size={16} /> {t('new_supplier')}
                     </button>
                 </div>
             </div>
@@ -204,7 +206,7 @@ export default function SuppliersPage() {
                     <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                     <input
                         type="text"
-                        placeholder="Buscar por nombre o email..."
+                        placeholder={t('search_suppliers_placeholder')}
                         className="w-full pl-14 pr-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/20 transition-all"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -216,7 +218,7 @@ export default function SuppliersPage() {
                         disabled={selectedIds.length === 0}
                         className="px-4 py-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 disabled:opacity-30"
                     >
-                        Deseleccionar
+                        {t('unselect')}
                     </button>
                 </div>
             </div>
@@ -300,7 +302,7 @@ export default function SuppliersPage() {
                     <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-10 animate-in zoom-in duration-300">
                         <div className="flex justify-between items-center mb-8">
                             <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">
-                                {editingSupplier ? 'Editar Proveedor' : 'Nuevo Proveedor'}
+                                {editingSupplier ? t('edit_supplier') : t('new_supplier')}
                             </h2>
                             <button onClick={() => setShowCreateModal(false)} className="bg-slate-50 p-2.5 rounded-2xl text-slate-400 hover:text-slate-900 transition-all">
                                 <X size={20} />
@@ -309,7 +311,7 @@ export default function SuppliersPage() {
 
                         <form onSubmit={handleCreateOrUpdate} className="space-y-6">
                             <div className="space-y-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Nombre de la Empresa / Contacto</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('company_name_label')}</label>
                                 <input
                                     className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/20 transition-all"
                                     value={formData.name}
@@ -337,7 +339,7 @@ export default function SuppliersPage() {
                                 </div>
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Notas Internas</label>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('internal_notes')}</label>
                                 <textarea
                                     className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-blue-500/20 transition-all min-h-[100px]"
                                     value={formData.notes}
@@ -346,7 +348,7 @@ export default function SuppliersPage() {
                             </div>
 
                             <button className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-black shadow-xl transition-all">
-                                {editingSupplier ? 'Guardar Cambios' : 'Crear Proveedor'}
+                                {editingSupplier ? t('save') : t('create')}
                             </button>
                         </form>
                     </div>
@@ -362,8 +364,8 @@ export default function SuppliersPage() {
                                 <MessageSquare size={160} />
                             </div>
                             <div className="relative z-10">
-                                <h2 className="text-3xl font-black uppercase italic tracking-tighter">Consultar Repuesto</h2>
-                                <p className="text-emerald-100 font-bold text-sm mt-2">Vas a enviar una consulta a {selectedIds.length} proveedores seleccionados.</p>
+                                <h2 className="text-3xl font-black uppercase italic tracking-tighter">{t('consult_parts')}</h2>
+                                <p className="text-emerald-100 font-bold text-sm mt-2">{t('send_inquiry')} {selectedIds.length} {t('suppliers').toLowerCase()}.</p>
                             </div>
                             <button
                                 onClick={() => setShowInquiryModal(false)}
@@ -377,26 +379,26 @@ export default function SuppliersPage() {
                             <div className="flex items-center gap-4 p-4 bg-blue-50 rounded-2xl text-blue-700 border border-blue-100">
                                 <Info size={20} className="shrink-0" />
                                 <p className="text-[10px] font-black uppercase tracking-widest leading-loose">
-                                    Los proveedores recibirán el detalle del repuesto junto con la información del vehículo para cotizar.
+                                    {t('inquiry_detail_hint')}
                                 </p>
                             </div>
 
                             <form onSubmit={handleSendInquiry} className="space-y-6">
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Vehículo (Año/Marca/Modelo)</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('vehicle')} (Año/Marca/Modelo)</label>
                                     <input
                                         className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                                        placeholder="Ej: 2018 Toyota Corolla"
+                                        placeholder={t('vehicle_placeholder_inquiry')}
                                         value={inquiryData.vehicleInfo}
                                         onChange={(e) => setInquiryData({ ...inquiryData, vehicleInfo: e.target.value })}
                                         required
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Repuesto y Detalles</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('part_inquiries')} y Detalles</label>
                                     <textarea
                                         className="w-full px-6 py-4 bg-slate-50 border-none rounded-2xl text-sm font-bold focus:ring-2 focus:ring-emerald-500/20 transition-all min-h-[120px]"
-                                        placeholder="Ej: Juego de pastillas de freno delanteras..."
+                                        placeholder={t('part_placeholder_inquiry')}
                                         value={inquiryData.partDescription}
                                         onChange={(e) => setInquiryData({ ...inquiryData, partDescription: e.target.value })}
                                         required
@@ -410,7 +412,7 @@ export default function SuppliersPage() {
                                     {sending ? (
                                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                     ) : (
-                                        <>Enviar Consulta <ArrowRight size={16} /></>
+                                        <>{t('send_inquiry')} <ArrowRight size={16} /></>
                                     )}
                                 </button>
                             </form>

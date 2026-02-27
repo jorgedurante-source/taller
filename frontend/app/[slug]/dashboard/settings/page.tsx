@@ -39,6 +39,7 @@ import { useSlug } from '@/lib/slug';
 import Link from 'next/link';
 import { useNotification } from '@/lib/notification';
 import { useRouter } from 'next/navigation';
+import { useTranslation, Language } from '@/lib/i18n';
 
 export default function SettingsPage() {
     const [activeTab, setActiveTab] = useState('global');
@@ -118,12 +119,35 @@ export default function SettingsPage() {
 
     // Users and Roles State
     const { user: currentUser, hasPermission } = useAuth();
+    const { t, setLanguage } = useTranslation();
     const [users, setUsers] = useState<any[]>([]);
     const [roles, setRoles] = useState<any[]>([]);
     const [newUser, setNewUser] = useState({ username: '', password: '', role_id: '', first_name: '', last_name: '' });
-    const [permissionsList] = useState([
-        'dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos', 'proveedores'
+    const [permissionsBase] = useState([
+        'dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'users', 'roles', 'reminders', 'appointments', 'suppliers', 'audit'
     ]);
+
+    const permissionsList = config?.enabled_modules && Array.isArray(config.enabled_modules)
+        ? permissionsBase.filter(p => config.enabled_modules.includes(p))
+        : permissionsBase;
+
+    const permissionLabels: { [key: string]: string } = {
+        'dashboard': t('perm_dashboard'),
+        'clients': t('perm_clients'),
+        'vehicles': t('perm_vehicles'),
+        'orders': t('perm_orders'),
+        'income': t('perm_income'),
+        'settings': t('perm_settings'),
+        'users': t('perm_users'),
+        'roles': t('perm_roles'),
+        'reminders': t('perm_reminders'),
+        'appointments': t('perm_appointments'),
+        'suppliers': t('perm_suppliers'),
+        'audit': t('perm_audit')
+    };
+
+    // Personal State
+    const [meData, setMeData] = useState<any>({ first_name: '', last_name: '', language: 'es', password: '' });
 
     // Logs State
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
@@ -164,14 +188,25 @@ export default function SettingsPage() {
                     api.get('/templates')
                 ];
 
-                if (hasPermission('usuarios')) {
+                if (currentUser && !currentUser.isSuperuser) {
+                    requests.push(api.get('/users/me'));
+                }
+
+                if (hasPermission('users')) {
                     requests.push(api.get('/users'));
                 }
                 if (hasPermission('roles')) {
                     requests.push(api.get('/roles'));
                 }
 
-                const [configRes, servicesRes, templatesRes, usersRes, rolesRes] = await Promise.all(requests);
+                const responses = await Promise.all(requests);
+                let currentIdx = 0;
+                const configRes = responses[currentIdx++];
+                const servicesRes = responses[currentIdx++];
+                const templatesRes = responses[currentIdx++];
+                let meRes = (currentUser && !currentUser.isSuperuser) ? responses[currentIdx++] : null;
+                let usersRes = hasPermission('users') ? responses[currentIdx++] : null;
+                let rolesRes = hasPermission('roles') ? responses[currentIdx++] : null;
 
                 if (configRes.data) {
                     const data = configRes.data;
@@ -194,6 +229,7 @@ export default function SettingsPage() {
 
                 setServices(servicesRes.data);
                 setTemplates(templatesRes.data);
+                if (meRes) setMeData({ ...meRes.data, password: '' });
                 if (usersRes) setUsers(usersRes.data);
                 if (rolesRes) setRoles(rolesRes.data);
             } catch (err) {
@@ -204,6 +240,35 @@ export default function SettingsPage() {
         };
         fetchData();
     }, [hasPermission]);
+
+    const handleSaveProfile = async () => {
+        setSaving(true);
+        try {
+            await api.put('/users/me', {
+                first_name: meData.first_name,
+                last_name: meData.last_name,
+                language: meData.language,
+                ...(meData.password ? { password: meData.password } : {})
+            });
+
+            // Persist locally
+            if (meData.language) {
+                setLanguage(meData.language as Language);
+            }
+
+            // Update the user in localStorage to keep persistence across reloads
+            const updatedUser = { ...currentUser, ...meData };
+            delete updatedUser.password;
+            localStorage.setItem('user', JSON.stringify(updatedUser));
+
+            notify('success', t('profile_updated'));
+            // setTimeout(() => window.location.reload(), 1500); // No longer strictly needed if we update local state
+        } catch (err) {
+            notify('error', t('error_updating_profile'));
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const handleSaveConfig = async () => {
         setSaving(true);
@@ -390,42 +455,130 @@ export default function SettingsPage() {
     return (
         <div className="max-w-7xl mx-auto space-y-8 pb-12 transition-all">
             <header>
-                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Panel de Configuración</h2>
-                <p className="text-slate-500 mt-1">Personalizá todos los aspectos de tu sistema taller.</p>
+                <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{t('settings_panel_title')}</h2>
+                <p className="text-slate-500 mt-1">{t('settings_panel_subtitle')}</p>
             </header>
 
             {/* Tabs Navigation */}
             <div className="flex flex-wrap bg-white p-1.5 rounded-2xl border border-slate-100 shadow-sm w-fit gap-1">
-                <TabButton active={activeTab === 'global'} onClick={() => setActiveTab('global')} icon={<Globe size={18} />} label="Global" />
-                <TabButton active={activeTab === 'comms'} onClick={() => setActiveTab('comms')} icon={<MessageSquare size={18} />} label="Comunicaciones" />
-                <TabButton active={activeTab === 'services'} onClick={() => setActiveTab('services')} icon={<Wrench size={18} />} label="Catálogo / Servicios" />
-                {hasPermission('usuarios') && <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<UserIcon size={18} />} label="Usuarios" />}
-                {hasPermission('roles') && <TabButton active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} icon={<Shield size={18} />} label="Roles" />}
-                <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')} icon={<Palette size={18} />} label="Apariencia" />
-                <button
-                    onClick={() => router.push(`/${slug}/dashboard/admin/audit`)}
-                    className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50"
-                >
-                    <Activity size={18} />
-                    Auditoría
-                </button>
+                <TabButton active={activeTab === 'personal'} onClick={() => setActiveTab('personal')} icon={<UserIcon size={18} />} label={t('personal_settings')} />
+                <TabButton active={activeTab === 'global'} onClick={() => setActiveTab('global')} icon={<Globe size={18} />} label={t('global_config')} />
+                <TabButton active={activeTab === 'comms'} onClick={() => setActiveTab('comms')} icon={<MessageSquare size={18} />} label={t('portal_config')} />
+                <TabButton active={activeTab === 'services'} onClick={() => setActiveTab('services')} icon={<Wrench size={18} />} label={t('services_catalog')} />
+                {hasPermission('users') && <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<UserIcon size={18} />} label={t('user_management')} />}
+                {hasPermission('roles') && <TabButton active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} icon={<Shield size={18} />} label={t('roles_and_perms')} />}
+                <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')} icon={<Palette size={18} />} label={t('theme_selection')} />
+                {hasPermission('audit') && (
+                    <button
+                        onClick={() => router.push(`/${slug}/dashboard/admin/audit`)}
+                        className="flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-800 hover:bg-slate-50"
+                    >
+                        <Activity size={18} />
+                        {t('audit_logs')}
+                    </button>
+                )}
                 {currentUser?.isSuperuser && (
                     <TabButton active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={<Activity size={18} />} label="Logs" />
                 )}
             </div>
 
             <div className="mt-8">
+                {activeTab === 'personal' && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <section className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-8">
+                            <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+                                <div className="bg-indigo-600 text-white p-3 rounded-2xl shadow-xl shadow-indigo-600/10">
+                                    <UserIcon size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{t('personal_settings')}</h3>
+                                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">{t('personal_data')}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                {currentUser?.isSuperuser ? (
+                                    <div className="md:col-span-2 p-6 bg-slate-50 rounded-3xl border border-slate-200 text-center">
+                                        <Shield className="mx-auto text-slate-400 mb-3" size={32} />
+                                        <p className="text-slate-600 font-bold uppercase text-xs tracking-widest max-w-sm mx-auto">
+                                            Tu perfil como superusuario se gestiona globalmente en el panel central.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('first_name')}</label>
+                                            <input
+                                                type="text"
+                                                className="w-full px-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold"
+                                                value={meData.first_name || ''}
+                                                onChange={(e) => setMeData({ ...meData, first_name: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('last_name')}</label>
+                                            <input
+                                                type="text"
+                                                className="w-full px-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold"
+                                                value={meData.last_name || ''}
+                                                onChange={(e) => setMeData({ ...meData, last_name: e.target.value })}
+                                            />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('language_personal')}</label>
+                                            <select
+                                                className="w-full px-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold appearance-none"
+                                                value={meData.language || 'es'}
+                                                onChange={(e) => setMeData({ ...meData, language: e.target.value })}
+                                            >
+                                                <option value="es">Español</option>
+                                                <option value="en">English</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('new_password')}</label>
+                                            <input
+                                                type="password"
+                                                autoComplete="new-password"
+                                                className="w-full px-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold"
+                                                placeholder={t('change_password_hint')}
+                                                value={meData.password || ''}
+                                                onChange={(e) => setMeData({ ...meData, password: e.target.value })}
+                                            />
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+
+                            {!currentUser?.isSuperuser && (
+                                <div className="pt-6 border-t border-slate-50 flex justify-end">
+                                    <button
+                                        onClick={handleSaveProfile}
+                                        disabled={saving}
+                                        className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-900/10 disabled:opacity-50 flex items-center gap-3"
+                                    >
+                                        {saving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
+                                        {t('save')}
+                                    </button>
+                                </div>
+                            )}
+                        </section>
+                    </div>
+                )}
+
                 {activeTab === 'global' && (
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         <div className="lg:col-span-2 space-y-8">
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
                                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                     <Globe className="text-blue-500" size={24} />
-                                    Portal de Clientes
+                                    {t('client_portal')}
                                 </h3>
                                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between gap-4">
                                     <div className="flex-grow overflow-hidden">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Enlace Público (Compartir con Clientes)</p>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('public_link')}</p>
                                         <div className="flex items-center gap-2 text-slate-700 font-mono text-sm truncate">
                                             <Link2 size={16} className="text-slate-400 shrink-0" />
                                             <span className="truncate">{typeof window !== 'undefined' ? `${window.location.origin}/${slug}/client/login` : `/${slug}/client/login`}</span>
@@ -441,20 +594,33 @@ export default function SettingsPage() {
                                         }}
                                         className={`shrink-0 p-3 rounded-xl transition-all font-black text-xs flex items-center gap-2 ${copiedPortal ? 'bg-emerald-50 text-emerald-600' : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 shadow-sm'}`}
                                     >
-                                        {copiedPortal ? <><Check size={16} /> Copiado</> : <><Copy size={16} /> Copiar Enlace</>}
+                                        {copiedPortal ? <><Check size={16} /> {t('copied')}</> : <><Copy size={16} /> {t('copy_link')}</>}
                                     </button>
+                                </div>
+
+                                <div className="space-y-1 mt-6">
+                                    <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('client_portal_language')}</label>
+                                    <select
+                                        className="w-full px-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold appearance-none"
+                                        value={config.client_portal_language || 'es'}
+                                        onChange={(e) => setConfig((prev: any) => ({ ...prev, client_portal_language: e.target.value }))}
+                                    >
+                                        <option value="es">Español</option>
+                                        <option value="en">English</option>
+                                    </select>
+                                    <p className="text-xs text-slate-400 mt-2 ml-1 font-bold">{t('portal_language_desc')}</p>
                                 </div>
                             </section>
 
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
                                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                     <SettingsIcon className="text-blue-500" size={24} />
-                                    Identidad del Taller
+                                    {t('workshop_identity')}
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <ConfigInput label="Nombre del Taller" value={config.workshop_name} onChange={(v) => setConfig((prev: any) => ({ ...prev, workshop_name: v }))} />
+                                    <ConfigInput label={t('workshop_info')} value={config.workshop_name} onChange={(v) => setConfig((prev: any) => ({ ...prev, workshop_name: v }))} />
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Logo del Taller (Hacé clic para cambiar)</label>
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('workshop_logo_hint')}</label>
                                         <div className="flex flex-col gap-4">
                                             <input
                                                 type="file"
@@ -474,7 +640,7 @@ export default function SettingsPage() {
                                                     <button
                                                         onClick={() => setConfig((prev: any) => ({ ...prev, logo_path: '' }))}
                                                         className="absolute -top-2 -right-2 bg-red-500 text-white p-2 rounded-full shadow-lg hover:bg-red-600 transition-all hover:scale-110"
-                                                        title="Quitar Logo"
+                                                        title={t('remove_logo')}
                                                     >
                                                         <Trash2 size={14} />
                                                     </button>
@@ -485,20 +651,20 @@ export default function SettingsPage() {
                                                     className="w-48 h-48 bg-slate-50 border-4 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/50 transition-all text-slate-400 hover:text-indigo-500 mx-auto md:mx-0"
                                                 >
                                                     <ImageIcon size={48} className="mb-3" />
-                                                    <span className="font-bold text-sm">Subir Logo Oficial</span>
-                                                    <span className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">Recomendado: 512x512px</span>
+                                                    <span className="font-bold text-sm">{t('upload_logo')}</span>
+                                                    <span className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-70">{t('recommended_size')}</span>
                                                 </label>
                                             )}
                                         </div>
                                     </div>
                                 </div>
-                                <ConfigInput label="Dirección Física" icon={<MapPin size={18} />} value={config.address} onChange={(v) => setConfig((prev: any) => ({ ...prev, address: v }))} />
+                                <ConfigInput label={t('address')} icon={<MapPin size={18} />} value={config.address} onChange={(v) => setConfig((prev: any) => ({ ...prev, address: v }))} />
                             </section>
 
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
                                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                     <TrendingUp className="text-indigo-500" size={24} />
-                                    Cálculo de Ingresos
+                                    {t('income_calculation')}
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="flex items-center gap-4">
@@ -514,14 +680,14 @@ export default function SettingsPage() {
                                                 <div className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-transform ${config.income_include_parts === 1 ? 'translate-x-6' : ''}`}></div>
                                             </div>
                                             <div>
-                                                <span className="text-sm font-bold text-slate-900 block tracking-tight">Sumar Repuestos</span>
-                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">Incluye repuestos en ingresos</span>
+                                                <span className="text-sm font-bold text-slate-900 block tracking-tight">{t('add_parts_to_income')}</span>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">{t('include_parts_desc')}</span>
                                             </div>
                                         </label>
                                     </div>
 
                                     <div className="space-y-1">
-                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">Ganancia Repuestos (%)</label>
+                                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{t('parts_profit_percentage')}</label>
                                         <div className="relative">
                                             <Percent size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
                                             <input
@@ -532,7 +698,7 @@ export default function SettingsPage() {
                                                 onChange={(e) => setConfig((prev: any) => ({ ...prev, parts_profit_percentage: parseFloat(e.target.value || '0') }))}
                                             />
                                         </div>
-                                        <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase italic">* Si no ganás el 100% de lo que sale el repuesto, bajá el número.</p>
+                                        <p className="text-[9px] text-slate-400 font-bold mt-1 uppercase italic">{t('parts_profit_desc')}</p>
                                     </div>
                                 </div>
                             </section>
@@ -540,19 +706,19 @@ export default function SettingsPage() {
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
                                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                     <Phone className="text-emerald-500" size={24} />
-                                    Contacto y Redes
+                                    {t('contact_and_social')}
                                 </h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <ConfigInput label="WhatsApp (Sin +)" value={config.whatsapp} onChange={(v) => setConfig((prev: any) => ({ ...prev, whatsapp: v }))} />
-                                    <ConfigInput label="Email de Contacto" icon={<Mail size={18} />} value={config.email} onChange={(v) => setConfig((prev: any) => ({ ...prev, email: v }))} />
-                                    <ConfigInput label="IVA (%)" icon={<Percent size={18} />} type="number" value={config.tax_percentage} onChange={(v) => setConfig((prev: any) => ({ ...prev, tax_percentage: parseFloat(v) }))} />
+                                    <ConfigInput label={t('whatsapp_hint')} value={config.whatsapp} onChange={(v) => setConfig((prev: any) => ({ ...prev, whatsapp: v }))} />
+                                    <ConfigInput label={t('email')} icon={<Mail size={18} />} value={config.email} onChange={(v) => setConfig((prev: any) => ({ ...prev, email: v }))} />
+                                    <ConfigInput label={t('tax_iva')} icon={<Percent size={18} />} type="number" value={config.tax_percentage} onChange={(v) => setConfig((prev: any) => ({ ...prev, tax_percentage: parseFloat(v) }))} />
                                 </div>
                             </section>
 
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6">
                                 <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
                                     <Mail className="text-blue-500" size={24} />
-                                    Configuración de Servidor de Correo
+                                    {t('mail_server_config')}
                                 </h3>
 
                                 <div className="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200">
@@ -561,7 +727,7 @@ export default function SettingsPage() {
                                         onClick={() => setConfig((prev: any) => ({ ...prev, mail_provider: 'smtp' }))}
                                         type="button"
                                     >
-                                        SMTP Tradicional
+                                        {t('traditional_smtp')}
                                     </button>
                                     <button
                                         className={`flex-1 py-2 text-sm font-bold uppercase tracking-wide rounded-lg transition-all ${config.mail_provider === 'resend' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
@@ -612,8 +778,8 @@ export default function SettingsPage() {
                                                 <RefreshCw size={20} />
                                             </div>
                                             <div>
-                                                <span className="text-sm font-black text-slate-800 uppercase tracking-tight">Lector de Respuestas automáticas</span>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">Captura respuestas de clientes y proveedores</p>
+                                                <span className="text-sm font-black text-slate-800 uppercase tracking-tight">{t('auto_reply_reader')}</span>
+                                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{t('capture_responses_desc')}</p>
                                             </div>
                                         </div>
                                         <div className="relative">
@@ -635,7 +801,7 @@ export default function SettingsPage() {
                                             <ConfigInput label="Usuario IMAP" placeholder="tu-email@gmail.com" value={config.imap_user} onChange={(v) => setConfig((prev: any) => ({ ...prev, imap_user: v }))} />
                                             <ConfigInput label="Contraseña IMAP / App Password" type="password" value={config.imap_pass} onChange={(v) => setConfig((prev: any) => ({ ...prev, imap_pass: v }))} />
                                             <p className="col-span-full text-[9px] text-slate-400 font-bold uppercase tracking-widest bg-blue-50/50 p-4 rounded-xl border border-blue-100/50 italic">
-                                                💡 Tip: Si usás Gmail, recordá generar una "Contraseña de aplicación" en tu cuenta de Google para que el sistema pueda entrar sin bloqueos.
+                                                {t('imap_gmail_tip')}
                                             </p>
                                         </div>
                                     )}
@@ -700,14 +866,14 @@ export default function SettingsPage() {
                                 className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${commsTab === 'recordatorios' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                             >
                                 <Bell size={14} className="inline mr-2" />
-                                Recordatorios
+                                {t('recordatorios_tab')}
                             </button>
                             <button
                                 onClick={() => setCommsTab('messages')}
                                 className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${commsTab === 'messages' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                             >
                                 <MessageSquare size={14} className="inline mr-2" />
-                                Mensajes (Plantillas)
+                                {t('templates_tab')}
                             </button>
                         </div>
 
@@ -723,8 +889,8 @@ export default function SettingsPage() {
                                                 <Clock size={24} />
                                             </div>
                                             <div>
-                                                <h3 className="text-2xl font-black uppercase italic tracking-tight">Envío Automático</h3>
-                                                <p className="text-slate-400 text-sm font-bold opacity-80 mt-1">Configura cuándo y cómo se envían los recordatorios.</p>
+                                                <h3 className="text-2xl font-black uppercase italic tracking-tight">{t('auto_sending_title')}</h3>
+                                                <p className="text-slate-400 text-sm font-bold opacity-80 mt-1">{t('auto_sending_desc')}</p>
                                             </div>
                                         </div>
 
@@ -742,8 +908,8 @@ export default function SettingsPage() {
                                                         <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${config.reminder_enabled === 1 ? 'translate-x-7' : ''}`}></div>
                                                     </div>
                                                     <div className="flex flex-col">
-                                                        <span className="text-xs font-black uppercase tracking-widest">Servicio Activo</span>
-                                                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">Habilita el cron diario</p>
+                                                        <span className="text-xs font-black uppercase tracking-widest">{t('active_service')}</span>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-0.5">{t('enable_daily_cron')}</p>
                                                     </div>
                                                 </label>
                                             </div>
@@ -751,7 +917,7 @@ export default function SettingsPage() {
                                             <div className="bg-white/5 border border-white/10 rounded-2xl p-4 px-6 flex items-center justify-between">
                                                 <div className="flex items-center gap-3">
                                                     <Clock size={18} className="text-blue-400" />
-                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora de envío</span>
+                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('sending_time')}</span>
                                                 </div>
                                                 <select
                                                     className="bg-transparent border-none outline-none text-white font-black text-xl [color-scheme:dark] cursor-pointer"
@@ -773,7 +939,7 @@ export default function SettingsPage() {
                                         <div className="flex items-start gap-4 bg-blue-600/20 border border-blue-500/20 p-5 rounded-2xl">
                                             <AlertCircle size={20} className="text-blue-400 shrink-0 mt-0.5" />
                                             <p className="text-xs font-bold text-slate-200 uppercase leading-relaxed opacity-90">
-                                                Los recordatorios se procesan según la <span className="text-white underline decoration-blue-500 underline-offset-4">fecha programada</span> en cada orden. Si el taller está configurado para no trabajar los domingos, esos mensajes se enviarán el siguiente lunes.
+                                                {t('reminders_processing_hint')}
                                             </p>
                                         </div>
 
@@ -784,7 +950,7 @@ export default function SettingsPage() {
                                                 className="bg-white text-slate-900 px-8 py-4 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-100 transition-all flex items-center gap-3 disabled:opacity-50 shadow-xl"
                                             >
                                                 {saving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-                                                {saving ? 'Guardando...' : 'Guardar Configuración'}
+                                                {saving ? t('saving_text') : t('save_config')}
                                             </button>
                                         </div>
                                     </div>
@@ -801,8 +967,8 @@ export default function SettingsPage() {
                                                 <MessageSquare size={24} />
                                             </div>
                                             <div>
-                                                <h3 className="text-xl font-black uppercase italic tracking-tight text-slate-800">Mensajes Automáticos</h3>
-                                                <p className="text-slate-500 text-sm font-bold opacity-80 mt-1">Controlá el envío automático por cambio de estado.</p>
+                                                <h3 className="text-xl font-black uppercase italic tracking-tight text-slate-800">{t('automated_messages')}</h3>
+                                                <p className="text-slate-500 text-sm font-bold opacity-80 mt-1">{t('control_auto_sending_desc')}</p>
                                             </div>
                                         </div>
                                         <label className="flex items-center gap-4 cursor-pointer group bg-slate-50 p-4 rounded-2xl border border-slate-100 shadow-inner">
@@ -837,7 +1003,7 @@ export default function SettingsPage() {
                                             className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all flex items-center gap-2 disabled:opacity-50"
                                         >
                                             {saving ? <RefreshCw className="animate-spin" size={14} /> : <Save size={14} />}
-                                            Guardar Ajuste de Mensajes
+                                            {t('save_message_adjustment')}
                                         </button>
                                     </div>
                                 </div>
@@ -845,14 +1011,14 @@ export default function SettingsPage() {
                                 <div className="bg-white p-6 md:p-10 rounded-3xl border border-slate-100 shadow-sm space-y-8">
                                     <div className="flex justify-between items-end gap-4 border-b border-slate-100 pb-8">
                                         <div>
-                                            <h3 className="text-2xl font-bold text-slate-800">Plantillas de Mensajes</h3>
-                                            <p className="text-slate-500 mt-1">Personaliza los mensajes que se envían por cada estado de la reparación.</p>
+                                            <h3 className="text-2xl font-bold text-slate-800">{t('message_templates_title')}</h3>
+                                            <p className="text-slate-500 mt-1">{t('personalize_templates_desc')}</p>
                                         </div>
                                         <button
                                             onClick={handleCreateTemplate}
                                             className="bg-blue-600 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-100 flex items-center gap-2 shrink-0"
                                         >
-                                            <Plus size={16} /> Nueva Plantilla
+                                            <Plus size={16} /> {t('new_template')}
                                         </button>
                                     </div>
 
@@ -881,16 +1047,16 @@ export default function SettingsPage() {
                                                                         value={template.trigger_status || ''}
                                                                         onChange={(e) => handleUpdateTemplate(template.id, { ...template, trigger_status: e.target.value, include_pdf: e.target.value ? template.include_pdf : 0 })}
                                                                     >
-                                                                        <option value="">Manual</option>
-                                                                        <option value="Pendiente">Al crear (Pendiente)</option>
-                                                                        <option value="Turno asignado">Turno asignado</option>
-                                                                        <option value="En proceso">En proceso</option>
-                                                                        <option value="Presupuestado">Presupuestado</option>
-                                                                        <option value="Aprobado">Aprobado</option>
-                                                                        <option value="En reparación">En reparación</option>
-                                                                        <option value="Listo para entrega">Listo para entrega</option>
-                                                                        <option value="Entregado">Entregado</option>
-                                                                        <option value="Recordatorio">Recordatorio</option>
+                                                                        <option value="">{t('manual')}</option>
+                                                                        <option value="Pendiente">{t('on_create_pending')}</option>
+                                                                        <option value="Turno asignado">{t('appointment')}</option>
+                                                                        <option value="En proceso">{t('in_progress')}</option>
+                                                                        <option value="Presupuestado">{t('quoted')}</option>
+                                                                        <option value="Aprobado">{t('approved')}</option>
+                                                                        <option value="En reparación">{t('in_repair')}</option>
+                                                                        <option value="Listo para entrega">{t('ready')}</option>
+                                                                        <option value="Entregado">{t('delivered')}</option>
+                                                                        <option value="Recordatorio">{t('reminders')}</option>
                                                                     </select>
                                                                 </div>
                                                                 <div className="flex flex-wrap items-center gap-4 bg-white p-2.5 rounded-2xl border border-slate-100 shadow-sm shrink-0">
@@ -955,7 +1121,7 @@ export default function SettingsPage() {
 
                                         <div className="xl:w-80 xl:sticky xl:top-24 bg-slate-900 p-8 rounded-3xl text-white space-y-6 shrink-0 shadow-xl">
                                             <h4 className="text-lg font-bold flex items-center gap-2 text-blue-400">
-                                                <ShieldCheck size={20} /> Tokens Disponibles
+                                                <ShieldCheck size={20} /> {t('available_tokens')}
                                             </h4>
                                             <div className="space-y-4 text-sm font-medium">
                                                 <button
@@ -964,9 +1130,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-pink-400 font-black tracking-wider">[apodo]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-pink-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-pink-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Usa el apodo o el primer nombre.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_apodo_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -975,9 +1141,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-blue-400 font-black tracking-wider">[cliente]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Nombre completo del cliente.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_cliente_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -986,9 +1152,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-emerald-400 font-black tracking-wider">[vehiculo]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Marca y modelo.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_vehiculo_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -997,9 +1163,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-indigo-400 font-black tracking-wider">[turno_fecha]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-indigo-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-indigo-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Fecha y hora del turno.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_turno_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -1008,9 +1174,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-blue-400 font-black tracking-wider">[link]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-blue-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Link de seguimiento.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_link_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -1019,9 +1185,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-amber-400 font-black tracking-wider">[items]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-amber-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-amber-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Lista de trabajos realizados.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_items_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -1030,9 +1196,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-emerald-400 font-black tracking-wider">[total]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Total de la orden.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_total_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -1041,9 +1207,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-purple-400 font-black tracking-wider">[usuario]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-purple-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-purple-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Nombre y apellido del empleado o mecánico.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_usuario_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -1052,8 +1218,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-slate-200 font-black tracking-wider">[taller]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-slate-200">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-slate-200">{t('insert')}</span>
                                                     </div>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_taller_desc')}</p>
                                                 </button>
 
                                                 <button
@@ -1062,9 +1229,9 @@ export default function SettingsPage() {
                                                 >
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-emerald-400 font-black tracking-wider">[datos_contacto_taller]</span>
-                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">Insertar</span>
+                                                        <span className="text-[10px] text-slate-500 font-bold uppercase group-hover:text-emerald-400">{t('insert')}</span>
                                                     </div>
-                                                    <p className="text-slate-400 text-xs mt-1">Email, Tel y Dirección del taller.</p>
+                                                    <p className="text-slate-400 text-xs mt-1">{t('token_contacto_desc')}</p>
                                                 </button>
                                             </div>
                                         </div>
@@ -1079,10 +1246,10 @@ export default function SettingsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         <div className="md:col-span-1">
                             <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 sticky top-24">
-                                <h3 className="text-xl font-bold text-slate-800">Cargar Servicio</h3>
+                                <h3 className="text-xl font-bold text-slate-800">{t('load_service')}</h3>
                                 <form onSubmit={handleAddService} className="space-y-4">
                                     <div className="space-y-1">
-                                        <label className="text-sm font-bold text-slate-600">Nombre del Servicio</label>
+                                        <label className="text-sm font-bold text-slate-600">{t('service_name')}</label>
                                         <input
                                             required
                                             className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-900 font-bold bg-slate-50/50"
@@ -1092,7 +1259,7 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-sm font-bold text-slate-600">Precio Base ($)</label>
+                                        <label className="text-sm font-bold text-slate-600">{t('base_price_label')}</label>
                                         <input
                                             type="number"
                                             className="w-full px-4 py-3 rounded-xl border border-slate-200 text-slate-900 font-bold bg-slate-50/50"
@@ -1102,7 +1269,7 @@ export default function SettingsPage() {
                                         />
                                     </div>
                                     <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
-                                        <Plus size={20} /> Agregar al Catálogo
+                                        <Plus size={20} /> {t('add_to_catalog')}
                                     </button>
                                 </form>
                             </section>
@@ -1113,9 +1280,9 @@ export default function SettingsPage() {
                                 <table className="w-full text-left">
                                     <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-widest border-b border-slate-100">
                                         <tr>
-                                            <th className="px-8 py-5">Servicio / Tarea</th>
-                                            <th className="px-8 py-5">Mano de Obra Sugerida</th>
-                                            <th className="px-8 py-5 text-right">Acciones</th>
+                                            <th className="px-8 py-5">{t('service_task')}</th>
+                                            <th className="px-8 py-5">{t('suggested_labor')}</th>
+                                            <th className="px-8 py-5 text-right">{t('actions')}</th>
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-100">
@@ -1124,7 +1291,7 @@ export default function SettingsPage() {
                                         ))}
                                         {services.length === 0 && (
                                             <tr>
-                                                <td colSpan={3} className="px-8 py-10 text-center text-slate-400 italic">No hay servicios cargados aún.</td>
+                                                <td colSpan={3} className="px-8 py-10 text-center text-slate-400 italic">{t('no_services_found')}</td>
                                             </tr>
                                         )}
                                     </tbody>
@@ -1136,32 +1303,32 @@ export default function SettingsPage() {
                 }
 
                 {
-                    activeTab === 'users' && hasPermission('usuarios') && (
+                    activeTab === 'users' && hasPermission('users') && (
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                             <div className="md:col-span-1">
                                 <section className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-6 sticky top-24">
-                                    <h3 className="text-xl font-bold text-slate-800">Crear Usuario</h3>
+                                    <h3 className="text-xl font-bold text-slate-800">{t('create_user')}</h3>
                                     <form onSubmit={handleCreateUser} className="space-y-4">
-                                        <ConfigInput label="Usuario" value={newUser.username} onChange={(v) => setNewUser({ ...newUser, username: v })} />
-                                        <ConfigInput label="Contraseña" type="password" value={newUser.password} onChange={(v) => setNewUser({ ...newUser, password: v })} />
+                                        <ConfigInput label={t('username_label')} value={newUser.username} onChange={(v) => setNewUser({ ...newUser, username: v })} />
+                                        <ConfigInput label={t('password_label')} type="password" value={newUser.password} onChange={(v) => setNewUser({ ...newUser, password: v })} />
                                         <div className="grid grid-cols-2 gap-4">
-                                            <ConfigInput label="Nombre" value={newUser.first_name} onChange={(v) => setNewUser({ ...newUser, first_name: v })} />
-                                            <ConfigInput label="Apellido" value={newUser.last_name} onChange={(v) => setNewUser({ ...newUser, last_name: v })} />
+                                            <ConfigInput label={t('first_name')} value={newUser.first_name} onChange={(v) => setNewUser({ ...newUser, first_name: v })} />
+                                            <ConfigInput label={t('last_name')} value={newUser.last_name} onChange={(v) => setNewUser({ ...newUser, last_name: v })} />
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-sm font-bold text-slate-900 ml-1">Rol</label>
+                                            <label className="text-sm font-bold text-slate-900 ml-1">{t('role_label')}</label>
                                             <select
                                                 className="w-full px-5 py-3 rounded-xl border border-slate-200 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all bg-slate-50/50 text-slate-900 font-bold"
                                                 value={newUser.role_id}
                                                 onChange={(e) => setNewUser({ ...newUser, role_id: e.target.value })}
                                                 required
                                             >
-                                                <option value="">Seleccionar Rol</option>
+                                                <option value="">{t('select_role')}</option>
                                                 {roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
                                             </select>
                                         </div>
                                         <button type="submit" className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-100 flex items-center justify-center gap-2">
-                                            <Plus size={20} /> Crear Usuario
+                                            <Plus size={20} /> {t('create_user')}
                                         </button>
                                     </form>
                                 </section>
@@ -1171,10 +1338,10 @@ export default function SettingsPage() {
                                     <table className="w-full text-left">
                                         <thead className="bg-slate-50 text-slate-400 text-xs font-bold uppercase tracking-widest border-b border-slate-100">
                                             <tr>
-                                                <th className="px-8 py-5">Usuario</th>
-                                                <th className="px-8 py-5">Nombre / Apellido</th>
-                                                <th className="px-8 py-5">Rol Actual</th>
-                                                <th className="px-8 py-5 text-right">Acciones</th>
+                                                <th className="px-8 py-5">{t('username_label')}</th>
+                                                <th className="px-8 py-5">{t('full_name')}</th>
+                                                <th className="px-8 py-5">{t('current_role')}</th>
+                                                <th className="px-8 py-5 text-right">{t('actions')}</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -1193,9 +1360,9 @@ export default function SettingsPage() {
                     activeTab === 'roles' && hasPermission('roles') && (
                         <div className="space-y-8">
                             <div className="flex justify-between items-center">
-                                <h3 className="text-2xl font-bold text-slate-800 italic uppercase">Editor de Roles y Permisos</h3>
+                                <h3 className="text-2xl font-bold text-slate-800 italic uppercase">{t('audit_editor_title')}</h3>
                                 <button onClick={handleCreateRole} className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 shadow-lg flex items-center gap-2">
-                                    <Plus size={16} /> Nuevo Rol
+                                    <Plus size={16} /> {t('new_role')}
                                 </button>
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1209,6 +1376,7 @@ export default function SettingsPage() {
                                             const hasPerm = isAdminUser || (currentUser?.permissions && currentUser.permissions.includes(p));
                                             return isModuleEnabled && hasPerm;
                                         })}
+                                        permissionLabels={permissionLabels}
                                         onUpdate={handleUpdateRole}
                                         onDelete={handleDeleteRole}
                                     />
@@ -1222,8 +1390,8 @@ export default function SettingsPage() {
                     activeTab === 'appearance' && (
                         <div className="max-w-4xl space-y-8">
                             <div>
-                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">Apariencia</h3>
-                                <p className="text-slate-500 text-sm mt-1 font-bold">Elegí el tema visual de tu taller. Este cambio se aplicará a todos tus usuarios y al Portal del Cliente.</p>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">{t('appearance_tab')}</h3>
+                                <p className="text-slate-500 text-sm mt-1 font-bold">{t('appearance_desc')}</p>
                             </div>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1264,7 +1432,7 @@ export default function SettingsPage() {
                                                             </span>
                                                         </div>
                                                         <p className="text-xs mt-1 font-bold" style={{ color: theme.preview.accent, opacity: 0.8 }}>
-                                                            {theme.description}
+                                                            {t(`theme_${theme.id}_desc`)}
                                                         </p>
                                                     </div>
                                                     {active && (
@@ -1542,7 +1710,7 @@ function UserRow({ userItem, roles, onUpdate, onDelete }: { userItem: any, roles
     );
 }
 
-function RoleCard({ role, permissionsList, onUpdate, onDelete }: { role: any, permissionsList: string[], onUpdate: (id: number, data: any) => void, onDelete: (id: number) => void }) {
+function RoleCard({ role, permissionsList, permissionLabels, onUpdate, onDelete }: { role: any, permissionsList: string[], permissionLabels: { [key: string]: string }, onUpdate: (id: number, data: any) => void, onDelete: (id: number) => void }) {
     const isSystemAdmin = role.name.toLowerCase() === 'admin' || role.name.toLowerCase() === 'administrador';
     const [editingName, setEditingName] = useState(false);
     const [name, setName] = useState(role.name);
@@ -1596,7 +1764,7 @@ function RoleCard({ role, permissionsList, onUpdate, onDelete }: { role: any, pe
                     {permissionsList.map(perm => (
                         <div key={perm} className="flex items-center justify-between group">
                             <span className={`text-xs font-bold uppercase tracking-wider ${role.permissions.includes(perm) ? 'text-slate-800' : 'text-slate-400'}`}>
-                                {perm.replace('_', ' ')}
+                                {permissionLabels[perm] || perm.replace('_', ' ')}
                             </span>
                             <div
                                 onClick={() => togglePermission(perm)}

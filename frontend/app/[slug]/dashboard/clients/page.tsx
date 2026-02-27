@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Plus, Search, User, Phone, Mail, X, Car, Hash, Calendar, ArrowRight, MapPin, Notebook } from 'lucide-react';
 import { useNotification } from '@/lib/notification';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 
 export default function ClientsPage() {
     const { slug } = useSlug();
@@ -16,13 +17,13 @@ export default function ClientsPage() {
     const [search, setSearch] = useState('');
     const { notify } = useNotification();
     const { hasPermission } = useAuth();
-
-    if (!hasPermission('clientes')) {
+    const { t } = useTranslation();
+    if (!hasPermission('clients')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
                 <User size={48} className="mb-4 opacity-20" />
-                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
-                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+                <p className="font-bold uppercase tracking-widest text-xs">{t('module_not_enabled')}</p>
+                <p className="text-[10px] mt-2 italic">{t('contact_admin_to_activate')}</p>
             </div>
         );
     }
@@ -71,7 +72,7 @@ export default function ClientsPage() {
             await api.post('/clients', payload);
             setShowModal(false);
             fetchClients();
-            notify('success', 'Cliente registrado exitosamente');
+            notify('success', t('client_registered_success'));
             // Reset form
             setFormData({
                 first_name: '', last_name: '', nickname: '', phone: '', email: '', address: '', notes: '',
@@ -98,15 +99,15 @@ export default function ClientsPage() {
         <div className="space-y-6">
             <header className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Clientes</h2>
-                    <p className="text-slate-500">Gestioná tu base de datos de clientes y sus vehículos.</p>
+                    <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{t('clients')}</h2>
+                    <p className="text-slate-500">{t('clients_management').toLowerCase()}</p>
                 </div>
                 <button
                     onClick={() => setShowModal(true)}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-blue-100 transition-all font-bold"
                 >
                     <Plus size={20} />
-                    <span>Nuevo Cliente</span>
+                    <span>{t('new_client')}</span>
                 </button>
             </header>
 
@@ -116,7 +117,7 @@ export default function ClientsPage() {
                 </div>
                 <input
                     type="text"
-                    placeholder="Buscar por nombre, apellido, apodo, teléfono o email..."
+                    placeholder={t('search_clients_placeholder')}
                     className="bg-transparent border-none outline-none w-full text-slate-900 font-bold p-2 placeholder-slate-400"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
@@ -125,11 +126,11 @@ export default function ClientsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {loading ? (
-                    <p className="col-span-full text-center py-20 text-slate-400 font-bold italic">Cargando base de datos...</p>
+                    <p className="col-span-full text-center py-20 text-slate-400 font-bold italic">{t('loading_database')}</p>
                 ) : filteredClients.length === 0 ? (
                     <div className="col-span-full py-20 text-center bg-white rounded-3xl border border-dashed border-slate-200">
                         <User size={48} className="mx-auto text-slate-300 mb-4" />
-                        <p className="text-slate-500 font-medium">No se encontraron clientes.</p>
+                        <p className="text-slate-500 font-medium">{t('no_clients_found')}</p>
                     </div>
                 ) : (
                     filteredClients.map(client => (
@@ -166,7 +167,7 @@ export default function ClientsPage() {
                                 </div>
                             </div>
                             <div className="bg-slate-50 px-6 py-3 border-t border-slate-100 flex justify-between items-center group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                <span className="text-[10px] font-black uppercase tracking-widest">Ver Detalles</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest">{t('view')} {t('details')}</span>
                                 <ArrowRight size={16} />
                             </div>
                         </Link>
@@ -180,8 +181,8 @@ export default function ClientsPage() {
                     <div className="bg-white rounded-[40px] shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in duration-300">
                         <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                             <div>
-                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">Nuevo Cliente</h3>
-                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Alta de legajo en el taller</p>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">{t('new_client')}</h3>
+                                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">{t('personal_data')}</p>
                             </div>
                             <button onClick={() => setShowModal(false)} className="bg-white p-3 rounded-2xl text-slate-400 hover:text-slate-900 hover:rotate-90 transition-all shadow-sm border border-slate-100">
                                 <X size={24} />
@@ -193,31 +194,31 @@ export default function ClientsPage() {
                             <section className="space-y-6">
                                 <div className="flex items-center gap-3 mb-2">
                                     <User className="text-blue-600" size={24} />
-                                    <h4 className="font-black text-slate-900 uppercase tracking-tight">Datos Personales</h4>
+                                    <h4 className="font-black text-slate-900 uppercase tracking-tight">{t('personal_data')}</h4>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Nombre</label>
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('first_name')}</label>
                                         <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all" value={formData.first_name} onChange={e => setFormData({ ...formData, first_name: e.target.value })} />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Apellido</label>
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('last_name')}</label>
                                         <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all" value={formData.last_name} onChange={e => setFormData({ ...formData, last_name: e.target.value })} />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Apodo (Opcional)</label>
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('nickname_optional')}</label>
                                         <input className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all" value={formData.nickname} onChange={e => setFormData({ ...formData, nickname: e.target.value })} />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Teléfono</label>
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('phone')}</label>
                                         <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Email</label>
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('email')}</label>
                                         <input type="email" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Dirección</label>
+                                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('address')}</label>
                                         <input className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} />
                                     </div>
                                 </div>
@@ -228,7 +229,7 @@ export default function ClientsPage() {
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-3">
                                         <Car className="text-emerald-500" size={24} />
-                                        <h4 className="font-black text-slate-900 uppercase tracking-tight">Vehículo Principal</h4>
+                                        <h4 className="font-black text-slate-900 uppercase tracking-tight">{t('main_vehicle')}</h4>
                                     </div>
                                     <label className="flex items-center gap-3 cursor-pointer group">
                                         <div className="relative">
@@ -236,30 +237,30 @@ export default function ClientsPage() {
                                             <div className={`w-10 h-5 rounded-full transition-colors ${formData.addVehicle ? 'bg-emerald-500' : 'bg-slate-200'}`}></div>
                                             <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${formData.addVehicle ? 'translate-x-5' : ''}`}></div>
                                         </div>
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-emerald-500 transition-colors">Vincular Vehículo</span>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-emerald-500 transition-colors">{t('link_vehicle')}</span>
                                     </label>
                                 </div>
 
                                 {formData.addVehicle && (
                                     <div className="grid grid-cols-1 md:grid-cols-5 gap-6 animate-in fade-in slide-in-from-top-4 duration-300">
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Patente</label>
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('plate')}</label>
                                             <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-black text-slate-900 uppercase italic outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.plate} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, plate: e.target.value } })} />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Marca</label>
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('brand')}</label>
                                             <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.brand} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, brand: e.target.value } })} />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Modelo</label>
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('model')}</label>
                                             <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.model} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, model: e.target.value } })} />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Año</label>
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('year')}</label>
                                             <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.year} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, year: e.target.value } })} />
                                         </div>
                                         <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">KM</label>
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('km')}</label>
                                             <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.km} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, km: e.target.value } })} />
                                         </div>
                                     </div>
@@ -267,9 +268,9 @@ export default function ClientsPage() {
                             </section>
 
                             <div className="pt-8 border-t border-slate-100 flex justify-end gap-4">
-                                <button type="button" onClick={() => setShowModal(false)} className="px-8 py-4 text-slate-400 font-bold hover:text-slate-900 transition-colors">Cancelar</button>
+                                <button type="button" onClick={() => setShowModal(false)} className="px-8 py-4 text-slate-400 font-bold hover:text-slate-900 transition-colors">{t('cancel')}</button>
                                 <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-4 rounded-2xl font-black shadow-2xl shadow-blue-200 transition-all transform hover:-translate-y-1 active:scale-95 uppercase tracking-widest">
-                                    Registrar Cliente
+                                    {t('register_client')}
                                 </button>
                             </div>
                         </form>

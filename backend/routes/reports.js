@@ -54,7 +54,7 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
             SUM(oi.parts_profit) as parts_profit
           FROM orders o
           JOIN order_items oi ON o.id = oi.order_id
-          WHERE o.payment_status IN ('cobrado', 'parcial')
+          WHERE o.payment_status IN ('paid', 'partial')
           GROUP BY month
           ORDER BY month DESC
           LIMIT 12
@@ -68,7 +68,7 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
             SUM(oi.parts_profit) as parts_profit_total
           FROM orders o
           JOIN order_items oi ON o.id = oi.order_id
-          WHERE o.payment_status IN ('cobrado', 'parcial')
+          WHERE o.payment_status IN ('paid', 'partial')
         `).get();
 
         // 1.2 Monthly Totals (Current Month)
@@ -79,7 +79,7 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
             SUM(oi.parts_profit) as parts_profit_total
           FROM orders o
           JOIN order_items oi ON o.id = oi.order_id
-          WHERE o.payment_status IN ('cobrado', 'parcial')
+          WHERE o.payment_status IN ('paid', 'partial')
           AND strftime('%Y-%m', o.updated_at) = strftime('%Y-%m', 'now')
         `).get();
 
@@ -91,7 +91,6 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
         }
 
         // 2. Orders by Status
-        // ... (rest of the code remains similar but we return new fields)
         const ordersByStatus = req.db.prepare(`
           SELECT status, COUNT(*) as count
           FROM orders
@@ -102,7 +101,7 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
             SELECT SUM(oi.labor_price + (CASE WHEN ? = 1 THEN oi.parts_profit ELSE 0 END)) as total
             FROM orders o
             JOIN order_items oi ON o.id = oi.order_id
-            WHERE o.status = 'Listo para entrega'
+            WHERE o.status = 'ready'
         `).get(includeParts).total || 0;
 
         const commonServices = req.db.prepare(`
@@ -128,13 +127,13 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
         `).get().count;
 
         const assignedAppointmentsCount = req.db.prepare(`
-          SELECT COUNT(*) as count FROM orders WHERE status = 'Turno asignado'
+          SELECT COUNT(*) as count FROM orders WHERE status = 'appointment'
         `).get().count;
 
         const unreadMessagesCount = req.db.prepare(`
             SELECT COUNT(*) as count 
             FROM order_history 
-            WHERE status = 'Respuesta Recibida' AND (is_read = 0 OR is_read IS NULL)
+            WHERE status = 'response_received' AND (is_read = 0 OR is_read IS NULL)
         `).get().count;
 
         res.json({
@@ -157,7 +156,7 @@ router.get('/dashboard', auth, hasPermission('dashboard'), (req, res) => {
 });
 
 // @route   GET api/reports/income-daily
-router.get('/income-daily', auth, hasPermission('ingresos'), (req, res) => {
+router.get('/income-daily', auth, hasPermission('income'), (req, res) => {
     const { month } = req.query; // YYYY-MM
 
     // Use local date to avoid UTC timezone month shift
@@ -177,7 +176,7 @@ router.get('/income-daily', auth, hasPermission('ingresos'), (req, res) => {
                 SUM(oi.parts_profit) as parts_profit
             FROM orders o
             JOIN order_items oi ON o.id = oi.order_id
-            WHERE o.payment_status IN ('cobrado', 'parcial')
+            WHERE o.payment_status IN ('paid', 'partial')
             AND strftime('%Y-%m', o.updated_at) = ?
             GROUP BY day
             ORDER BY day ASC
@@ -191,7 +190,7 @@ router.get('/income-daily', auth, hasPermission('ingresos'), (req, res) => {
 });
 
 // @route   GET api/reports/orders-status
-router.get('/orders-status', auth, hasPermission('ingresos'), (req, res) => {
+router.get('/orders-status', auth, hasPermission('income'), (req, res) => {
     try {
         const ordersByStatus = req.db.prepare(`
             SELECT status, COUNT(*) as count
@@ -206,7 +205,7 @@ router.get('/orders-status', auth, hasPermission('ingresos'), (req, res) => {
 });
 
 // @route   GET api/reports/top-customers
-router.get('/top-customers', auth, hasPermission('ingresos'), (req, res) => {
+router.get('/top-customers', auth, hasPermission('income'), (req, res) => {
     try {
         const topCustomers = req.db.prepare(`
             SELECT c.first_name || ' ' || c.last_name AS name, SUM(o.payment_amount) as total
@@ -225,10 +224,10 @@ router.get('/top-customers', auth, hasPermission('ingresos'), (req, res) => {
 
 
 // @route   GET api/reports/reminders
-router.get('/reminders', auth, hasPermission('recordatorios'), (req, res) => {
+router.get('/reminders', auth, hasPermission('reminders'), (req, res) => {
     const tab = req.query.tab || 'today';
     try {
-        let whereClause = "WHERE o.reminder_at IS NOT NULL AND o.status = 'Entregado'";
+        let whereClause = "WHERE o.reminder_at IS NOT NULL AND o.status = 'delivered'";
         const todayStr = "date('now', 'localtime')";
         const tomorrowStr = "date('now', '+1 day', 'localtime')";
         const lastWeekStr = "date('now', '-7 days', 'localtime')";
@@ -277,7 +276,7 @@ router.get('/reminders', auth, hasPermission('recordatorios'), (req, res) => {
 });
 
 // @route   PATCH api/reports/reminders/:orderId/date
-router.patch('/reminders/:orderId/date', auth, hasPermission('recordatorios'), (req, res) => {
+router.patch('/reminders/:orderId/date', auth, hasPermission('reminders'), (req, res) => {
     const { date } = req.body;
     try {
         req.db.prepare('UPDATE orders SET reminder_at = ? WHERE id = ?').run(
@@ -292,7 +291,7 @@ router.patch('/reminders/:orderId/date', auth, hasPermission('recordatorios'), (
 });
 
 // @route   POST api/reports/reminders/send-bulk
-router.post('/reminders/send-bulk', auth, hasPermission('recordatorios'), async (req, res) => {
+router.post('/reminders/send-bulk', auth, hasPermission('reminders'), async (req, res) => {
     const { orderIds } = req.body;
     if (!Array.isArray(orderIds) || orderIds.length === 0) {
         return res.status(400).json({ message: 'No order IDs provided' });

@@ -134,11 +134,11 @@ router.post('/orders', auth, (req, res) => {
 
         const result = req.db.prepare(`
             INSERT INTO orders (client_id, vehicle_id, description, status, created_by_id, share_token) 
-            VALUES (?, ?, ?, 'Pendiente', NULL, ?)
+            VALUES (?, ?, ?, 'pending', NULL, ?)
         `).run(client.id, vehicle_id, description || '', share_token);
 
         req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, NULL)')
-            .run(result.lastInsertRowid, 'Pendiente', 'Turno solicitado por el cliente desde el portal');
+            .run(result.lastInsertRowid, 'pending', 'Turno solicitado por el cliente desde el portal');
 
         res.json({ id: result.lastInsertRowid, message: 'Turno solicitado correctamente' });
     } catch (err) {

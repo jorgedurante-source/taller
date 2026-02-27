@@ -18,6 +18,7 @@ db.exec(`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
+        language TEXT DEFAULT 'es',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -38,7 +39,7 @@ db.exec(`
         super_user_id INTEGER,
         super_user_name TEXT,
         action TEXT NOT NULL,
-        entity_type TEXT, -- 'workshop', 'settings', etc.
+        entity_type TEXT,
         entity_id TEXT,
         details TEXT,
         ip_address TEXT,
@@ -50,9 +51,22 @@ db.exec(`
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         title TEXT NOT NULL,
         content TEXT NOT NULL,
-        type TEXT DEFAULT 'info', -- 'info', 'warning', 'success', 'error'
+        type TEXT DEFAULT 'info',
         is_active INTEGER DEFAULT 1,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS support_tickets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        workshop_slug TEXT NOT NULL,
+        workshop_name TEXT NOT NULL,
+        user_name TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        message TEXT NOT NULL,
+        reply TEXT,
+        status TEXT DEFAULT 'open',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 `);
 
@@ -62,11 +76,7 @@ function addColumn(table, column, type) {
         db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
         console.log(`[super] Migration: Added column ${column} to ${table}`);
     } catch (e) {
-        if (e.message.includes('duplicate column name')) {
-            // Already exists
-        } else {
-            console.error(`[super] Migration error adding ${column} to ${table}:`, e.message);
-        }
+        // Ignore duplicate column errors
     }
 }
 
@@ -74,50 +84,26 @@ addColumn('workshops', 'status', "TEXT DEFAULT 'active'");
 addColumn('workshops', 'api_token', 'TEXT');
 addColumn('workshops', 'logo_path', 'TEXT');
 addColumn('workshops', 'environment', "TEXT DEFAULT 'prod'");
-addColumn('workshops', 'enabled_modules', "TEXT DEFAULT '[\"dashboard\", \"clientes\", \"vehiculos\", \"ordenes\", \"ingresos\", \"configuracion\", \"usuarios\", \"roles\", \"recordatorios\", \"turnos\", \"proveedores\"]'");
+addColumn('workshops', 'enabled_modules', "TEXT DEFAULT '[\"dashboard\", \"clients\", \"vehicles\", \"orders\", \"income\", \"settings\", \"users\", \"roles\", \"reminders\", \"appointments\", \"suppliers\", \"audit\"]'");
+addColumn('super_users', 'last_activity', 'DATETIME');
+addColumn('super_users', 'language', "TEXT DEFAULT 'es'");
+
+// Initial global settings for timeouts
+function ensureSetting(key, defaultValue) {
+    const exists = db.prepare("SELECT key FROM global_settings WHERE key = ?").get(key);
+    if (!exists) {
+        db.prepare("INSERT INTO global_settings (key, value) VALUES (?, ?)").run(key, defaultValue);
+    }
+}
+ensureSetting('user_session_timeout', '60');
+ensureSetting('superadmin_session_timeout', '120');
 
 // Ensure unique index for token
 try {
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_workshops_api_token ON workshops(api_token)");
-} catch (e) {
-    // If there were duplicate nulls, this might fail, but since it's a new migration it should be fine
-}
+} catch (e) { }
 
-// 3. Ensure all workshops have tokens
-try {
-    const workshopsWithoutTokens = db.prepare("SELECT slug FROM workshops WHERE api_token IS NULL").all();
-    workshopsWithoutTokens.forEach(w => {
-        const token = crypto.randomBytes(32).toString('hex');
-        db.prepare("UPDATE workshops SET api_token = ? WHERE slug = ?").run(token, w.slug);
-        console.log(`[super] Generated missing token for: ${w.slug}`);
-    });
-} catch (e) {
-    console.error("[super] Error generating tokens:", e.message);
-}
-
-// 4. Seed Settings
-const seedSetting = (key, value) => {
-    try {
-        const exists = db.prepare("SELECT key FROM global_settings WHERE key = ?").get(key);
-        if (!exists) {
-            db.prepare("INSERT INTO global_settings (key, value) VALUES (?, ?)").run(key, value);
-        }
-    } catch (e) {
-        console.error(`[super] Error seeding setting ${key}:`, e.message);
-    }
-};
-
-seedSetting('product_name', 'MechHub');
-seedSetting('maintenance_mode', 'false');
-seedSetting('allow_new_registrations', 'true');
-seedSetting('support_email', 'soporte@surforge.com');
-seedSetting('system_currency', '$');
-seedSetting('superadmin_theme', 'default');
-seedSetting('backup_enabled', 'false');
-seedSetting('backup_frequency', 'daily');
-seedSetting('backup_retention', '7');
-
-// 5. Seed Superuser
+// Seed Superuser
 try {
     const existing = db.prepare("SELECT id FROM super_users WHERE username = 'superuser'").get();
     if (!existing) {
@@ -129,64 +115,44 @@ try {
     console.error("[super] Error seeding superuser:", e.message);
 }
 
-// --- DATA MIGRATION: Normalize workshops' enabled_modules to Spanish ---
+// Ensure English categories in enabled_modules
 try {
     const workshops = db.prepare('SELECT id, slug, enabled_modules FROM workshops').all();
-    const mapping = {
-        'inventory': ['clientes', 'vehiculos'],
-        'appointments': ['turnos'],
-        'income': ['ingresos'],
-        'reports': ['recordatorios'],
-        'settings': ['configuracion', 'usuarios', 'roles'],
-        'clients': ['clientes'],
-        'vehicles': ['vehiculos'],
-        'orders': ['ordenes'],
-        'reminders': ['recordatorios'],
-        'suppliers': ['proveedores']
+    const reverseMapping = {
+        'clientes': 'clients',
+        'vehiculos': 'vehicles',
+        'ordenes': 'orders',
+        'ingresos': 'income',
+        'configuracion': 'settings',
+        'usuarios': 'users',
+        'roles': 'roles',
+        'recordatorios': 'reminders',
+        'turnos': 'appointments',
+        'proveedores': 'suppliers',
+        'auditoria': 'audit'
     };
 
     workshops.forEach(w => {
         if (!w.enabled_modules) return;
         let modules = [];
-        try {
-            modules = JSON.parse(w.enabled_modules || '[]');
-        } catch (e) {
-            return;
-        }
+        try { modules = JSON.parse(w.enabled_modules || '[]'); } catch (e) { return; }
 
         let migrated = false;
-        let newModules = [];
-
-        // Add 'dashboard' if missing
-        if (!modules.includes('dashboard')) {
-            modules.push('dashboard');
-            migrated = true;
-        }
-
-        modules.forEach(m => {
-            if (mapping[m]) {
-                newModules.push(...mapping[m]);
+        let fixedModules = modules.map(m => {
+            if (reverseMapping[m]) {
                 migrated = true;
-            } else if (!newModules.includes(m)) {
-                newModules.push(m);
+                return reverseMapping[m];
             }
+            return m;
         });
 
-        // Extra check: if 'configuracion' is enabled, ensure 'usuarios' and 'roles' are too
-        if (newModules.includes('configuracion')) {
-            if (!newModules.includes('usuarios')) { newModules.push('usuarios'); migrated = true; }
-            if (!newModules.includes('roles')) { newModules.push('roles'); migrated = true; }
-        }
-
         if (migrated) {
-            const finalModules = Array.from(new Set(newModules));
+            const finalModules = Array.from(new Set(fixedModules));
             db.prepare('UPDATE workshops SET enabled_modules = ? WHERE id = ?').run(JSON.stringify(finalModules), w.id);
-            console.log(`[super] Migrated workshop '${w.slug}' enabled_modules to Spanish`);
+            console.log(`[super] Refactored workshop '${w.slug}' modules to English`);
         }
     });
-} catch (e) {
-    console.error(`[super] Error migrating workshops enabled_modules:`, e.message);
-}
+} catch (e) { }
 
 db.generateApiToken = () => crypto.randomBytes(32).toString('hex');
 

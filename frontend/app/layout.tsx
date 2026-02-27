@@ -6,11 +6,12 @@ import { AuthProvider } from "@/lib/auth";
 import ThemeProvider from "@/lib/theme";
 import { ConfigProvider } from "@/lib/config";
 import { NotificationProvider } from "@/lib/notification";
+import { LanguageProvider } from "@/lib/i18n";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Sistema de Gestión de Talleres",
+  title: "MechHub - Sistema de Gestión de Talleres",
   description: "Optimiza el flujo de trabajo de tu taller mecánico.",
 };
 
@@ -28,12 +29,14 @@ export default function RootLayout({
         <ConfigProvider>
           <NotificationProvider>
             <AuthProvider>
-              <ThemeProvider>
-                <main className="flex-grow">
-                  {children}
-                </main>
-                <Footer />
-              </ThemeProvider>
+              <LanguageProvider>
+                <ThemeProvider>
+                  <main className="flex-grow">
+                    {children}
+                  </main>
+                  <Footer />
+                </ThemeProvider>
+              </LanguageProvider>
             </AuthProvider>
           </NotificationProvider>
         </ConfigProvider>

@@ -19,6 +19,7 @@ import {
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useSlug } from '@/lib/slug';
+import { useTranslation } from '@/lib/i18n';
 
 export default function OrdersPage() {
     const { slug } = useSlug();
@@ -28,19 +29,20 @@ export default function OrdersPage() {
     const [showAll, setShowAll] = useState(false);
     const [onlyUnread, setOnlyUnread] = useState(false);
     const { hasPermission } = useAuth();
-    const canSeeIncome = hasPermission('ingresos');
+    const { t } = useTranslation();
+    const canSeeIncome = hasPermission('income');
 
     const searchParams = useSearchParams();
     const statusParam = searchParams.get('status');
     const historyParam = searchParams.get('showHistory');
     const filterParam = searchParams.get('filter');
 
-    if (!hasPermission('ordenes')) {
+    if (!hasPermission('orders')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
                 <ClipboardList size={48} className="mb-4 opacity-20" />
-                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
-                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+                <p className="font-bold uppercase tracking-widest text-xs">{t('module_not_enabled')}</p>
+                <p className="text-[10px] mt-2 italic">{t('contact_admin_to_activate')}</p>
             </div>
         );
     }
@@ -50,11 +52,11 @@ export default function OrdersPage() {
         if (statusParam) setSearch(statusParam);
         if (filterParam === 'finished') {
             setShowAll(true);
-            setSearch('Entregado');
+            setSearch('delivered');
         }
         if (filterParam === 'active_work') {
             setShowAll(false);
-            setSearch('Apro'); // Will match Aprobado
+            setSearch('approved');
         }
         if (filterParam === 'unread') {
             setOnlyUnread(true);
@@ -90,23 +92,24 @@ export default function OrdersPage() {
 
         if (showAll) {
             // History mode: only delivered orders
-            return matchesSearch && o.status === 'Entregado';
+            return matchesSearch && o.status === 'delivered';
         }
 
-        // Default: all active orders (everything except Entregado)
-        return matchesSearch && o.status !== 'Entregado';
+        // Default: all active orders (everything except delivered)
+        return matchesSearch && o.status !== 'delivered';
     });
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'Pendiente': return 'bg-slate-100 text-slate-600';
-            case 'Turno asignado': return 'bg-purple-100 text-purple-700';
-            case 'Aprobado': return 'bg-emerald-100 text-emerald-700';
-            case 'En proceso':
-            case 'En reparación': return 'bg-amber-100 text-amber-700';
-            case 'Presupuestado': return 'bg-blue-100 text-blue-700';
-            case 'Listo para entrega': return 'bg-indigo-100 text-indigo-700';
-            case 'Entregado': return 'bg-slate-900 text-white';
+            case 'pending': return 'bg-slate-100 text-slate-600';
+            case 'appointment': return 'bg-purple-100 text-purple-700';
+            case 'approved': return 'bg-emerald-100 text-emerald-700';
+            case 'in_repair':
+            case 'in_progress': return 'bg-amber-100 text-amber-700';
+            case 'quoted': return 'bg-blue-100 text-blue-700';
+            case 'ready': return 'bg-indigo-100 text-indigo-700';
+            case 'waiting_parts': return 'bg-rose-100 text-rose-700';
+            case 'delivered': return 'bg-slate-900 text-white';
             default: return 'bg-slate-50 text-slate-500';
         }
     };
@@ -115,24 +118,24 @@ export default function OrdersPage() {
         if (!canSeeIncome) return null;
         const { payment_status, payment_amount, order_total } = order;
 
-        if (!payment_status || payment_status === 'sin_cobrar') {
+        if (!payment_status || payment_status === 'unpaid' || payment_status === 'sin_cobrar') {
             return (
                 <span className="flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-red-50 text-red-500">
-                    <CircleSlash size={11} /> Sin cobrar
+                    <CircleSlash size={11} /> {t('unpaid')}
                 </span>
             );
         }
-        if (payment_status === 'parcial') {
+        if (payment_status === 'partial') {
             return (
                 <span className="flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-amber-50 text-amber-600">
-                    <CircleDollarSign size={11} /> Parcial ${(payment_amount || 0).toLocaleString('es-AR')}
+                    <CircleDollarSign size={11} /> {t('partial')} ${(payment_amount || 0).toLocaleString('es-AR')}
                 </span>
             );
         }
-        if (payment_status === 'cobrado') {
+        if (payment_status === 'paid') {
             return (
                 <span className="flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-emerald-50 text-emerald-600">
-                    <CheckCircle2 size={11} /> Cobrado ${(payment_amount || 0).toLocaleString('es-AR')}
+                    <CheckCircle2 size={11} /> {t('paid')} ${(payment_amount || 0).toLocaleString('es-AR')}
                 </span>
             );
         }
@@ -143,15 +146,15 @@ export default function OrdersPage() {
         <div className="space-y-6 pb-20">
             <header className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Gestión de Órdenes</h2>
-                    <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">Órdenes de trabajo del taller</p>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">{t('orders_management')}</h2>
+                    <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">{t('orders_description')}</p>
                 </div>
                 <Link
                     href={`/${slug}/dashboard/orders/create`}
                     className="bg-slate-900 text-white px-6 py-3 rounded-xl flex items-center gap-2 font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200"
                 >
                     <Plus size={20} />
-                    <span>NUEVA ORDEN</span>
+                    <span>{t('new_order').toUpperCase()}</span>
                 </Link>
             </header>
 
@@ -162,7 +165,7 @@ export default function OrdersPage() {
                     </div>
                     <input
                         type="text"
-                        placeholder="Buscar por cliente, patente, modelo o estado..."
+                        placeholder={t('search_orders_placeholder')}
                         className="bg-transparent border-none outline-none w-full text-slate-900 font-bold p-2 placeholder-slate-400"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -181,7 +184,7 @@ export default function OrdersPage() {
                             <div className={`w-10 h-5 rounded-full transition-colors ${showAll ? 'bg-blue-600' : 'bg-slate-200'}`}></div>
                             <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${showAll ? 'translate-x-5' : ''}`}></div>
                         </div>
-                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-900 transition-colors">Entregadas</span>
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest group-hover:text-slate-900 transition-colors">{t('history_delivered')}</span>
                     </label>
                 </div>
 
@@ -191,10 +194,10 @@ export default function OrdersPage() {
                         if (!onlyUnread) setShowAll(false);
                     }}
                     className={`bg-white p-4 rounded-2xl border flex items-center gap-2 transition-all ${onlyUnread ? 'border-red-200 text-red-600 bg-red-50' : 'border-slate-100 text-slate-400 hover:text-slate-900'}`}
-                    title="Filtrar por no leídos"
+                    title={t('unread_only')}
                 >
                     <MessageSquare size={20} />
-                    {onlyUnread && <span className="text-[10px] font-black uppercase">Solo no leídos</span>}
+                    {onlyUnread && <span className="text-[10px] font-black uppercase">{t('unread_only')}</span>}
                 </button>
 
                 <button className="bg-white p-4 rounded-2xl border border-slate-100 text-slate-400 hover:text-slate-900 transition-all">
@@ -204,11 +207,11 @@ export default function OrdersPage() {
 
             <div className="grid grid-cols-1 gap-4">
                 {loading ? (
-                    <p className="p-10 text-center text-slate-400 font-bold">Cargando órdenes...</p>
+                    <p className="p-10 text-center text-slate-400 font-bold">{t('loading_orders')}</p>
                 ) : filteredOrders.length === 0 ? (
                     <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
                         <ClipboardList size={48} className="mx-auto text-slate-200 mb-4" />
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">No hay órdenes para mostrar</p>
+                        <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">{t('no_orders')}</p>
                     </div>
                 ) : (
                     filteredOrders.map(order => (
@@ -219,7 +222,7 @@ export default function OrdersPage() {
                                 </div>
                                 <div>
                                     <div className="flex items-center gap-2">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Orden #{order.id}</p>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('orders')} #{order.id}</p>
                                         {order.unread_messages > 0 && (
                                             <span className="flex items-center gap-1 bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[7px] font-black uppercase animate-pulse">
                                                 <MessageSquare size={8} /> {order.unread_messages}
@@ -229,7 +232,7 @@ export default function OrdersPage() {
                                     <h3 className="text-xl font-black text-slate-900 uppercase truncate">{order.client_name}</h3>
                                     {canSeeIncome && order.order_total > 0 && (
                                         <p className="text-[11px] font-black text-slate-400">
-                                            Total orden: <span className="text-slate-700">${Number(order.order_total).toLocaleString('es-AR')}</span>
+                                            {t('total_order')}: <span className="text-slate-700">${Number(order.order_total).toLocaleString('es-AR')}</span>
                                         </p>
                                     )}
                                 </div>
@@ -253,7 +256,7 @@ export default function OrdersPage() {
                             <div className="flex-1 flex items-center justify-between flex-wrap gap-2">
                                 <div className="flex flex-wrap items-center gap-2">
                                     <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest ${getStatusColor(order.status)}`}>
-                                        {order.status}
+                                        {t(order.status)}
                                     </span>
                                     {getPaymentBadge(order)}
                                 </div>
@@ -261,7 +264,7 @@ export default function OrdersPage() {
                                     href={`/${slug}/dashboard/orders/${order.id}`}
                                     className="bg-blue-50 text-blue-600 px-6 py-3 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all flex items-center gap-2"
                                 >
-                                    Detalles <ArrowRight size={14} />
+                                    {t('details')} <ArrowRight size={14} />
                                 </Link>
                             </div>
                         </div>

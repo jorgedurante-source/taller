@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth';
 import api from '@/lib/api';
 import { LogIn, Car, Wrench, UserPlus, MapPin, Clock, Instagram, Phone, MessageCircle } from 'lucide-react';
 import { useConfig } from '@/lib/config';
+import { useTranslation } from '@/lib/i18n';
 import Link from 'next/link';
 import { useRouter, useParams } from 'next/navigation';
 
@@ -16,6 +17,7 @@ export default function ClientLoginPage() {
     const [config, setConfig] = useState<any>(null);
     const { config: globalConfig } = useConfig();
     const { clientLogin, clientUser, loading: authLoading } = useAuth();
+    const { t, setLanguage } = useTranslation();
     const router = useRouter();
     const params = useParams();
     const slug = params?.slug as string || 'demo';
@@ -35,12 +37,15 @@ export default function ClientLoginPage() {
                     res.data.business_hours = JSON.parse(res.data.business_hours);
                 }
                 setConfig(res.data);
+                if (res.data.client_portal_language) {
+                    setLanguage(res.data.client_portal_language);
+                }
             } catch (err) {
                 console.error(err);
             }
         };
         fetchConfig();
-    }, []);
+    }, [setLanguage]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -51,7 +56,7 @@ export default function ClientLoginPage() {
             const response = await api.post('/auth/login', { username, password });
             clientLogin(response.data.token, response.data.user);
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Email o contraseña incorrectos');
+            setError(err.response?.data?.message || t('email_password_incorrect'));
         } finally {
             setLoading(false);
         }
@@ -72,8 +77,8 @@ export default function ClientLoginPage() {
                         </div>
                     )}
                     <div>
-                        <h2 className="text-3xl font-black text-[var(--accent)] leading-tight italic uppercase tracking-tighter">Bienvenido a {config?.workshop_name || 'MechHub'}</h2>
-                        <p className="text-[var(--text-muted)] font-bold text-xs uppercase tracking-widest mt-2 italic">Excelencia en Servicio Automotriz</p>
+                        <h2 className="text-3xl font-black text-[var(--accent)] leading-tight italic uppercase tracking-tighter">{t('welcome_to')} {config?.workshop_name || 'MechHub'}</h2>
+                        <p className="text-[var(--text-muted)] font-bold text-xs uppercase tracking-widest mt-2 italic">{t('excellence_automotive')}</p>
                     </div>
                 </header>
 
@@ -83,8 +88,8 @@ export default function ClientLoginPage() {
                             <MapPin size={24} />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Ubicación</p>
-                            <p className="font-bold text-[var(--text-primary)] leading-relaxed">{config?.address || 'Cargando dirección...'}</p>
+                            <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">{t('location')}</p>
+                            <p className="font-bold text-[var(--text-primary)] leading-relaxed">{config?.address || t('loading')}</p>
                         </div>
                     </div>
 
@@ -93,16 +98,16 @@ export default function ClientLoginPage() {
                             <Clock size={24} />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Horarios de Atención</p>
+                            <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">{t('business_hours_title')}</p>
                             <div className="space-y-1">
                                 {config?.business_hours?.mon_fri && (
-                                    <p className="text-sm font-bold text-[var(--text-muted)]">Lunes a Viernes: <span className="text-[var(--text-primary)]">{config.business_hours.mon_fri}</span></p>
+                                    <p className="text-sm font-bold text-[var(--text-muted)]">{t('mon_fri_label')}: <span className="text-[var(--text-primary)]">{config.business_hours.mon_fri}</span></p>
                                 )}
                                 {config?.business_hours?.sat && (
-                                    <p className="text-sm font-bold text-[var(--text-muted)]">Sábados: <span className="text-[var(--text-primary)]">{config.business_hours.sat}</span></p>
+                                    <p className="text-sm font-bold text-[var(--text-muted)]">{t('sat_label')}: <span className="text-[var(--text-primary)]">{config.business_hours.sat}</span></p>
                                 )}
                                 {config?.business_hours?.sun && (
-                                    <p className="text-sm font-bold text-[var(--text-muted)]">Domingos: <span className="text-[var(--text-primary)]">{config.business_hours.sun}</span></p>
+                                    <p className="text-sm font-bold text-[var(--text-muted)]">{t('sun_label')}: <span className="text-[var(--text-primary)]">{config.business_hours.sun}</span></p>
                                 )}
                             </div>
                         </div>
@@ -114,7 +119,7 @@ export default function ClientLoginPage() {
                                 <Phone size={24} />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">Contacto Directo</p>
+                                <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1">{t('direct_contact')}</p>
                                 <div className="space-y-1">
                                     {config?.whatsapp && (
                                         <div className="flex items-center gap-2">
@@ -140,7 +145,7 @@ export default function ClientLoginPage() {
 
                 <div className="pt-8 border-t border-[var(--border)] flex items-center gap-4 text-[var(--text-muted)]">
                     <div className="bg-[var(--bg-card)] p-2 rounded-lg hover:text-[var(--text-primary)] transition-colors cursor-pointer"><Instagram size={20} /></div>
-                    <p className="text-xs font-bold uppercase tracking-widest">Seguinos en redes</p>
+                    <p className="text-xs font-bold uppercase tracking-widest">{t('follow_us')}</p>
                 </div>
             </div>
 
@@ -156,8 +161,8 @@ export default function ClientLoginPage() {
                             <Car size={32} className="text-white" />
                         </div>
                     </div>
-                    <h1 className="text-3xl font-black italic tracking-tighter relative z-10 uppercase text-[var(--text-primary)]">Portal Clientes</h1>
-                    <p className="mt-2 font-black text-[10px] relative z-10 tracking-widest uppercase text-[var(--text-muted)]">Gestioná tus vehículos y servicios</p>
+                    <h1 className="text-3xl font-black italic tracking-tighter relative z-10 uppercase text-[var(--text-primary)]">{t('client_portal_title')}</h1>
+                    <p className="mt-2 font-black text-[10px] relative z-10 tracking-widest uppercase text-[var(--text-muted)]">{t('manage_vehicles_desc')}</p>
                 </div>
 
                 <div className="p-8 space-y-8">
@@ -170,7 +175,7 @@ export default function ClientLoginPage() {
                         )}
 
                         <div className="space-y-2">
-                            <label className="text-xs font-black text-[var(--text-primary)] ml-1 uppercase tracking-widest">Tu Email</label>
+                            <label className="text-xs font-black text-[var(--text-primary)] ml-1 uppercase tracking-widest">{t('your_email')}</label>
                             <input
                                 type="email"
                                 required
@@ -182,7 +187,7 @@ export default function ClientLoginPage() {
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-black text-[var(--text-primary)] ml-1 uppercase tracking-widest">Contraseña</label>
+                            <label className="text-xs font-black text-[var(--text-primary)] ml-1 uppercase tracking-widest">{t('password')}</label>
                             <input
                                 type="password"
                                 required
@@ -199,10 +204,10 @@ export default function ClientLoginPage() {
                             className="w-full text-white font-black py-5 rounded-2xl shadow-2xl transition-all flex items-center justify-center gap-3 disabled:opacity-50 group uppercase tracking-widest opacity-90 hover:opacity-100"
                             style={{ backgroundColor: 'var(--accent)' }}
                         >
-                            {loading ? 'Ingresando...' : (
+                            {loading ? t('logging_in') : (
                                 <>
                                     <LogIn size={20} className="group-hover:translate-x-1 transition-transform" />
-                                    Entrar a mi Portal
+                                    {t('login_button')}
                                 </>
                             )}
                         </button>
@@ -213,7 +218,7 @@ export default function ClientLoginPage() {
                             <div className="w-full border-t border-[var(--border)]"></div>
                         </div>
                         <div className="relative flex justify-center text-[10px] uppercase">
-                            <span className="bg-[var(--bg-surface)] px-4 text-[var(--text-muted)] font-black tracking-widest">Otras opciones</span>
+                            <span className="bg-[var(--bg-surface)] px-4 text-[var(--text-muted)] font-black tracking-widest">{t('other_options')}</span>
                         </div>
                     </div>
 
@@ -224,7 +229,7 @@ export default function ClientLoginPage() {
                                 className="flex flex-col items-center justify-center p-4 rounded-2xl border border-[var(--border)] hover:border-[var(--accent)] transition-all group"
                             >
                                 <UserPlus size={24} className="text-[var(--text-muted)] group-hover:text-[var(--accent)] mb-2 transition-colors" />
-                                <span className="text-[10px] font-black text-[var(--text-muted)] group-hover:text-[var(--accent)] uppercase">Crear Cuenta</span>
+                                <span className="text-[10px] font-black text-[var(--text-muted)] group-hover:text-[var(--accent)] uppercase">{t('create_account')}</span>
                             </Link>
                         )}
 
@@ -233,7 +238,7 @@ export default function ClientLoginPage() {
                             className="flex flex-col items-center justify-center p-4 rounded-2xl border border-[var(--border)] hover:border-[var(--text-primary)] transition-all group"
                         >
                             <Wrench size={24} className="text-[var(--text-muted)] group-hover:text-[var(--text-primary)] mb-2 transition-colors" />
-                            <span className="text-[10px] font-black text-[var(--text-muted)] group-hover:text-[var(--text-primary)] uppercase">Soy Mecánico</span>
+                            <span className="text-[10px] font-black text-[var(--text-muted)] group-hover:text-[var(--text-primary)] uppercase">{t('i_am_mechanic')}</span>
                         </Link>
                     </div>
                 </div>

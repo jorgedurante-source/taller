@@ -241,3 +241,11 @@ option {
 [data-theme="lavender"] .border-slate-100 {
   border-color: var(--border) !important;
 }
+
+/* --- Dark Mode Alert Overrides (Fix for Ocean visibility) --- */
+[data-theme='obsidian'] .bg-rose-50, [data-theme='ocean'] .bg-rose-50, [data-theme='forest'] .bg-rose-50 { background-color: color-mix(in srgb, #991b1b 15%, var(--bg-surface)) !important; }
+[data-theme='obsidian'] .border-rose-100, [data-theme='ocean'] .border-rose-100, [data-theme='forest'] .border-rose-100 { border-color: #991b1b80 !important; }
+[data-theme='obsidian'] .bg-amber-50, [data-theme='ocean'] .bg-amber-50, [data-theme='forest'] .bg-amber-50 { background-color: color-mix(in srgb, #92400e 15%, var(--bg-surface)) !important; }
+[data-theme='obsidian'] .border-amber-100, [data-theme='ocean'] .border-amber-100, [data-theme='forest'] .border-amber-100 { border-color: #92400e80 !important; }
+[data-theme='obsidian'] .bg-emerald-50, [data-theme='ocean'] .bg-emerald-50, [data-theme='forest'] .bg-emerald-50 { background-color: color-mix(in srgb, #065f46 15%, var(--bg-surface)) !important; }
+[data-theme='obsidian'] .border-emerald-100, [data-theme='ocean'] .border-emerald-100, [data-theme='forest'] .border-emerald-100 { border-color: #065f4680 !important; }

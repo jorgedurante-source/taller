@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
-const { auth, isAdmin } = require('../middleware/auth');
+const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 const fs = require('fs');
 const path = require('path');
 const { LOGS_DIR } = require('../lib/logger');
@@ -25,7 +25,7 @@ router.get('/', auth, isAdmin, (req, res, next) => {
 
 // @route   GET api/:slug/logs/audit
 // @desc    Get audit logs from DB
-router.get('/audit', auth, isAdmin, (req, res, next) => {
+router.get('/audit', auth, hasPermission('audit'), (req, res, next) => {
     try {
         const limit = parseInt(req.query.limit) || 100;
         const offset = parseInt(req.query.offset) || 0;

@@ -48,9 +48,12 @@ router.post('/', auth, hasPermission('roles'), (req, res, next) => {
         }
     }
 
+    // Filter permissions based on enabled modules
+    const finalPermissions = (permissions || []).filter(p => !req.enabledModules || req.enabledModules.includes(p));
+
     const result = req.db.prepare('INSERT INTO roles (name, permissions) VALUES (?, ?)').run(
         name,
-        JSON.stringify(permissions || [])
+        JSON.stringify(finalPermissions)
     );
     res.json({ id: result.lastInsertRowid, name, permissions });
     logActivity(req.slug, req.user, 'CREATE_ROLE', 'role', result.lastInsertRowid, { name, permissions }, req);
@@ -77,9 +80,13 @@ router.put('/:id', auth, hasPermission('roles'), (req, res, next) => {
             return res.status(403).json({ message: 'El rol Admin es del sistema y no se puede editar' });
         }
 
+        // Filter permissions based on enabled modules
+        const incomingPermissions = permissions || JSON.parse(role.permissions);
+        const finalPermissions = incomingPermissions.filter(p => !req.enabledModules || req.enabledModules.includes(p));
+
         req.db.prepare('UPDATE roles SET name = ?, permissions = ? WHERE id = ?').run(
             name || role.name,
-            JSON.stringify(permissions || JSON.parse(role.permissions)),
+            JSON.stringify(finalPermissions),
             req.params.id
         );
         res.json({ message: 'Rol actualizado correctamente' });

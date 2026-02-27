@@ -6,6 +6,7 @@ import api from '@/lib/api';
 import Link from 'next/link';
 import { Search, Car, User, Phone, ClipboardList, ArrowRight, Hash, Filter } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 
 export default function VehiclesPage() {
     const { slug } = useSlug();
@@ -13,13 +14,14 @@ export default function VehiclesPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
     const { hasPermission } = useAuth();
+    const { t } = useTranslation();
 
-    if (!hasPermission('vehiculos')) {
+    if (!hasPermission('vehicles')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
                 <Car size={48} className="mb-4 opacity-20" />
-                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
-                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+                <p className="font-bold uppercase tracking-widest text-xs">{t('module_not_enabled')}</p>
+                <p className="text-[10px] mt-2 italic">{t('contact_admin_to_activate')}</p>
             </div>
         );
     }
@@ -55,8 +57,8 @@ export default function VehiclesPage() {
         <div className="space-y-6 pb-20">
             <header className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">Base de Vehículos</h2>
-                    <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">Legajo técnico global</p>
+                    <h2 className="text-3xl font-black text-slate-900 tracking-tight uppercase">{t('vehicles_base')}</h2>
+                    <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">{t('global_technical_file')}</p>
                 </div>
             </header>
 

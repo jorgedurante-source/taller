@@ -16,7 +16,7 @@ router.get('/', auth, (req, res) => {
 });
 
 // @route   POST api/templates
-router.post('/', auth, hasPermission('configuracion'), (req, res) => {
+router.post('/', auth, hasPermission('settings'), (req, res) => {
     const { name, content, trigger_status, include_pdf, send_whatsapp, send_email } = req.body;
     try {
         if (trigger_status) {
@@ -40,7 +40,7 @@ router.post('/', auth, hasPermission('configuracion'), (req, res) => {
 });
 
 // @route   PUT api/templates/:id
-router.put('/:id', auth, hasPermission('configuracion'), (req, res) => {
+router.put('/:id', auth, hasPermission('settings'), (req, res) => {
     const { name, content, trigger_status, include_pdf, send_whatsapp, send_email } = req.body;
     try {
         if (trigger_status) {
@@ -62,7 +62,7 @@ router.put('/:id', auth, hasPermission('configuracion'), (req, res) => {
 });
 
 // @route   DELETE api/templates/:id
-router.delete('/:id', auth, hasPermission('configuracion'), (req, res) => {
+router.delete('/:id', auth, hasPermission('settings'), (req, res) => {
     try {
         req.db.prepare('DELETE FROM templates WHERE id = ?').run(req.params.id);
         res.json({ message: 'Template deleted' });

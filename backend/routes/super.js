@@ -35,7 +35,24 @@ function superAuth(req, res, next) {
     try {
         const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const decoded = jwt.verify(token, secret);
-        if (decoded.role !== 'superusuario' && decoded.role !== 'superuser') return res.status(403).json({ message: 'Acceso restringido a superadministradores' });
+        if (decoded.role !== 'superusuario' && decoded.role !== 'superuser' && decoded.role !== 'superadmin') return res.status(403).json({ message: 'Acceso restringido a superadministradores' });
+
+        // --- Session Timeout Check ---
+        const user = superDb.prepare('SELECT last_activity FROM super_users WHERE id = ?').get(decoded.id);
+        if (user && user.last_activity) {
+            const timeoutMinutes = parseInt(superDb.prepare("SELECT value FROM global_settings WHERE key = 'superadmin_session_timeout'").get()?.value || '120');
+            const lastActivity = new Date(user.last_activity);
+            const now = new Date();
+            const diffMins = (now - lastActivity) / (1000 * 60);
+
+            if (diffMins > timeoutMinutes) {
+                return res.status(401).json({ message: 'Sesión expirada por inactividad', timeout: true });
+            }
+        }
+
+        // Update activity
+        superDb.prepare('UPDATE super_users SET last_activity = CURRENT_TIMESTAMP WHERE id = ?').run(decoded.id);
+
         req.superUser = decoded;
         next();
     } catch (err) {
@@ -56,14 +73,15 @@ router.post('/login', async (req, res) => {
 
         const secret = process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
         const token = jwt.sign(
-            { id: user.id, username: user.username, role: 'superusuario' },
+            { id: user.id, username: user.username, role: 'superadmin', language: user.language || 'es' },
             secret,
             { expiresIn: '12h' }
         );
 
+        superDb.prepare('UPDATE super_users SET last_activity = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
         logSystemActivity(user, 'LOGIN', 'auth', user.id, 'Superadmin logged in', req);
 
-        res.json({ token, user: { id: user.id, username: user.username, role: 'superusuario' } });
+        res.json({ token, user: { id: user.id, username: user.username, role: 'superadmin', language: user.language || 'es' } });
     } catch (err) {
         console.error(err);
         res.status(500).send('Server error');
@@ -406,7 +424,7 @@ router.post('/impersonate/:slug', superAuth, (req, res) => {
     const secret = workshop?.api_token || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
 
     const token = jwt.sign(
-        { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions: enabledModules, slug, isSuperuser: true },
+        { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions: enabledModules, slug, isSuperuser: true, superId: req.superUser.id },
         secret,
         { expiresIn: '8h' }
     );
@@ -879,8 +897,17 @@ router.get('/anomalies', superAuth, (req, res) => {
     try {
         const workshops = listTenants();
         const anomalies = [];
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        // Load thresholds from settings
+        const settingsList = superDb.prepare('SELECT key, value FROM global_settings').all();
+        const settings = settingsList.reduce((acc, s) => ({ ...acc, [s.key]: s.value }), {});
+
+        const inactivityDays = parseInt(settings.inactivity_threshold || 30);
+        const storageLimitMB = parseInt(settings.storage_threshold_mb || 50);
+        const checkEmailAlerts = settings.alert_email_config === 'true';
+
+        const inactivityLimit = new Date();
+        inactivityLimit.setDate(inactivityLimit.getDate() - inactivityDays);
 
         for (const w of workshops) {
             try {
@@ -895,13 +922,13 @@ router.get('/anomalies', superAuth, (req, res) => {
                     lastAudit ? new Date(lastAudit.created_at) : new Date(0)
                 ].sort((a, b) => b - a)[0];
 
-                if (lastActivity < thirtyDaysAgo) {
+                if (lastActivity < inactivityLimit) {
                     anomalies.push({
                         slug: w.slug,
                         name: w.name,
                         type: 'inactivity',
                         severity: 'warning',
-                        message: 'Sin actividad en más de 30 días',
+                        message: `Sin actividad en más de ${inactivityDays} días`,
                         last_seen: lastActivity.toISOString()
                     });
                 }
@@ -911,7 +938,7 @@ router.get('/anomalies', superAuth, (req, res) => {
                 if (fs.existsSync(dbPath)) {
                     const size = fs.statSync(dbPath).size;
                     const sizeMB = size / 1024 / 1024;
-                    if (sizeMB > 50) { // Alert if > 50MB
+                    if (sizeMB > storageLimitMB) {
                         anomalies.push({
                             slug: w.slug,
                             name: w.name,
@@ -923,15 +950,17 @@ router.get('/anomalies', superAuth, (req, res) => {
                 }
 
                 // 3. Check Email Config
-                const emailConfig = db.prepare('SELECT smtp_host, imap_host FROM config LIMIT 1').get();
-                if (!emailConfig || (!emailConfig.smtp_host && !emailConfig.imap_host)) {
-                    anomalies.push({
-                        slug: w.slug,
-                        name: w.name,
-                        type: 'config',
-                        severity: 'info',
-                        message: 'Email no configurado'
-                    });
+                if (checkEmailAlerts) {
+                    const emailConfig = db.prepare('SELECT smtp_host, imap_host FROM config LIMIT 1').get();
+                    if (!emailConfig || (!emailConfig.smtp_host && !emailConfig.imap_host)) {
+                        anomalies.push({
+                            slug: w.slug,
+                            name: w.name,
+                            type: 'config',
+                            severity: 'info',
+                            message: 'Email no configurado'
+                        });
+                    }
                 }
 
             } catch (err) {
@@ -1140,6 +1169,40 @@ router.get('/workshops/:slug/email-check', superAuth, async (req, res) => {
     } catch (err) {
         console.error(`[super:/email-check/${slug}] Error:`, err);
         res.status(500).json({ message: 'Error al verificar conexión de email' });
+    }
+});
+
+// ─── SUPPORT TICKETS ROUTES ──────────────────────────────────────────────────
+router.get('/tickets', superAuth, (req, res) => {
+    try {
+        const tickets = superDb.prepare("SELECT * FROM support_tickets ORDER BY status = 'open' DESC, created_at DESC").all();
+        res.json(tickets);
+    } catch (err) {
+        res.status(500).send('Server error');
+    }
+});
+
+router.post('/tickets/:id/reply', superAuth, (req, res) => {
+    const { id } = req.params;
+    const { reply } = req.body;
+    try {
+        superDb.prepare("UPDATE support_tickets SET reply = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .run(reply, id);
+        res.json({ message: 'Respuesta enviada correctamente' });
+    } catch (err) {
+        res.status(500).send('Server error');
+    }
+});
+
+router.put('/tickets/:id/status', superAuth, (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    try {
+        superDb.prepare("UPDATE support_tickets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+            .run(status, id);
+        res.json({ message: 'Estado actualizado correctamente' });
+    } catch (err) {
+        res.status(500).send('Server error');
     }
 });
 

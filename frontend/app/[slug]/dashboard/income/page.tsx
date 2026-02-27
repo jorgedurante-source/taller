@@ -17,6 +17,7 @@ import {
     Search
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import { useTranslation } from '@/lib/i18n';
 import {
     BarChart,
     Bar,
@@ -38,13 +39,14 @@ export default function IncomePage() {
     const { slug } = useSlug();
     const { hasPermission } = useAuth();
     const router = useRouter();
+    const { t } = useTranslation();
 
-    if (!hasPermission('ingresos')) {
+    if (!hasPermission('income')) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400">
                 <DollarSign size={48} className="mb-4 opacity-20" />
-                <p className="font-bold uppercase tracking-widest text-xs">Módulo no habilitado</p>
-                <p className="text-[10px] mt-2 italic">Contacta al administrador para activar esta funcionalidad</p>
+                <p className="font-bold uppercase tracking-widest text-xs">{t('module_not_enabled')}</p>
+                <p className="text-[10px] mt-2 italic">{t('contact_admin_to_activate')}</p>
             </div>
         );
     }
@@ -109,7 +111,7 @@ export default function IncomePage() {
         setSelectedMonth(newMonth);
     };
 
-    if (loading && !summary) return <div className="p-10 font-bold text-slate-400 italic">Generando análisis financiero...</div>;
+    if (loading && !summary) return <div className="p-10 font-bold text-slate-400 italic">{t('loading_stats')}</div>;
 
     // Build complete day-by-day grid for the selected month, filling missing days with 0
     const [selYear, selMonthNum] = selectedMonth.split('-').map(Number);
@@ -150,25 +152,25 @@ export default function IncomePage() {
         <div className="space-y-8 pb-20">
             <header className="flex justify-between items-end">
                 <div>
-                    <h2 className="text-4xl font-black text-slate-900 tracking-tight uppercase italic">Análisis Financiero</h2>
-                    <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">Control de caja y proyecciones</p>
+                    <h2 className="text-4xl font-black text-slate-900 tracking-tight uppercase italic">{t('financial_analysis')}</h2>
+                    <p className="text-slate-500 font-bold tracking-wider uppercase text-xs mt-1">{t('cash_control')}</p>
                 </div>
                 <button
                     onClick={togglePrivacy}
                     className="flex items-center gap-2 bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-sm text-slate-500 font-bold text-xs uppercase tracking-widest hover:text-slate-900 transition-all"
                 >
                     {showTotals ? <EyeOff size={16} /> : <Eye size={16} />}
-                    {showTotals ? 'Ocultar Cifras' : 'Mostrar Cifras'}
+                    {showTotals ? t('hide_figures') : t('show_figures')}
                 </button>
             </header>
 
             <Tab.Group>
                 <Tab.List className="flex space-x-4 border-b border-gray-200">
                     <Tab className={({ selected }) => selected ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}>
-                        Ingresos
+                        {t('income')}
                     </Tab>
                     <Tab className={({ selected }) => selected ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}>
-                        Reportes
+                        {t('reports')}
                     </Tab>
                 </Tab.List>
                 <Tab.Panels>
@@ -177,20 +179,20 @@ export default function IncomePage() {
                             {/* Ingreso Histórico */}
                             <div className="bg-slate-900 rounded-[32px] p-8 text-white shadow-2xl relative overflow-hidden group">
                                 <div className="absolute -right-8 -bottom-8 bg-blue-600/20 w-40 h-40 rounded-full blur-3xl group-hover:bg-blue-600/40 transition-all"></div>
-                                <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-4">Ingreso Total Histórico</p>
+                                <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-4">{t('historical_total_income')}</p>
                                 <h3 className="text-4xl font-black tracking-tighter mb-4">{formatVal(totalHistoricalIncome)}</h3>
 
                                 <div className="space-y-2 border-t border-slate-800 pt-4 mt-4">
                                     <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                                        <span>Neto (Mano Obra)</span>
+                                        <span>{t('net_labor')}</span>
                                         <span className="text-white">{formatVal(histLabor)}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                                        <span>Repuestos</span>
+                                        <span>{t('parts')}</span>
                                         <span className="text-white">{formatVal(histParts)}</span>
                                     </div>
                                     <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-emerald-400">
-                                        <span>Ganancia Rep. ({partsProfitPercentage}%)</span>
+                                        <span>{t('parts_profit')} ({partsProfitPercentage}%)</span>
                                         <span>{formatVal(histPartsProfit)}</span>
                                     </div>
                                 </div>
@@ -204,10 +206,10 @@ export default function IncomePage() {
                                 <div className="bg-blue-50 w-12 h-12 rounded-2xl flex items-center justify-center text-blue-600 mb-6 group-hover:bg-blue-600 group-hover:text-white transition-all">
                                     <TrendingUp size={24} />
                                 </div>
-                                <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-2">Promedio Mensual</p>
+                                <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-2">{t('monthly_average')}</p>
                                 <h3 className="text-2xl font-black text-slate-900">{formatVal(avgIncome)}</h3>
                                 <p className="text-slate-500 text-[10px] font-bold mt-4 uppercase flex items-center gap-1 group-hover:text-blue-600 transition-colors">
-                                    Ver historial de cobros <ChevronRight size={14} />
+                                    {t('view_payment_history')} <ChevronRight size={14} />
                                 </p>
                             </div>
 
@@ -219,13 +221,13 @@ export default function IncomePage() {
                                 <div className="bg-emerald-50 w-12 h-12 rounded-2xl flex items-center justify-center text-emerald-600 mb-6 group-hover:bg-indigo-600 group-hover:text-white transition-all">
                                     <ClipboardCheck size={24} />
                                 </div>
-                                <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-2">Listas para cobro</p>
+                                <p className="text-slate-400 font-black text-[10px] uppercase tracking-widest mb-2">{t('ready_for_collection')}</p>
                                 <div className="space-y-1">
-                                    <h3 className="text-2xl font-black text-slate-900 leading-none">{readyToDeliverCount} Órdenes</h3>
+                                    <h3 className="text-2xl font-black text-slate-900 leading-none">{readyToDeliverCount} {t('orders')}</h3>
                                     <p className="text-emerald-600 font-black text-lg">{formatVal(summary?.readyToDeliverTotal || 0)}</p>
                                 </div>
                                 <p className="text-slate-500 text-[10px] font-bold mt-4 uppercase flex items-center gap-1 group-hover:text-indigo-600 transition-colors">
-                                    Listado de unidades <Search size={14} />
+                                    {t('units_list')} <Search size={14} />
                                 </p>
                             </div>
                         </div>
@@ -234,16 +236,16 @@ export default function IncomePage() {
                             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
                                 <div className="space-y-1">
                                     <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3 italic">
-                                        <Calendar className="text-blue-600" size={32} /> FACTURACIÓN DIARIA
+                                        <Calendar className="text-blue-600" size={32} /> {t('daily_billing')}
                                     </h3>
-                                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">Detalle del flujo por jornada</p>
+                                    <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">{t('daily_flow_detail')}</p>
                                     <p className="text-slate-900 font-black text-lg mt-1">
-                                        Total del mes: <span className="text-blue-600">{formatVal(totalMonthlyIncome)}</span>
+                                        {t('month_total')} <span className="text-blue-600">{formatVal(totalMonthlyIncome)}</span>
                                     </p>
                                     <div className="flex gap-4 mt-2">
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Neto: {formatVal(monthLabor)}</span>
-                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Repuestos: {formatVal(monthParts)}</span>
-                                        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Ganancia: {formatVal(monthPartsProfit)} ({partsProfitPercentage}%)</span>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('net_labor')}: {formatVal(monthLabor)}</span>
+                                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('parts')}: {formatVal(monthParts)}</span>
+                                        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">{t('parts_profit')}: {formatVal(monthPartsProfit)} ({partsProfitPercentage}%)</span>
                                     </div>
                                 </div>
 
@@ -299,7 +301,7 @@ export default function IncomePage() {
                         {/* Monthly Income History */}
                         <section className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm mt-8">
                             <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3 italic mb-6">
-                                <TrendingUp className="text-emerald-600" size={32} /> HISTÓRICO MENSUAL
+                                <TrendingUp className="text-emerald-600" size={32} /> {t('monthly_history')}
                             </h3>
                             <div className="h-[380px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
@@ -336,13 +338,13 @@ export default function IncomePage() {
                     <Tab.Panel>
                         {/* New Reports Section */}
                         <section className="bg-white p-10 rounded-[40px] border border-slate-100 shadow-sm">
-                            <h3 className="text-2xl font-black text-slate-900">Reportes Avanzados</h3>
-                            <p className="text-slate-400 text-sm">Explora métricas detalladas y gráficas interactivas.</p>
+                            <h3 className="text-2xl font-black text-slate-900">{t('advanced_reports')}</h3>
+                            <p className="text-slate-400 text-sm">{t('explore_metrics')}</p>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                                 {/* Orders by Status */}
                                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                                    <h4 className="text-lg font-bold text-slate-900 mb-4">Órdenes por Estado</h4>
+                                    <h4 className="text-lg font-bold text-slate-900 mb-4">{t('orders_by_status')}</h4>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <PieChart>
                                             <Pie
@@ -365,7 +367,7 @@ export default function IncomePage() {
 
                                 {/* Top Customers */}
                                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-                                    <h4 className="text-lg font-bold text-slate-900 mb-4">Top Clientes</h4>
+                                    <h4 className="text-lg font-bold text-slate-900 mb-4">{t('top_customers')}</h4>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart data={topCustomers} layout="vertical" margin={{ left: 50 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -379,7 +381,7 @@ export default function IncomePage() {
 
                                 {/* Most Frequent Services */}
                                 <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm md:col-span-2">
-                                    <h4 className="text-lg font-bold text-slate-900 mb-4">Servicios más realizados</h4>
+                                    <h4 className="text-lg font-bold text-slate-900 mb-4">{t('most_frequent_services')}</h4>
                                     <ResponsiveContainer width="100%" height={300}>
                                         <BarChart data={summary?.commonServices} margin={{ bottom: 30 }}>
                                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />

@@ -37,19 +37,15 @@ async function sendOrderReminder(db, orderId, slug, config) {
         'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim()
     };
 
-    let messageText = template.content;
-    let messageHtml = template.content.replace(/\n/g, '<br>');
+    const { processTemplate } = require('./templateProcessor');
+    const messageText = processTemplate(template.content, replacements);
+    let messageHtml = messageText.replace(/\n/g, '<br>');
 
-    Object.keys(replacements).forEach(key => {
-        const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
-        const value = String(replacements[key] || '');
-        messageText = messageText.replace(regex, value);
-        if (key === 'link') {
-            messageHtml = messageHtml.replace(regex, `<a href="${value}" style="color: #2563eb; font-weight: bold; text-decoration: underline;">${value}</a>`);
-        } else {
-            messageHtml = messageHtml.replace(regex, value);
-        }
-    });
+    // Optional: specifically highlight the tracking link if present
+    if (replacements.link) {
+        const linkRegex = new RegExp(`[\\{\\[]link[\\}\\]]`, 'gi');
+        messageHtml = messageHtml.replace(linkRegex, `<a href="${replacements.link}" style="color: #2563eb; font-weight: bold; text-decoration: underline;">${replacements.link}</a>`);
+    }
 
     let attachments = [];
     if (template.include_pdf === 1) {

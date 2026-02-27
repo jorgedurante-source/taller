@@ -103,7 +103,7 @@ async function checkEmails(db, slug) {
                         VALUES (?, ?, ?, ?, ?, ?)
                     `).run(
                         orderId,
-                        'Respuesta Recibida',
+                        'response_received',
                         `Respuesta de ${fromRaw}:\n${cleanText}`,
                         fromEmail,
                         null,

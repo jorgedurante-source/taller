@@ -9,6 +9,7 @@ import { useSlug } from '@/lib/slug';
 import { superApi } from '@/lib/api';
 import { useConfig } from '@/lib/config';
 import { useNotification } from '@/lib/notification';
+import { useTranslation } from '@/lib/i18n';
 import {
     Users,
     Car,
@@ -23,7 +24,12 @@ import {
     Building2,
     Bell,
     Calendar as CalendarIcon,
-    Truck
+    Truck,
+    Megaphone,
+    AlertTriangle,
+    Info,
+    CheckCircle,
+    LifeBuoy
 } from 'lucide-react';
 
 interface Workshop {
@@ -38,6 +44,7 @@ export default function DashboardLayout({
 }) {
     const { user, logout, loading, hasPermission } = useAuth();
     const { notify } = useNotification();
+    const { t, language, setLanguage } = useTranslation();
     const { slug } = useSlug();
     const router = useRouter();
     const pathname = usePathname();
@@ -71,7 +78,7 @@ export default function DashboardLayout({
     }, [slug]);
 
     if (loading || !user || configLoading) {
-        return <div className="flex items-center justify-center min-h-screen">Cargando {config.product_name || '...'}</div>;
+        return <div className="flex items-center justify-center min-h-screen">{t('loading_app')} {config.product_name || '...'}</div>;
     }
 
     const handleSwitchWorkshop = async (targetSlug: string) => {
@@ -83,7 +90,7 @@ export default function DashboardLayout({
             localStorage.setItem('current_slug', targetSlug);
             window.location.href = `/${targetSlug}/dashboard`;
         } catch (err) {
-            notify('error', 'Error al cambiar de taller');
+            notify('error', t('error'));
         }
     };
 
@@ -120,7 +127,7 @@ export default function DashboardLayout({
                             {showWorkshopSwitcher && (
                                 <div className="absolute top-full left-0 w-full mt-2 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-[60] animate-in fade-in slide-in-from-top-2 duration-200">
                                     <div className="p-2 max-h-48 overflow-y-auto">
-                                        <p className="text-[9px] font-black text-slate-500 uppercase p-2 tracking-[0.2em]">Seleccionar Taller</p>
+                                        <p className="text-[9px] font-black text-slate-500 uppercase p-2 tracking-[0.2em]">{t('select_workshop')}</p>
                                         {workshops.map(w => (
                                             <button
                                                 key={w.slug}
@@ -135,7 +142,7 @@ export default function DashboardLayout({
                                     <Link href="/superadmin/dashboard">
                                         <div className="bg-slate-800 p-3 flex items-center gap-2 text-[10px] font-black uppercase text-blue-400 hover:bg-slate-700 transition-colors border-t border-slate-700 cursor-pointer">
                                             <ShieldCheck size={14} />
-                                            Panel Central
+                                            {t('central_panel')}
                                         </div>
                                     </Link>
                                 </div>
@@ -145,26 +152,27 @@ export default function DashboardLayout({
                 </div>
 
                 <nav className="flex-grow p-4 space-y-2">
-                    {hasPermission('dashboard') && <NavItem href={`/${slug}/dashboard`} icon={<LayoutDashboard size={20} />} label="Dashboard" />}
-                    {hasPermission('clientes') && <NavItem href={`/${slug}/dashboard/clients`} icon={<Users size={20} />} label="Clientes" />}
-                    {hasPermission('vehiculos') && <NavItem href={`/${slug}/dashboard/vehicles`} icon={<Car size={20} />} label="Vehículos" />}
-                    {hasPermission('ordenes') && (
+                    {hasPermission('dashboard') && <NavItem href={`/${slug}/dashboard`} icon={<LayoutDashboard size={20} />} label={t('dashboard')} />}
+                    {hasPermission('clients') && <NavItem href={`/${slug}/dashboard/clients`} icon={<Users size={20} />} label={t('clients')} />}
+                    {hasPermission('vehicles') && <NavItem href={`/${slug}/dashboard/vehicles`} icon={<Car size={20} />} label={t('vehicles')} />}
+                    {hasPermission('orders') && (
                         <>
-                            <NavItem href={`/${slug}/dashboard/orders`} icon={<ClipboardList size={20} />} label="Órdenes" />
-                            <NavItem href={`/${slug}/dashboard/orders/create`} icon={<Plus size={20} />} label="Nueva Orden" />
+                            <NavItem href={`/${slug}/dashboard/orders`} icon={<ClipboardList size={20} />} label={t('orders')} />
+                            <NavItem href={`/${slug}/dashboard/orders/create`} icon={<Plus size={20} />} label={t('create')} />
                         </>
                     )}
-                    {hasPermission('turnos') && <NavItem href={`/${slug}/dashboard/appointments`} icon={<CalendarIcon size={20} />} label="Turnos" />}
-                    {hasPermission('ingresos') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label="Ingresos" />}
-                    {hasPermission('recordatorios') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label="Recordatorios" />}
-                    {hasPermission('proveedores') && <NavItem href={`/${slug}/dashboard/suppliers`} icon={<Truck size={20} />} label="Proveedores" />}
-                    {hasPermission('configuracion') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label="Configuración" />}
+                    {hasPermission('appointments') && <NavItem href={`/${slug}/dashboard/appointments`} icon={<CalendarIcon size={20} />} label={t('appointments')} />}
+                    {hasPermission('income') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label={t('income')} />}
+                    {hasPermission('reminders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label={t('reminders')} />}
+                    {hasPermission('suppliers') && <NavItem href={`/${slug}/dashboard/suppliers`} icon={<Truck size={20} />} label={t('suppliers')} />}
+                    {hasPermission('settings') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label={t('settings')} />}
+                    <NavItem href={`/${slug}/dashboard/support`} icon={<LifeBuoy size={20} />} label={t('support')} />
                 </nav>
 
-                <div className="p-4 border-t border-slate-800">
+                <div className="p-4 border-t border-slate-800 space-y-2">
                     {user?.isSuperuser && (
                         <Link href="/superadmin/dashboard">
-                            <div className="flex items-center gap-3 px-4 py-3 mb-2 rounded-lg bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600/20 transition-all cursor-pointer">
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600/20 transition-all cursor-pointer">
                                 <ShieldCheck size={20} />
                                 <span className="font-bold text-xs uppercase italic">SuperAdmin</span>
                             </div>
@@ -178,29 +186,57 @@ export default function DashboardLayout({
                         className="flex items-center gap-3 px-4 py-3 w-full rounded-lg hover:bg-slate-800 transition-all text-slate-400 hover:text-white"
                     >
                         <LogOut size={20} />
-                        <span className="font-bold text-xs uppercase tracking-widest">Cerrar Sesión</span>
+                        <span className="font-bold text-xs uppercase tracking-widest">{t('logout')}</span>
                     </button>
                 </div>
             </aside>
 
-            {/* Dev Mode Banner (Fixed Top) */}
             {tenantConfig?.environment === 'dev' && (
                 <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-white py-1 px-4 flex items-center justify-center gap-4 shadow-lg border-b border-amber-600 animate-in slide-in-from-top duration-500">
                     <div className="flex items-center gap-2">
                         <Settings size={14} className="animate-spin" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.3em] italic">Entorno de Desarrollo</span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.3em] italic">{t('dev_environment')}</span>
                     </div>
                     <div className="h-3 w-[1px] bg-white/30 hidden sm:block" />
-                    <span className="text-[9px] font-bold uppercase tracking-widest hidden sm:block">Los datos sembrados son ficticios y solo para pruebas</span>
+                    <span className="text-[9px] font-bold uppercase tracking-widest hidden sm:block">{t('dev_data_warning')}</span>
                     <div className="flex items-center gap-1.5 bg-white/20 px-2 py-0.5 rounded-full">
                         <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                        <span className="text-[9px] font-black uppercase">Modo Dev</span>
+                        <span className="text-[9px] font-black uppercase">{t('dev_mode')}</span>
                     </div>
                 </div>
             )}
 
             {/* Main Content */}
             <main className={`flex-grow md:ml-64 p-8 ${tenantConfig?.environment === 'dev' ? 'pt-12' : ''}`}>
+                {/* Global Announcements from Superadmin */}
+                {config.announcements && config.announcements.length > 0 && (
+                    <div className="mb-8 space-y-4 animate-in slide-in-from-top-4 duration-500">
+                        {config.announcements.map((ann) => (
+                            <div
+                                key={ann.id}
+                                className={`p-6 rounded-[2.5rem] border flex items-center gap-6 shadow-sm transition-all hover:shadow-md ${ann.type === 'error' ? 'bg-rose-50 border-rose-100 text-rose-900' :
+                                    ann.type === 'warning' ? 'bg-amber-50 border-amber-100 text-amber-900' :
+                                        ann.type === 'success' ? 'bg-emerald-50 border-emerald-100 text-emerald-900' :
+                                            'bg-blue-50 border-blue-100 text-blue-900'
+                                    }`}
+                            >
+                                <div className={`p-4 rounded-3xl ${ann.type === 'error' ? 'bg-rose-600 text-white' :
+                                    ann.type === 'warning' ? 'bg-amber-600 text-white' :
+                                        ann.type === 'success' ? 'bg-emerald-600 text-white' :
+                                            'bg-blue-600 text-white'
+                                    }`}>
+                                    {ann.type === 'error' ? <AlertTriangle size={24} /> :
+                                        ann.type === 'warning' ? <Megaphone size={24} /> :
+                                            ann.type === 'success' ? <CheckCircle size={24} /> : <Info size={24} />}
+                                </div>
+                                <div className="flex-grow">
+                                    <h4 className="font-black uppercase tracking-tighter text-lg leading-none mb-1 italic">{ann.title}</h4>
+                                    <p className="text-sm font-bold opacity-80">{ann.content}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
                 {children}
             </main>
         </div>

@@ -2,9 +2,9 @@ const firstNames = ['Juan', 'Maria', 'Pedro', 'Ana', 'Jose', 'Laura', 'Carlos', 
 const lastNames = ['Garcia', 'Rodriguez', 'Lopez', 'Martinez', 'Gonzalez', 'Perez', 'Sanchez', 'Romero', 'Torres', 'Fernandez', 'Ruiz', 'Diaz', 'Alvarez', 'Jimenez', 'Moreno', 'Munoz', 'Alonso', 'Gutierrez', 'Castillo', 'Blanco'];
 const brands = ['Toyota', 'Ford', 'Chevrolet', 'Volkswagen', 'Honda', 'Fiat', 'Renault', 'Peugeot', 'Nissan', 'Hyundai'];
 const models = ['Corolla', 'Fiesta', 'Cruze', 'Golf', 'Civic', 'Cronos', 'Clio', '208', 'Sentra', 'Tucson'];
-const orderStatuses = ['Pendiente', 'Turno asignado', 'En proceso', 'Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'];
-const paymentStatuses = ['sin_cobrar', 'cobrado', 'parcial'];
-const descriptions = ['Cambio de aceite y filtro', 'Revisión técnica general', 'Frenos delanteros', 'Alineación y balanceo', 'Cambio de correa de distribución', 'Reparación de embrague', 'Check engine encendido', 'Ruidos en la suspensión', 'Carga de aire acondicionado', 'Cambio de batería'];
+const orderStatuses = ['pending', 'appointment', 'quoted', 'approved', 'ready', 'delivered', 'cancelled'];
+const paymentStatuses = ['unpaid', 'paid', 'partial'];
+const descriptions = ['Cambio de aceite y filtro', 'Inspección técnica general', 'Frenos delanteros', 'Alineación y balanceo', 'Reemplazo de correa de distribución', 'Reparación de embrague', 'Luz de check engine encendida', 'Ruido en la suspensión', 'Recarga de aire acondicionado', 'Reemplazo de batería'];
 
 function seedWorkshop(db) {
     const adminUser = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
@@ -55,7 +55,7 @@ function seedWorkshop(db) {
         }
 
         // 3. Insert 10 Services
-        const serviceNames = ['Cambio de Aceite', 'Frenos', 'Alineación', 'Balanceo', 'Escaneo Computarizado', 'Carga de AC', 'Revisión General', 'Limpieza de Inyectores', 'Cambio de Batería', 'Suspensión'];
+        const serviceNames = ['Cambio de Aceite', 'Frenos', 'Alineación', 'Balanceo', 'Escaneo Computarizado', 'Carga de Aire', 'Revisión General', 'Limpieza de Inyectores', 'Cambio de Batería', 'Suspensión'];
         for (const sName of serviceNames) {
             insertService.run(
                 sName,
@@ -91,20 +91,20 @@ function seedWorkshop(db) {
                 insertItem.run(orderId, descriptions[Math.floor(Math.random() * descriptions.length)], labor, parts, subtotal);
             }
 
-            if (payStatus === 'cobrado') {
+            if (payStatus === 'paid') {
                 db.prepare('UPDATE orders SET payment_amount = ? WHERE id = ?').run(orderTotal, orderId);
-            } else if (payStatus === 'parcial') {
+            } else if (payStatus === 'partial') {
                 db.prepare('UPDATE orders SET payment_amount = ? WHERE id = ?').run(Math.floor(orderTotal / 2), orderId);
             }
         }
 
         // 5. Insert 5 Suppliers
         const suppliers = [
-            { name: 'Repuestos Buenos Aires', email: 'ventas@repuestosba.com', phone: '11 4567-8901', notes: 'Especialistas en Ford y Chevrolet' },
+            { name: 'Repuestos Directos', email: 'ventas@repuestosdirectos.com', phone: '11 4567-8901', notes: 'Especialistas en Ford y Chevrolet' },
             { name: 'Todo Frenos', email: 'contacto@todofrenos.com', phone: '11 2345-6789', notes: 'Mejores precios en pastillas y discos' },
-            { name: 'Embragues del Sur', email: 'info@embraguessur.com', phone: '11 9876-5432', notes: 'Entregas en el día' },
-            { name: 'Baterías y Accesorios Lucas', email: 'lucas@baterias.com', phone: '11 3210-4567', notes: 'Garantía oficial' },
-            { name: 'Warnes Repuestos', email: 'warnes@repuestos.com', phone: '11 5555-1234', notes: 'Tienen de todo' }
+            { name: 'Embragues del Sur', email: 'info@embraguessur.com', phone: '11 9876-5432', notes: 'Entrega en el día' },
+            { name: 'Baterías Lucas', email: 'lucas@baterias.com', phone: '11 3210-4567', notes: 'Garantía oficial' },
+            { name: 'General Repuestos', email: 'warnes@repuestos.com', phone: '11 5555-1234', notes: 'Stock integral Warnes' }
         ];
 
         const insertSupplier = db.prepare('INSERT INTO suppliers (name, email, phone, notes) VALUES (?, ?, ?, ?)');
@@ -148,63 +148,63 @@ function reseedTemplates(db) {
     const defaultTemplates = [
         {
             name: 'Recepción de Vehículo',
-            content: 'Hola [apodo], te damos la bienvenida a [taller]. Ya registramos el ingreso de tu [vehiculo]. Te avisaremos en cuanto tengamos el presupuesto listo. Orden de trabajo: #[orden_id]. Seguí el estado acá: [link]\n\n[datos_contacto_taller]',
-            trigger_status: 'Pendiente',
+            content: 'Hola [apodo], bienvenido a [taller]. Registramos el ingreso de tu [vehiculo]. Te avisaremos en cuanto el presupuesto esté listo. Orden de trabajo: #[orden_id]. Seguí el estado aquí: [link]\n\n[datos_contacto_taller]',
+            trigger_status: 'pending',
             include_pdf: 0,
             send_email: 1,
             send_whatsapp: 0
         },
         {
             name: 'Turno Asignado',
-            content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue agendado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\n[datos_contacto_taller]\n\nSaludos, [usuario]',
-            trigger_status: 'Turno asignado',
+            content: 'Hola [apodo], te confirmamos que tu turno para el [vehiculo] en [taller] fue programado para el [turno_fecha]. ¡Te esperamos! Podés seguir el estado de tu orden aquí: [link]\n\n[datos_contacto_taller]\n\nSaludos, [usuario]',
+            trigger_status: 'appointment',
             include_pdf: 0,
             send_email: 1,
             send_whatsapp: 0
         },
         {
             name: 'Presupuesto para Revisión',
-            content: 'Hola [apodo], el presupuesto para tu [vehiculo] ya se encuentra disponible para tu revisión. Podés verlo adjunto en este mensaje o desde el portal de clientes aquí: [link]. Avisanos si estás de acuerdo para comenzar con el trabajo.\n\n[datos_contacto_taller]',
-            trigger_status: 'Presupuestado',
+            content: 'Hola [apodo], ya está disponible el presupuesto de tu [vehiculo] para tu revisión. Podés verlo adjunto a este mensaje o desde el portal de clientes aquí: [link]. Avisanos si estás de acuerdo para comenzar el trabajo.\n\n[datos_contacto_taller]',
+            trigger_status: 'quoted',
             include_pdf: 1,
             send_email: 1,
             send_whatsapp: 0
         },
         {
-            name: 'Trabajo en Marcha',
-            content: '¡Hola [apodo]! Te confirmamos que ya aprobaste el presupuesto y nos pusimos manos a la obra con tu [vehiculo]. Estaremos haciendo: [items]. Seguí el avance en vivo: [link]\n\nCualquier duda, nuestro contacto es:\n[datos_contacto_taller]',
-            trigger_status: 'Aprobado',
+            name: 'Trabajo en Progreso',
+            content: '¡Hola [apodo]! Te confirmamos que aprobaste el presupuesto y comenzamos a trabajar en tu [vehiculo]. Realizaremos: [servicios]. Seguí el avance en vivo: [link]\n\nCualquier duda, nuestro contacto es:\n[datos_contacto_taller]',
+            trigger_status: 'approved',
             include_pdf: 0,
             send_email: 1,
             send_whatsapp: 0
         },
         {
             name: 'Vehículo Listo',
-            content: '¡Buenas noticias [apodo]! Tu [vehiculo] ya está listo para ser retirado. Podés pasar por [taller] en nuestros horarios de atención. ¡Te esperamos!\n\n[datos_contacto_taller]',
-            trigger_status: 'Listo para entrega',
+            content: '¡Buenas noticias [apodo]! Tu [vehiculo] ya está listo para retirar. Podés pasar por [taller] en nuestros horarios de atención. ¡Te esperamos!\n\n[datos_contacto_taller]',
+            trigger_status: 'ready',
             include_pdf: 0,
             send_email: 1,
             send_whatsapp: 0
         },
         {
             name: 'Agradecimiento y Entrega',
-            content: 'Muchas gracias [apodo] por confiar en [taller]. Acabamos de registrar la entrega de tu [vehiculo] con [km] km. Esperamos que disfrutes del andar y cualquier duda estamos a tu disposición.\n\n[datos_contacto_taller]\n\nSaludos, [usuario]',
-            trigger_status: 'Entregado',
+            content: 'Gracias [apodo] por confiar en [taller]. Acabamos de registrar la entrega de tu [vehiculo] con [km] km. Esperamos que disfrutes el viaje y cualquier duda quedamos a tu disposición.\n\n[datos_contacto_taller]\n\nSaludos, [usuario]',
+            trigger_status: 'delivered',
             include_pdf: 1,
             send_email: 1,
             send_whatsapp: 0
         },
         {
             name: 'Seguimiento Preventivo',
-            content: 'Hola [apodo], hace unos meses realizamos el servicio de [items] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva y asegurar que todo siga funcionando perfecto. ¡Te esperamos!\n\n[datos_contacto_taller]',
-            trigger_status: 'Recordatorio',
+            content: 'Hola [apodo], hace unos meses realizamos el servicio de [servicios] en tu [vehiculo] (registrado con [km] km). Te escribimos de [taller] para recordarte que podría ser un buen momento para una revisión preventiva para asegurar que todo siga funcionando perfecto. ¡Te esperamos!\n\n[datos_contacto_taller]',
+            trigger_status: 'reminder',
             include_pdf: 0,
             send_email: 1,
             send_whatsapp: 0
         },
         {
             name: 'Envío de Documento',
-            content: 'Hola [apodo], te enviamos adjunto el documento solicitado relacionado con tu [vehiculo] desde [taller]. Quedamos a tu disposición por cualquier consulta.\n\n[datos_contacto_taller]',
+            content: 'Hola [apodo], te enviamos el documento solicitado relacionado con tu [vehiculo] de [taller]. Quedamos a tu disposición por cualquier consulta.\n\n[datos_contacto_taller]',
             trigger_status: null,
             include_pdf: 1,
             send_email: 1,
@@ -213,15 +213,7 @@ function reseedTemplates(db) {
         {
             name: 'Consulta de Repuesto (Proveedor)',
             content: 'Hola [proveedor], te consultamos por el presupuesto de: [repuesto] para el vehículo [vehiculo].\n\nQuedamos a la espera de tu respuesta.\n\n[datos_contacto_taller]\n\nSaludos, [usuario]',
-            trigger_status: 'proveedores_consulta',
-            include_pdf: 0,
-            send_email: 1,
-            send_whatsapp: 0
-        },
-        {
-            name: 'Orden en Espera de Repuestos',
-            content: 'Hola [apodo], te informamos que tu [vehiculo] se encuentra en espera de los repuestos necesarios para continuar con la reparación. Te avisaremos apenas los recibamos para seguir avanzando. Podés ver el detalle acá: [link]\n\n[datos_contacto_taller]',
-            trigger_status: 'Esperando Repuestos',
+            trigger_status: 'supplier_inquiry',
             include_pdf: 0,
             send_email: 1,
             send_whatsapp: 0
@@ -242,5 +234,6 @@ function reseedTemplates(db) {
     });
     transaction();
 }
+
 
 module.exports = { seedWorkshop, clearWorkshop, reseedTemplates };

@@ -5,10 +5,11 @@ const path = require('path');
 // db is injected per-request via req.db (tenant middleware)
 // Each route reads db from req.db
 function getDb(req) { return req.db; }
-const { auth, hasPermission } = require('../middleware/auth');
+const { auth, isAdmin, hasPermission } = require('../middleware/auth');
 const { sendEmail } = require('../lib/mailer');
 const { generateOrderPDF } = require('../lib/pdfGenerator');
 const { logActivity } = require('../lib/auditLogger');
+const { processTemplate } = require('../lib/templateProcessor');
 
 // Multer setup for photos - using tenant-specific persistent storage
 const { getTenantDir } = require('../tenantManager');
@@ -26,13 +27,13 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // @route   GET api/orders
-router.get('/', auth, hasPermission('ordenes'), (req, res) => {
+router.get('/', auth, hasPermission('orders'), (req, res) => {
     const orders = req.db.prepare(`
         SELECT o.*, 
             (c.first_name || ' ' || c.last_name) as client_name, 
             v.plate, v.model,
             COALESCE((SELECT SUM(subtotal) FROM order_items WHERE order_id = o.id), 0) as order_total,
-            (SELECT COUNT(*) FROM order_history WHERE order_id = o.id AND status = 'Respuesta Recibida' AND (is_read = 0 OR is_read IS NULL)) as unread_messages
+            (SELECT COUNT(*) FROM order_history WHERE order_id = o.id AND status = 'response_received' AND (is_read = 0 OR is_read IS NULL)) as unread_messages
         FROM orders o
         JOIN clients c ON o.client_id = c.id
         JOIN vehicles v ON o.vehicle_id = v.id
@@ -42,7 +43,7 @@ router.get('/', auth, hasPermission('ordenes'), (req, res) => {
 });
 
 // @route   POST api/orders
-router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
+router.post('/', auth, hasPermission('orders'), async (req, res) => {
     const { client_id, vehicle_id, description, items } = req.body;
 
     const crypto = require('crypto');
@@ -82,10 +83,10 @@ router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
         // Log Initial History
         const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
-            .run(orderId, 'Pendiente', 'Orden de trabajo creada', actingUserId);
+            .run(orderId, 'pending', 'Orden de trabajo creada', actingUserId);
 
         // --- Automation Logic ---
-        const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'Pendiente'").get();
+        const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'pending'").get();
         if (template) {
             const order = req.db.prepare(`
                 SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, u.first_name as user_first_name, u.last_name as user_last_name
@@ -118,11 +119,7 @@ router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
                     'orden_id': orderId
                 };
 
-                let message = template.content;
-                Object.keys(replacements).forEach(key => {
-                    const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
-                    message = message.replace(regex, replacements[key]);
-                });
+                const message = processTemplate(template.content, replacements);
 
                 let attachments = [];
                 if (template.include_pdf === 1) {
@@ -145,7 +142,7 @@ router.post('/', auth, hasPermission('ordenes'), async (req, res) => {
 });
 
 // @route   GET api/orders/:id
-router.get('/:id', auth, hasPermission('ordenes'), (req, res) => {
+router.get('/:id', auth, hasPermission('orders'), (req, res) => {
     try {
         const order = req.db.prepare(`
             SELECT o.*, (c.first_name || ' ' || c.last_name) as client_name, c.phone as client_phone, c.email as client_email,
@@ -178,7 +175,7 @@ router.get('/:id', auth, hasPermission('ordenes'), (req, res) => {
 });
 
 // @route   PUT api/orders/:id/status
-router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
+router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
     const { status, notes, reminder_days, appointment_date } = req.body;
     try {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
@@ -187,13 +184,13 @@ router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
         const currentOrder = req.db.prepare('SELECT status, delivered_at, payment_status, payment_amount FROM orders WHERE id = ?').get(req.params.id);
 
         let deliveredAt = currentOrder.delivered_at;
-        // If changing to 'Entregado' or already 'Entregado', ensure we have a delivery date
-        if (status === 'Entregado' && !deliveredAt) {
+        // If changing to 'delivered' or already 'delivered', ensure we have a delivery date
+        if (status === 'delivered' && !deliveredAt) {
             deliveredAt = new Date().toISOString();
         }
 
         let reminderAt = null;
-        if (status === 'Entregado' && reminder_days && req.enabledModules.includes('recordatorios')) {
+        if (status === 'delivered' && reminder_days && req.enabledModules.includes('reminders')) {
             const baseDate = new Date(deliveredAt || new Date());
             baseDate.setDate(baseDate.getDate() + parseInt(reminder_days));
             reminderAt = baseDate.toISOString().split('T')[0];
@@ -219,18 +216,17 @@ router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
         req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
             .run(req.params.id, status, historyNotes, actingUserId);
 
-        // Auto-set payment to 'cobrado' when delivered
-        if (status === 'Entregado') {
-            if (!currentOrder.payment_status || currentOrder.payment_status === 'sin_cobrar') {
+        // Auto-set payment to 'paid' when delivered
+        if (status === 'delivered') {
+            if (!currentOrder.payment_status || currentOrder.payment_status === 'unpaid') {
                 const config = req.db.prepare('SELECT * FROM config LIMIT 1').get() || {};
                 const includeParts = config.income_include_parts ?? 1;
-                const partsPercentage = (config.parts_profit_percentage ?? 100) / 100.0;
                 const totalRow = req.db.prepare(`
                     SELECT SUM(labor_price + (CASE WHEN ? = 1 THEN (parts_price + parts_profit) ELSE 0 END)) as total
                     FROM order_items WHERE order_id = ?
                 `).get(includeParts, req.params.id);
                 const orderTotal = totalRow?.total || 0;
-                req.db.prepare("UPDATE orders SET payment_status = 'cobrado', payment_amount = ? WHERE id = ?")
+                req.db.prepare("UPDATE orders SET payment_status = 'paid', payment_amount = ? WHERE id = ?")
                     .run(orderTotal, req.params.id);
             }
         }
@@ -283,11 +279,7 @@ router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
                     'orden_id': order.id
                 };
 
-                let message = (template.content || '');
-                Object.keys(replacements).forEach(key => {
-                    const regex = new RegExp(`[\\{\\[]${key}[\\}\\]]`, 'gi');
-                    message = message.replace(regex, replacements[key]);
-                });
+                const message = processTemplate(template.content || '', replacements);
 
                 let attachments = [];
                 if (template.include_pdf === 1) {
@@ -306,7 +298,7 @@ router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
         logActivity(req.slug, req.user, 'UPDATE_ORDER_STATUS', 'order', req.params.id, {
             oldStatus: currentOrder.status,
             newStatus: status,
-            autoPaid: (status === 'Entregado' && (!currentOrder.payment_status || currentOrder.payment_status === 'sin_cobrar'))
+            autoPaid: (status === 'delivered' && (!currentOrder.payment_status || currentOrder.payment_status === 'unpaid'))
         }, req);
     } catch (err) {
         console.error('Error updating order status:', err);
@@ -315,9 +307,9 @@ router.put('/:id/status', auth, hasPermission('ordenes'), async (req, res) => {
 });
 
 // @route   PUT api/orders/:id/payment
-router.put('/:id/payment', auth, hasPermission('ordenes'), (req, res) => {
+router.put('/:id/payment', auth, hasPermission('orders'), (req, res) => {
     const { payment_status, payment_amount } = req.body;
-    if (!['cobrado', 'parcial', 'sin_cobrar'].includes(payment_status)) {
+    if (!['paid', 'partial', 'unpaid'].includes(payment_status)) {
         return res.status(400).json({ message: 'Estado de cobro inválido' });
     }
     try {
@@ -337,7 +329,7 @@ router.put('/:id/payment', auth, hasPermission('ordenes'), (req, res) => {
 });
 
 // @route   POST api/orders/:id/photos
-router.post('/:id/photos', auth, hasPermission('ordenes'), upload.array('photos', 5), (req, res) => {
+router.post('/:id/photos', auth, hasPermission('orders'), upload.array('photos', 5), (req, res) => {
     const filenames = req.files.map(f => f.filename);
     const order = req.db.prepare('SELECT photos FROM orders WHERE id = ?').get(req.params.id);
     const existingPhotos = JSON.parse(order.photos || '[]');
@@ -350,22 +342,22 @@ router.post('/:id/photos', auth, hasPermission('ordenes'), upload.array('photos'
 });
 
 // @route   POST api/orders/:id/budget
-router.post('/:id/budget', auth, hasPermission('ordenes'), (req, res) => {
+router.post('/:id/budget', auth, hasPermission('orders'), (req, res) => {
     const { items, subtotal, tax, total } = req.body;
     const result = req.db.prepare('INSERT INTO budgets (order_id, items, subtotal, tax, total) VALUES (?, ?, ?, ?, ?)').run(
         req.params.id, JSON.stringify(items), subtotal, tax, total
     );
 
     const actingUserId = req.user.id === 0 ? null : req.user.id;
-    req.db.prepare("UPDATE orders SET status = 'Presupuestado', modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    req.db.prepare("UPDATE orders SET status = 'quoted', modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
         .run(actingUserId, req.params.id);
 
     req.db.prepare('INSERT INTO order_history (order_id, status, notes, user_id) VALUES (?, ?, ?, ?)')
-        .run(req.params.id, 'Presupuestado', `Presupuesto generado por un total de $${total}`, actingUserId);
+        .run(req.params.id, 'quoted', `Presupuesto generado por un total de $${total}`, actingUserId);
 
     (async () => {
         try {
-            const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'Presupuestado'").get();
+            const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'quoted'").get();
             if (template) {
                 const order = req.db.prepare(`
                     SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km, u.first_name as user_first_name, u.last_name as user_last_name
@@ -384,15 +376,23 @@ router.post('/:id/budget', auth, hasPermission('ordenes'), (req, res) => {
                 if (config && config.messages_enabled === 0) {
                     console.log('[Automation] Messages disabled in config. Skipping budget notification.');
                 } else if (order && order.email && template.send_email === 1) {
-                    let message = template.content
-                        .replace(/{apodo}|\[apodo\]/g, order.nickname || order.first_name || 'Cliente')
-                        .replace(/\[cliente\]/g, order.first_name || 'Cliente')
-                        .replace(/{vehiculo}|\[vehiculo\]/g, `${order.brand} ${order.model}`)
-                        .replace(/{taller}|\[taller\]/g, config.workshop_name || 'Nuestro Taller')
-                        .replace(/\[servicios\]/g, servicesStr || 'Mantenimiento General')
-                        .replace(/\[km\]/g, order.km || '---')
-                        .replace(/\[usuario\]/g, `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim())
-                        .replace(/{orden_id}|\[orden_id\]/g, req.params.id);
+                    const siteUrl = (process.env.SITE_URL || 'http://localhost:3000').replace(/\/$/, '');
+                    const trackingLink = `${siteUrl}/${req.slug}/o/${order.share_token}`;
+
+                    const message = processTemplate(template.content, {
+                        'apodo': order.nickname || order.first_name || 'Cliente',
+                        'cliente': order.first_name || 'Cliente',
+                        'vehiculo': `${order.brand} ${order.model}`,
+                        'taller': config.workshop_name || 'Nuestro Taller',
+                        'servicios': servicesStr || 'Mantenimiento General',
+                        'items': servicesStr || 'Mantenimiento General',
+                        'km': order.km || '---',
+                        'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim(),
+                        'datos_contacto_taller': `Email: ${config.email || '---'} | Tel: ${config.whatsapp || config.phone || '---'} | Dir: ${config.address || '---'}`,
+                        'link': trackingLink,
+                        'total': total,
+                        'orden_id': req.params.id
+                    });
 
                     let attachments = [];
                     if (template.include_pdf === 1) {
@@ -416,7 +416,7 @@ router.post('/:id/budget', auth, hasPermission('ordenes'), (req, res) => {
 router.use('/photos', express.static('uploads'));
 
 // @route   POST api/orders/:id/items
-router.post('/:id/items', auth, hasPermission('ordenes'), (req, res) => {
+router.post('/:id/items', auth, hasPermission('orders'), (req, res) => {
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
@@ -453,7 +453,7 @@ router.post('/:id/items', auth, hasPermission('ordenes'), (req, res) => {
 });
 
 // @route   PUT api/orders/items/:itemId
-router.put('/items/:itemId', auth, hasPermission('ordenes'), (req, res) => {
+router.put('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
     const { description, labor_price, parts_price, parts_profit } = req.body;
     const labor = parseFloat(labor_price) || 0;
     const parts = parseFloat(parts_price) || 0;
@@ -490,7 +490,7 @@ router.put('/items/:itemId', auth, hasPermission('ordenes'), (req, res) => {
 });
 
 // @route   DELETE api/orders/items/:itemId
-router.delete('/items/:itemId', auth, hasPermission('ordenes'), (req, res) => {
+router.delete('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
     try {
         const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
         if (!item) return res.status(404).json({ message: 'Item no encontrado' });
@@ -508,7 +508,7 @@ router.delete('/items/:itemId', auth, hasPermission('ordenes'), (req, res) => {
 });
 
 // @route   POST api/orders/:id/send-email
-router.post('/:id/send-email', auth, hasPermission('ordenes'), async (req, res) => {
+router.post('/:id/send-email', auth, hasPermission('orders'), async (req, res) => {
     try {
         const order = req.db.prepare(`
             SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km, u.first_name as user_first_name, u.last_name as user_last_name
@@ -526,7 +526,7 @@ router.post('/:id/send-email', auth, hasPermission('ordenes'), async (req, res) 
 
         let template = req.db.prepare('SELECT * FROM templates WHERE trigger_status = ?').get(order.status);
         if (!template) {
-            template = req.db.prepare("SELECT * FROM templates WHERE name = 'Presupuesto Listo'").get();
+            template = req.db.prepare("SELECT * FROM templates WHERE name = 'budget_review'").get();
         }
 
         if (template && template.send_email !== 1) {
@@ -601,7 +601,7 @@ router.post('/:id/send-email', auth, hasPermission('ordenes'), async (req, res) 
 });
 
 // @route   POST api/orders/send-manual-template
-router.post('/send-manual-template', auth, hasPermission('ordenes'), async (req, res) => {
+router.post('/send-manual-template', auth, hasPermission('orders'), async (req, res) => {
     const { clientId, vehicleId, orderId, templateId } = req.body;
     try {
         const client = req.db.prepare('SELECT first_name, nickname, email FROM clients WHERE id = ?').get(clientId);
@@ -659,7 +659,7 @@ router.post('/send-manual-template', auth, hasPermission('ordenes'), async (req,
 });
 
 // @route   POST api/orders/:id/reply
-router.post('/:id/reply', auth, hasPermission('proveedores'), async (req, res) => {
+router.post('/:id/reply', auth, hasPermission('suppliers'), async (req, res) => {
     const { to, message } = req.body;
 
     try {
@@ -681,7 +681,7 @@ router.post('/:id/reply', auth, hasPermission('proveedores'), async (req, res) =
             SELECT status, notes, created_at 
             FROM order_history 
             WHERE order_id = ? 
-            AND (status = 'Respuesta Recibida' OR status = 'Respuesta Enviada')
+            AND (status = 'response_received' OR status = 'response_sent')
             AND reply_to = ?
             ORDER BY created_at DESC
             LIMIT 5
@@ -703,7 +703,7 @@ router.post('/:id/reply', auth, hasPermission('proveedores'), async (req, res) =
         req.db.prepare(`
             INSERT INTO order_history (order_id, status, notes, user_id, reply_to, is_read)
             VALUES (?, ?, ?, ?, ?, 1)
-        `).run(req.params.id, 'Respuesta Enviada', `Respuesta a ${to}:\n${message}`, actingUserId, to);
+        `).run(req.params.id, 'response_sent', `Respuesta a ${to}:\n${message}`, actingUserId, to);
 
         res.json({ message: 'Respuesta enviada correctamente' });
     } catch (err) {
@@ -713,14 +713,14 @@ router.post('/:id/reply', auth, hasPermission('proveedores'), async (req, res) =
 });
 
 // @route   PUT api/orders/:id/messages/read
-router.put('/:id/messages/read', auth, hasPermission('proveedores'), (req, res) => {
+router.put('/:id/messages/read', auth, hasPermission('suppliers'), (req, res) => {
     const { reply_to } = req.body;
     try {
         if (reply_to) {
-            req.db.prepare('UPDATE order_history SET is_read = 1 WHERE order_id = ? AND reply_to = ? AND status = \'Respuesta Recibida\'')
+            req.db.prepare('UPDATE order_history SET is_read = 1 WHERE order_id = ? AND reply_to = ? AND status = \'response_received\'')
                 .run(req.params.id, reply_to);
         } else {
-            req.db.prepare('UPDATE order_history SET is_read = 1 WHERE order_id = ? AND status = \'Respuesta Recibida\'')
+            req.db.prepare('UPDATE order_history SET is_read = 1 WHERE order_id = ? AND status = \'response_received\'')
                 .run(req.params.id);
         }
         res.json({ message: 'Mensajes marcados como leídos' });
@@ -731,7 +731,7 @@ router.put('/:id/messages/read', auth, hasPermission('proveedores'), (req, res) 
 });
 
 // @route   PUT api/orders/:id/reminder-status
-router.put('/:id/reminder-status', auth, hasPermission('recordatorios'), (req, res) => {
+router.put('/:id/reminder-status', auth, hasPermission('reminders'), (req, res) => {
     const { status } = req.body; // 'pending', 'skipped', 'sent'
     try {
         req.db.prepare('UPDATE orders SET reminder_status = ? WHERE id = ?').run(status, req.params.id);

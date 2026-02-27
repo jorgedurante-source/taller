@@ -17,7 +17,41 @@ async function generateOrderPDF(db, orderId) {
         items = db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
     }
 
-    const workshop = db.prepare('SELECT * FROM config LIMIT 1').get() || { workshop_name: 'Taller' };
+    const workshop = db.prepare('SELECT * FROM config LIMIT 1').get() || { workshop_name: 'Taller', client_portal_language: 'es' };
+    const lang = workshop.client_portal_language || 'es';
+
+    const translations = {
+        es: {
+            budget: 'PRESUPUESTO DE SERVICIO',
+            order: 'ORDEN DE TRABAJO',
+            client: 'Cliente',
+            vehicle: 'Vehículo',
+            date: 'Fecha',
+            detail: 'Detalle',
+            qty: 'Cant',
+            price: 'Precio',
+            subtotal: 'Subtotal',
+            labor: 'Mano de Obra',
+            parts: 'Repuestos',
+            total: 'TOTAL'
+        },
+        en: {
+            budget: 'SERVICE ESTIMATE',
+            order: 'WORK ORDER',
+            client: 'Customer',
+            vehicle: 'Vehicle',
+            date: 'Date',
+            detail: 'Detail',
+            qty: 'Qty',
+            price: 'Price',
+            subtotal: 'Subtotal',
+            labor: 'Labor',
+            parts: 'Parts',
+            total: 'TOTAL'
+        }
+    };
+
+    const t = (key) => translations[lang][key] || key;
 
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage([600, 800]);
@@ -64,20 +98,20 @@ async function generateOrderPDF(db, orderId) {
     }
 
     page.drawText(wName, { x: 50 + logoOffset, y: 750, size: 24, font: bold });
-    page.drawText(isBudget ? 'PRESUPUESTO DE SERVICIO' : 'ORDEN DE TRABAJO', { x: 300, y: 750, size: 14, font: bold, color: rgb(0.2, 0.4, 0.8) });
+    page.drawText(isBudget ? t('budget') : t('order'), { x: 300, y: 750, size: 14, font: bold, color: rgb(0.2, 0.4, 0.8) });
 
-    page.drawText(`Cliente: ${order.client_name || 'Cliente'}`, { x: 50, y: 700, size: 12, font });
-    page.drawText(`Vehículo: ${order.brand || ''} ${order.model || ''} (${order.plate || ''})`, { x: 50, y: 680, size: 12, font });
-    page.drawText(`Fecha: ${order.created_at ? new Date(order.created_at).toLocaleDateString() : '---'}`, { x: 350, y: 700, size: 12, font });
+    page.drawText(`${t('client')}: ${order.client_name || '---'}`, { x: 50, y: 700, size: 12, font });
+    page.drawText(`${t('vehicle')}: ${order.brand || ''} ${order.model || ''} (${order.plate || ''})`, { x: 50, y: 680, size: 12, font });
+    page.drawText(`${t('date')}: ${order.created_at ? new Date(order.created_at).toLocaleDateString(lang === 'es' ? 'es-AR' : 'en-US') : '---'}`, { x: 350, y: 700, size: 12, font });
 
-    page.drawText('Detalle', { x: 50, y: 620, size: 12, font: bold });
+    page.drawText(t('detail'), { x: 50, y: 620, size: 12, font: bold });
     if (isBudget) {
-        page.drawText('Cant', { x: 350, y: 620, size: 12, font: bold });
-        page.drawText('Precio', { x: 420, y: 620, size: 12, font: bold });
-        page.drawText('Subtotal', { x: 500, y: 620, size: 12, font: bold });
+        page.drawText(t('qty'), { x: 350, y: 620, size: 12, font: bold });
+        page.drawText(t('price'), { x: 420, y: 620, size: 12, font: bold });
+        page.drawText(t('subtotal'), { x: 500, y: 620, size: 12, font: bold });
     } else {
-        page.drawText('Mano de Obra', { x: 350, y: 620, size: 12, font: bold });
-        page.drawText('Repuestos', { x: 450, y: 620, size: 12, font: bold });
+        page.drawText(t('labor'), { x: 350, y: 620, size: 12, font: bold });
+        page.drawText(t('parts'), { x: 450, y: 620, size: 12, font: bold });
     }
 
     let y = 600;
@@ -102,10 +136,11 @@ async function generateOrderPDF(db, orderId) {
 
     if (isBudget && budget.tax) {
         page.drawText(`SUBTOTAL: $${budget.subtotal}`, { x: 350, y: y - 30, size: 10, font });
-        page.drawText(`IVA (21%): $${budget.tax}`, { x: 350, y: y - 45, size: 10, font });
-        page.drawText(`TOTAL: $${budget.total}`, { x: 350, y: y - 70, size: 16, font: bold });
+        const taxLabel = lang === 'es' ? 'IVA (21%)' : 'TAX (21%)';
+        page.drawText(`${taxLabel}: $${budget.tax}`, { x: 350, y: y - 45, size: 10, font });
+        page.drawText(`${t('total')}: $${budget.total}`, { x: 350, y: y - 70, size: 16, font: bold });
     } else {
-        page.drawText(`TOTAL: $${total}`, { x: 350, y: y - 40, size: 14, font: bold });
+        page.drawText(`${t('total')}: $${total}`, { x: 350, y: y - 40, size: 14, font: bold });
     }
 
     const pdfBytes = await pdfDoc.save();
@@ -134,7 +169,47 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
         ORDER BY updated_at DESC
     `).all(vehicleId);
 
-    const workshop = db.prepare('SELECT * FROM config LIMIT 1').get() || { workshop_name: 'Taller' };
+    const workshop = db.prepare('SELECT * FROM config LIMIT 1').get() || { workshop_name: 'Taller', client_portal_language: 'es' };
+    const lang = workshop.client_portal_language || 'es';
+
+    const translations = {
+        es: {
+            title: 'HISTORIAL DE MANTENIMIENTO',
+            client: 'Cliente',
+            vehicle: 'Vehículo',
+            plate: 'Patente',
+            km: 'Kilometraje',
+            date: 'Fecha',
+            maintenance: 'Mantenimiento',
+            status: 'Estado',
+            service: 'Servicio',
+            detail_title: 'Detalle de Tareas y Repuestos:',
+            labor: 'M.O',
+            parts: 'Rep',
+            totals: 'TOTALES FACTURADOS',
+            notes: 'Notas',
+            no_records: 'No hay registros de ordenes para este vehiculo.'
+        },
+        en: {
+            title: 'MAINTENANCE HISTORY',
+            client: 'Customer',
+            vehicle: 'Vehicle',
+            plate: 'Plate',
+            km: 'Mileage',
+            date: 'Date',
+            maintenance: 'Maintenance',
+            status: 'Status',
+            service: 'Service',
+            detail_title: 'Tasks and Parts Detail:',
+            labor: 'Labor',
+            parts: 'Parts',
+            totals: 'BILLED TOTALS',
+            notes: 'Notes',
+            no_records: 'No order records found for this vehicle.'
+        }
+    };
+
+    const t = (key) => translations[lang][key] || key;
 
     const pdfDoc = await PDFDocument.create();
     let page = pdfDoc.addPage([600, 800]);
@@ -190,14 +265,14 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
     }
 
     page.drawText(wName, { x: 50 + logoOffset, y: 750, size: 24, font: bold });
-    page.drawText('HISTORIAL DE MANTENIMIENTO', { x: 300, y: 750, size: 14, font: bold, color: rgb(0.2, 0.4, 0.8) });
+    page.drawText(t('title'), { x: 300, y: 750, size: 14, font: bold, color: rgb(0.2, 0.4, 0.8) });
 
-    page.drawText(`Cliente: ${sanitize(vehicle.first_name)} ${sanitize(vehicle.last_name)}`, { x: 50, y: 700, size: 12, font });
-    page.drawText(`Vehiculo: ${sanitize(vehicle.brand)} ${sanitize(vehicle.model)}`, { x: 50, y: 680, size: 12, font });
-    page.drawText(`Patente: ${sanitize(vehicle.plate)} | Kilometraje: ${sanitize(vehicle.km)}`, { x: 50, y: 660, size: 12, font });
+    page.drawText(`${t('client')}: ${sanitize(vehicle.first_name)} ${sanitize(vehicle.last_name)}`, { x: 50, y: 700, size: 12, font });
+    page.drawText(`${t('vehicle')}: ${sanitize(vehicle.brand)} ${sanitize(vehicle.model)}`, { x: 50, y: 680, size: 12, font });
+    page.drawText(`${t('plate')}: ${sanitize(vehicle.plate)} | ${t('km')}: ${sanitize(vehicle.km)}`, { x: 50, y: 660, size: 12, font });
 
     if (orders.length === 0) {
-        page.drawText('No hay registros de ordenes para este vehiculo.', { x: 50, y, size: 10, font });
+        page.drawText(t('no_records'), { x: 50, y, size: 10, font });
     } else {
         orders.forEach(order => {
             checkPage();
@@ -206,24 +281,24 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
             const orderKmQuery = db.prepare(`SELECT km FROM vehicle_km_history WHERE vehicle_id = ? AND recorded_at <= ? ORDER BY recorded_at DESC LIMIT 1`).get(vehicleId, order.updated_at || order.created_at);
             const orderKm = orderKmQuery ? orderKmQuery.km : null;
 
-            const dateStr = order.updated_at ? new Date(order.updated_at).toLocaleDateString() : 'N/A';
+            const dateStr = order.updated_at ? new Date(order.updated_at).toLocaleDateString(lang === 'es' ? 'es-AR' : 'en-US') : 'N/A';
 
-            page.drawText(`Fecha: ${dateStr}`, { x: 50, y, size: 10, font: bold });
+            page.drawText(`${t('date')}: ${dateStr}`, { x: 50, y, size: 10, font: bold });
             const kmText = orderKm ? ` - ${orderKm} km aprox` : '';
-            page.drawText(`Mantenimiento${kmText} | Estado: ${order.status}`, { x: 200, y, size: 10, font: bold });
+            page.drawText(`${t('maintenance')}${kmText} | ${t('status')}: ${order.status}`, { x: 200, y, size: 10, font: bold });
             y -= 20;
             checkPage();
 
-            const svcDesc = order.description || order.desc || 'Sin detalle';
-            page.drawText(`Servicio: ${sanitize(svcDesc).substring(0, 100)}`, { x: 50, y, size: 10, font });
+            const svcDesc = order.description || order.desc || '---';
+            page.drawText(`${t('service')}: ${sanitize(svcDesc).substring(0, 100)}`, { x: 50, y, size: 10, font });
             y -= 20;
             checkPage();
 
             // Fetch pricing and items if status is Entregado
-            if (order.status === 'Entregado') {
+            if (order.status === 'Entregado' || order.status === 'Delivered') {
                 const items = db.prepare('SELECT description, labor_price, parts_price FROM order_items WHERE order_id = ?').all(order.id);
                 if (items && items.length > 0) {
-                    page.drawText('Detalle de Tareas y Repuestos:', { x: 50, y, size: 9, font: bold });
+                    page.drawText(t('detail_title'), { x: 50, y, size: 9, font: bold });
                     y -= 15;
                     checkPage();
 
@@ -235,7 +310,7 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
                         const parts = i.parts_price || 0;
 
                         page.drawText(`- ${itemDesc}`, { x: 60, y, size: 8, font });
-                        page.drawText(`M.O: $${labor} | Rep: $${parts}`, { x: 400, y, size: 8, font });
+                        page.drawText(`${t('labor')}: $${labor} | ${t('parts')}: $${parts}`, { x: 400, y, size: 8, font });
                         y -= 12;
                         checkPage();
 
@@ -244,7 +319,7 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
                     });
 
                     if (totalLabor > 0 || totalParts > 0) {
-                        page.drawText(`TOTALES FACTURADOS - Mano de Obra: $${totalLabor} | Repuestos: $${totalParts}`, { x: 50, y, size: 9, font: bold, color: rgb(0.1, 0.4, 0.1) });
+                        page.drawText(`${t('totals')} - ${t('labor')}: $${totalLabor} | ${t('parts')}: $${totalParts}`, { x: 50, y, size: 9, font: bold, color: rgb(0.1, 0.4, 0.1) });
                         y -= 20;
                         checkPage();
                     }
@@ -254,7 +329,7 @@ async function generateVehicleHistoryPDF(db, vehicleId) {
             // Fetch last note if exists
             const lastNote = db.prepare('SELECT notes FROM order_history WHERE order_id = ? ORDER BY created_at DESC LIMIT 1').get(order.id);
             if (lastNote && lastNote.notes) {
-                page.drawText(`Notas: ${sanitize(lastNote.notes).substring(0, 100)}`, { x: 50, y, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
+                page.drawText(`${t('notes')}: ${sanitize(lastNote.notes).substring(0, 100)}`, { x: 50, y, size: 9, font, color: rgb(0.4, 0.4, 0.4) });
                 y -= 20;
                 checkPage();
             }
