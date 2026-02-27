@@ -15,7 +15,6 @@ export default function SuperAdminSettings() {
         allow_new_registrations: 'true',
         support_email: '',
         system_currency: '$',
-        system_announcement: '',
         superadmin_theme: 'default',
         backup_enabled: 'false',
         backup_frequency: 'daily',
@@ -124,30 +123,6 @@ export default function SuperAdminSettings() {
                                     />
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Announcement Section */}
-                    <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all">
-                        <div className="flex items-center gap-4 mb-8">
-                            <div className="p-4 bg-amber-50 text-amber-600 rounded-[1.5rem]">
-                                <Bell size={28} />
-                            </div>
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Comunicación</h2>
-                                <p className="text-slate-400 font-bold text-[10px] uppercase tracking-widest">Global Broadcast</p>
-                            </div>
-                        </div>
-
-                        <div className="space-y-3">
-                            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Anuncio Global</label>
-                            <textarea
-                                value={settings.system_announcement}
-                                onChange={(e) => setSettings({ ...settings, system_announcement: e.target.value })}
-                                className="w-full bg-slate-50 border-none rounded-2xl p-5 text-slate-900 focus:ring-4 focus:ring-amber-50 transition-all font-bold min-h-[120px]"
-                                placeholder="Escribe un mensaje que verán todos los talleres en su dashboard..."
-                            />
-                            <p className="text-[10px] text-slate-400 italic ml-1">Deja vacío para no mostrar ningún anuncio.</p>
                         </div>
                     </div>
 

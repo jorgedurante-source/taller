@@ -112,7 +112,6 @@ seedSetting('maintenance_mode', 'false');
 seedSetting('allow_new_registrations', 'true');
 seedSetting('support_email', 'soporte@surforge.com');
 seedSetting('system_currency', '$');
-seedSetting('system_announcement', '');
 seedSetting('superadmin_theme', 'default');
 seedSetting('backup_enabled', 'false');
 seedSetting('backup_frequency', 'daily');

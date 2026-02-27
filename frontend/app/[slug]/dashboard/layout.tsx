@@ -201,18 +201,6 @@ export default function DashboardLayout({
 
             {/* Main Content */}
             <main className={`flex-grow md:ml-64 p-8 ${tenantConfig?.environment === 'dev' ? 'pt-12' : ''}`}>
-                {/* Global Announcement */}
-                {config.system_announcement && (
-                    <div className="mb-8 bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-center gap-4 text-amber-900 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
-                        <div className="p-2 bg-amber-100 rounded-xl text-amber-600">
-                            <ShieldCheck size={20} />
-                        </div>
-                        <div className="flex-grow">
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50 mb-0.5">Comunicado Oficial</p>
-                            <p className="text-sm font-bold leading-tight">{config.system_announcement}</p>
-                        </div>
-                    </div>
-                )}
                 {children}
             </main>
         </div>
