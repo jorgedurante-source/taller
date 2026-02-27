@@ -49,7 +49,8 @@ import {
     Cpu,
     Server,
     Clock,
-    Mail
+    Mail,
+    Wand2
 } from 'lucide-react';
 import { THEMES, applyTheme } from '@/lib/theme';
 
@@ -99,6 +100,7 @@ export default function SuperAdminDashboard() {
     const [systemHealth, setSystemHealth] = useState<any>(null);
     const [showHealthMonitor, setShowHealthMonitor] = useState(false);
     const [workshopEmailStatus, setWorkshopEmailStatus] = useState<Record<string, any>>({});
+    const [runningMigration, setRunningMigration] = useState(false);
     const [systemLogs, setSystemLogs] = useState<any[]>([]);
     const [fileLogs, setFileLogs] = useState<any[]>([]);
     const [loadingLogs, setLoadingLogs] = useState(false);
@@ -524,6 +526,23 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const handleMigrateAll = async () => {
+        if (!confirm('¿Desea propagar cambios de estructura a TODOS los talleres? Esta operación inicializará todas las bases de datos con las últimas migraciones.')) return;
+        setRunningMigration(true);
+        try {
+            const res = await superApi.post('/workshops/migrate');
+            notify('success', `Migración completada: ${res.data.success} talleres actualizados.`);
+            if (res.data.failed > 0) {
+                notify('warn', `${res.data.failed} talleres fallaron al migrar.`);
+            }
+            fetchData();
+        } catch (err) {
+            notify('error', 'Error al ejecutar la migración maestra');
+        } finally {
+            setRunningMigration(false);
+        }
+    };
+
     if (loading) return (
         <div className="min-h-screen flex items-center justify-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -601,6 +620,15 @@ export default function SuperAdminDashboard() {
                             title="Monitoreo de Salud del Sistema"
                         >
                             <Activity size={20} className={showHealthMonitor ? 'animate-pulse' : ''} />
+                        </button>
+
+                        <button
+                            onClick={() => handleMigrateAll()}
+                            disabled={runningMigration}
+                            className={`bg-slate-800 hover:bg-amber-600 p-2.5 rounded-xl transition-all group border border-slate-700 hover:border-amber-500/50 ${runningMigration ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title="Propagar Estructura de DB (Migraciones)"
+                        >
+                            <Wand2 size={20} className={`text-slate-400 group-hover:text-white transition-colors ${runningMigration ? 'animate-spin' : ''}`} />
                         </button>
 
                         <button

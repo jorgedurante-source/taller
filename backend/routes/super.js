@@ -842,6 +842,38 @@ router.get('/audit', superAuth, (req, res) => {
     }
 });
 
+// ─── Master Migration Manager ───────────────────────────────────────────────
+router.post('/workshops/migrate', superAuth, async (req, res) => {
+    try {
+        const workshops = listTenants();
+        const results = {
+            total: workshops.length,
+            success: 0,
+            failed: 0,
+            errors: []
+        };
+
+        for (const w of workshops) {
+            try {
+                // getDb already triggers initTenantDb(db, slug)
+                getDb(w.slug);
+                results.success++;
+            } catch (err) {
+                results.failed++;
+                results.errors.push({ slug: w.slug, error: err.message });
+                console.error(`[super:migrate] Failed for ${w.slug}:`, err);
+            }
+        }
+
+        logSystemActivity(req.superUser, 'MIGRATE_ALL', 'system', null, `Executed master migration on ${results.success}/${results.total} workshops`, req);
+
+        res.json(results);
+    } catch (err) {
+        console.error('[super:/migrate] Error:', err);
+        res.status(500).json({ message: 'Error al ejecutar migración maestra' });
+    }
+});
+
 // ─── Health & Resources ──────────────────────────────────────────────────────
 
 const getDirSize = (dirPath) => {
