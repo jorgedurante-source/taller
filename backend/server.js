@@ -24,10 +24,14 @@ app.use('/api/super', require('./routes/super'));
 
 // ─── Tenant middleware ────────────────────────────────────────────────────────
 const tenantMiddleware = require('./middleware/tenant');
+const rateLimiter = require('./middleware/rateLimiter');
 
 // ─── All tenant routes mounted under /api/:slug/ ─────────────────────────────
 // Build a single tenant router
 const tenantRouter = express.Router({ mergeParams: true });
+
+// Apply Rate Limiting to all tenant routes (100 req per minute per IP/Tenant)
+tenantRouter.use(rateLimiter({ max: 120 }));
 
 tenantRouter.use('/auth', require('./routes/auth'));
 tenantRouter.use('/clients', require('./routes/clients'));
