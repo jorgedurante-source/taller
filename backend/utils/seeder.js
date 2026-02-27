@@ -122,7 +122,7 @@ function clearWorkshop(db) {
         SELECT name FROM sqlite_master 
         WHERE type='table' 
         AND name NOT LIKE 'sqlite_%' 
-        AND name != 'config'
+        AND name NOT IN ('config', 'users', 'roles')
     `).all().map(t => t.name);
 
     // 2. Disable foreign keys OUTSIDE the transaction for it to take effect
