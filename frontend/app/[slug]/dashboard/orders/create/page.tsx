@@ -52,6 +52,7 @@ export default function CreateOrderPage() {
         { description: '', labor_price: '', parts_price: '', parts_profit: '', service_id: null }
     ]);
     const [description, setDescription] = useState('');
+    const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -211,7 +212,7 @@ export default function CreateOrderPage() {
                 </div>
             </header>
 
-            <form onSubmit={handleSubmit} className="space-y-8" onClick={() => setShowResults(false)}>
+            <form onSubmit={handleSubmit} className="space-y-8" onClick={() => { setShowResults(false); setActiveSearchIndex(null); }}>
                 {/* Step 1: Client & Vehicle */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <section className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-6 relative">
@@ -329,28 +330,57 @@ export default function CreateOrderPage() {
                     <div className="space-y-6">
                         {items.map((item, index) => (
                             <div key={index} className="grid grid-cols-1 lg:grid-cols-12 gap-5 p-6 bg-slate-50/50 rounded-[24px] border border-slate-100 group">
-                                <div className="lg:col-span-2 space-y-1">
-                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Servicio Catálogo</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold bg-white"
-                                        value={item.service_id || ''}
-                                        onChange={(e) => updateItem(index, 'service_id', e.target.value)}
-                                    >
-                                        <option value="">-- Personalizado --</option>
-                                        {catalog.map(s => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="lg:col-span-3 space-y-1">
-                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Descripción / Tarea</label>
-                                    <input
-                                        required
-                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold bg-white text-slate-900"
-                                        placeholder="Ej: Cambio de aceite"
-                                        value={item.description}
-                                        onChange={(e) => updateItem(index, 'description', e.target.value)}
-                                    />
+                                <div className="lg:col-span-5 space-y-1 relative" onClick={(e) => e.stopPropagation()}>
+                                    <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Descripción / Tarea del Servicio</label>
+                                    <div className="relative">
+                                        <input
+                                            required
+                                            className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold bg-white text-slate-900"
+                                            placeholder="Escribe para buscar en el catálogo..."
+                                            value={item.description}
+                                            onChange={(e) => {
+                                                updateItem(index, 'description', e.target.value);
+                                                setActiveSearchIndex(index);
+                                                // If they type, clear service_id so backend re-checks
+                                                const updated = [...items];
+                                                updated[index].service_id = null;
+                                                setItems(updated);
+                                            }}
+                                            onFocus={() => setActiveSearchIndex(index)}
+                                        />
+                                        {activeSearchIndex === index && item.description.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-slate-100 shadow-2xl z-50 max-h-48 overflow-y-auto">
+                                                {catalog.length > 0 ? (
+                                                    (() => {
+                                                        const filtered = catalog.filter(s =>
+                                                            s.name.toLowerCase().includes(item.description.toLowerCase())
+                                                        );
+                                                        return filtered.length > 0 ? (
+                                                            filtered.map(s => (
+                                                                <div
+                                                                    key={s.id}
+                                                                    className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                                                    onClick={() => {
+                                                                        const updated = [...items];
+                                                                        updated[index].service_id = s.id;
+                                                                        updated[index].description = s.name;
+                                                                        updated[index].labor_price = s.base_price?.toString() || '0';
+                                                                        setItems(updated);
+                                                                        setActiveSearchIndex(null);
+                                                                    }}
+                                                                >
+                                                                    <p className="font-bold text-sm text-slate-900">{s.name}</p>
+                                                                    <p className="text-[10px] text-emerald-600 font-black tracking-widest uppercase">$ {s.base_price}</p>
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <div className="p-3 text-[10px] font-bold text-slate-400 uppercase italic">Se guardará como servicio nuevo</div>
+                                                        );
+                                                    })()
+                                                ) : null}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="lg:col-span-2 space-y-1">
                                     <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest">Mano O. ($)</label>

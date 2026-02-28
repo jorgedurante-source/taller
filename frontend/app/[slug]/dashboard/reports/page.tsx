@@ -453,7 +453,7 @@ export default function ReportsPage() {
                                     {priceChartData.length >= 2 && (
                                         <div>
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                                                Evolución de precio{priceHistoryFilter ? ` — ${priceHistoryFilter}` : ''}
+                                                Evolución de precio{priceHistoryFilter ? ` — ${priceHistoryData.summary.find((s: any) => s.id === priceHistoryFilter)?.name}` : ''}
                                             </p>
                                             <div className="h-[300px] w-full">
                                                 <ResponsiveContainer width="100%" height="100%">
@@ -503,7 +503,7 @@ export default function ReportsPage() {
                                             </thead>
                                             <tbody>
                                                 {(priceHistoryFilter
-                                                    ? priceHistoryData.summary.filter((s: any) => s.name === priceHistoryFilter)
+                                                    ? priceHistoryData.summary.filter((s: any) => s.id === priceHistoryFilter)
                                                     : priceHistoryData.summary
                                                 ).map((svc: any) => {
                                                     const pctChange = svc.initial_price && svc.initial_price > 0
@@ -512,8 +512,8 @@ export default function ReportsPage() {
                                                     return (
                                                         <tr
                                                             key={svc.id}
-                                                            className={`border-b border-slate-50 transition-colors cursor-pointer ${priceHistoryFilter === svc.name ? 'bg-violet-50/50' : 'hover:bg-slate-50/50'}`}
-                                                            onClick={() => setPriceHistoryFilter(priceHistoryFilter === svc.name ? '' : svc.name)}
+                                                            className={`border-b border-slate-50 transition-colors cursor-pointer ${priceHistoryFilter === svc.id ? 'bg-violet-50/50' : 'hover:bg-slate-50/50'}`}
+                                                            onClick={() => setPriceHistoryFilter(priceHistoryFilter === svc.id ? '' : svc.id)}
                                                         >
                                                             <td className="py-4 px-4 font-black text-slate-800 uppercase italic text-xs">{svc.name}</td>
                                                             <td className="py-4 px-4 text-right font-bold text-slate-400 text-xs tabular-nums">
@@ -546,7 +546,7 @@ export default function ReportsPage() {
                                     {filteredPriceHistory.length > 0 && (
                                         <div>
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                                                Log de cambios{priceHistoryFilter ? ` — ${priceHistoryFilter}` : ''}
+                                                Log de cambios{priceHistoryFilter ? ` — ${priceHistoryData.summary.find((s: any) => s.id === priceHistoryFilter)?.name}` : ''}
                                             </p>
                                             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                                                 {filteredPriceHistory.slice(0, 30).map((entry: any) => (

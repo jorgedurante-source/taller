@@ -637,6 +637,7 @@ export const translations: Translations = {
     delete_btn: { en: 'Delete', es: 'Eliminar' },
     from_label: { en: 'From', es: 'Desde' },
     to_label: { en: 'To', es: 'Hasta' },
+    type_to_search_catalog: { en: 'Type to search catalog...', es: 'Escribe para buscar en el catálogo...' },
 };
 
 interface LanguageContextType {

@@ -16,12 +16,13 @@ router.get('/', auth, (req, res) => {
 router.get('/price-history', auth, hasPermission('settings'), (req, res) => {
     try {
         const history = req.db.prepare(`
-            SELECT h.id, h.service_id, h.service_name, h.old_price, h.new_price, h.changed_at,
+            SELECT h.id, h.service_id, sc.name as service_name, h.old_price, h.new_price, h.changed_at,
                    u.first_name || ' ' || u.last_name as changed_by,
                    CASE WHEN h.old_price IS NULL OR h.old_price = 0 THEN NULL
                         ELSE ROUND(((h.new_price - h.old_price) / h.old_price) * 100, 1)
                    END as pct_change
             FROM service_price_history h
+            JOIN service_catalog sc ON h.service_id = sc.id
             LEFT JOIN users u ON h.changed_by_id = u.id
             ORDER BY h.changed_at DESC LIMIT 200
         `).all();
@@ -48,9 +49,9 @@ router.post('/', auth, hasPermission('settings'), (req, res) => {
     res.json({ id: result.lastInsertRowid, name, base_price });
     try {
         req.db.prepare(`
-            INSERT INTO service_price_history (service_id, service_name, old_price, new_price, changed_by_id)
-            VALUES (?, ?, NULL, ?, ?)
-        `).run(result.lastInsertRowid, name, parseFloat(base_price) || 0, req.user?.id || null);
+            INSERT INTO service_price_history (service_id, old_price, new_price, changed_by_id)
+            VALUES (?, NULL, ?, ?)
+        `).run(result.lastInsertRowid, parseFloat(base_price) || 0, req.user?.id || null);
     } catch (e) { /* fail silently for old DBs */ }
 });
 
@@ -62,9 +63,9 @@ router.put('/:id', auth, hasPermission('settings'), (req, res) => {
     if (current && parseFloat(current.base_price) !== parseFloat(base_price)) {
         try {
             req.db.prepare(`
-                INSERT INTO service_price_history (service_id, service_name, old_price, new_price, changed_by_id)
-                VALUES (?, ?, ?, ?, ?)
-            `).run(req.params.id, name || current.name, current.base_price, parseFloat(base_price), req.user?.id || null);
+                INSERT INTO service_price_history (service_id, old_price, new_price, changed_by_id)
+                VALUES (?, ?, ?, ?)
+            `).run(req.params.id, current.base_price, parseFloat(base_price), req.user?.id || null);
         } catch (e) { /* fail silently */ }
     }
     res.json({ message: 'Service updated' });

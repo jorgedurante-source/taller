@@ -10,6 +10,7 @@ const { sendEmail } = require('../lib/mailer');
 const { generateOrderPDF } = require('../lib/pdfGenerator');
 const { logActivity } = require('../lib/auditLogger');
 const { processTemplate } = require('../lib/templateProcessor');
+const { ensureService } = require('../lib/serviceManager');
 
 // Multer setup for photos - using tenant-specific persistent storage
 const { getTenantDir } = require('../tenantManager');
@@ -58,6 +59,7 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
 
         if (data.items && data.items.length > 0) {
             data.items.forEach(item => {
+                const updatedServiceId = ensureService(req.db, item, actingUserId);
                 const labor = parseFloat(item.labor_price) || 0;
                 const parts = parseFloat(item.parts_price) || 0;
                 const profit = parseFloat(item.parts_profit) || 0;
@@ -65,8 +67,8 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
 
                 insertItem.run(
                     orderId,
-                    item.service_id || null,
-                    item.description,
+                    updatedServiceId,
+                    (item.description || '').trim(),
                     labor,
                     parts,
                     profit,
@@ -443,8 +445,10 @@ router.post('/:id/items', auth, hasPermission('orders'), (req, res) => {
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
         const itemsToInsert = Array.isArray(data) ? data : (data.items || []);
         itemsToInsert.forEach(item => {
+            const updatedServiceId = ensureService(req.db, item, actingUserId);
             const labor = parseFloat(item.labor_price) || 0;
             const parts = parseFloat(item.parts_price) || 0;
             const profit = parseFloat(item.parts_profit) || 0;
@@ -452,8 +456,8 @@ router.post('/:id/items', auth, hasPermission('orders'), (req, res) => {
 
             insertItem.run(
                 req.params.id,
-                item.service_id || null,
-                item.description,
+                updatedServiceId,
+                (item.description || '').trim(),
                 labor,
                 parts,
                 profit,
@@ -463,6 +467,11 @@ router.post('/:id/items', auth, hasPermission('orders'), (req, res) => {
     });
 
     try {
+        const order = req.db.prepare('SELECT status FROM orders WHERE id = ?').get(req.params.id);
+        if (order && order.status === 'delivered') {
+            return res.status(403).json({ message: 'No se puede modificar una orden ya entregada. Cambie el estado para editar.' });
+        }
+
         transaction(req.body);
         const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('UPDATE orders SET modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
@@ -484,16 +493,27 @@ router.put('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
     const subtotal = labor + parts + profit;
 
     try {
-        const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
+        const actingUserId = req.user.id === 0 ? null : req.user.id;
+        const item = req.db.prepare(`
+            SELECT oi.order_id, o.status 
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            WHERE oi.id = ?
+        `).get(req.params.itemId);
+
         if (!item) return res.status(404).json({ message: 'Item no encontrado' });
+        if (item.status === 'delivered') {
+            return res.status(403).json({ message: 'No se puede modificar una orden ya entregada.' });
+        }
+
+        const updatedServiceId = ensureService(req.db, req.body, actingUserId);
 
         req.db.prepare(`
             UPDATE order_items 
-            SET description = ?, labor_price = ?, parts_price = ?, parts_profit = ?, subtotal = ? 
+            SET service_id = ?, description = ?, labor_price = ?, parts_price = ?, parts_profit = ?, subtotal = ? 
             WHERE id = ?
-        `).run(description, labor, parts, profit, subtotal, req.params.itemId);
+        `).run(updatedServiceId, description.trim(), labor, parts, profit, subtotal, req.params.itemId);
 
-        const actingUserId = req.user.id === 0 ? null : req.user.id;
         req.db.prepare('UPDATE orders SET modified_by_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
             .run(actingUserId, item.order_id);
 
@@ -515,8 +535,17 @@ router.put('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
 // @route   DELETE api/orders/items/:itemId
 router.delete('/items/:itemId', auth, hasPermission('orders'), (req, res) => {
     try {
-        const item = req.db.prepare('SELECT order_id FROM order_items WHERE id = ?').get(req.params.itemId);
+        const item = req.db.prepare(`
+            SELECT oi.order_id, o.status 
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            WHERE oi.id = ?
+        `).get(req.params.itemId);
+
         if (!item) return res.status(404).json({ message: 'Item no encontrado' });
+        if (item.status === 'delivered') {
+            return res.status(403).json({ message: 'No se puede modificar una orden ya entregada.' });
+        }
 
         req.db.prepare('DELETE FROM order_items WHERE id = ?').run(req.params.itemId);
 

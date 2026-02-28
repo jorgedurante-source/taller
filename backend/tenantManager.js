@@ -143,7 +143,6 @@ function initTenantDb(db, slug) {
         CREATE TABLE IF NOT EXISTS service_price_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             service_id INTEGER NOT NULL,
-            service_name TEXT,
             old_price REAL,
             new_price REAL NOT NULL,
             changed_by_id INTEGER,
@@ -314,7 +313,6 @@ function initTenantDb(db, slug) {
     addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
     addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
     addColumn('vehicles', 'version', "TEXT");
-    addColumn('service_price_history', 'service_name', "TEXT");
     addColumn('service_price_history', 'changed_by_id', "INTEGER");
 
     // Roles Seeding

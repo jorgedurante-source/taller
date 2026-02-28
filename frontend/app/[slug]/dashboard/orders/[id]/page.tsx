@@ -79,6 +79,8 @@ export default function OrderDetailsPage() {
     const [paymentStatus, setPaymentStatus] = useState('unpaid');
     const [paymentAmount, setPaymentAmount] = useState<number>(0);
     const [savingPayment, setSavingPayment] = useState(false);
+    const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
+    const [showEditSearch, setShowEditSearch] = useState(false);
 
     const fetchOrder = useCallback(async () => {
         try {
@@ -523,9 +525,9 @@ export default function OrderDetailsPage() {
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                 {/* Information Columns */}
-                <div className="lg:col-span-2 space-y-8">
+                <div className="lg:col-span-9 space-y-8">
                     {/* Items Table */}
                     <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm overflow-hidden">
                         <div className="p-8 border-b border-slate-50 flex justify-between items-center">
@@ -541,7 +543,8 @@ export default function OrderDetailsPage() {
                                 </span>
                                 <button
                                     onClick={() => setShowItemsModal(true)}
-                                    className="bg-blue-600 text-white p-2 rounded-xl hover:bg-slate-900 transition-all shadow-lg shadow-blue-100"
+                                    disabled={order.status === 'delivered'}
+                                    className={`p-2 rounded-xl transition-all shadow-lg ${order.status === 'delivered' ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-slate-900 shadow-blue-100'}`}
                                 >
                                     <Plus size={18} />
                                 </button>
@@ -549,14 +552,14 @@ export default function OrderDetailsPage() {
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-left">
-                                <thead className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                                <thead className="bg-slate-50/50 text-slate-400 text-[9px] font-black uppercase tracking-widest border-b border-slate-100">
                                     <tr>
-                                        <th className="px-8 py-4 whitespace-nowrap">{t('description')}</th>
-                                        <th className="px-8 py-4 text-right whitespace-nowrap">{t('labor')}</th>
-                                        <th className="px-8 py-4 text-right whitespace-nowrap">{t('parts')}</th>
-                                        <th className="px-8 py-4 text-right whitespace-nowrap">{t('parts_profit')}</th>
-                                        <th className="px-8 py-4 text-right whitespace-nowrap">{t('subtotal')}</th>
-                                        <th className="px-8 py-4 text-right whitespace-nowrap">{t('actions')}</th>
+                                        <th className="px-3 py-2.5 whitespace-nowrap">{t('description')}</th>
+                                        <th className="px-3 py-2.5 text-right whitespace-nowrap">{t('labor')}</th>
+                                        <th className="px-3 py-2.5 text-right whitespace-nowrap">{t('parts')}</th>
+                                        <th className="px-3 py-2.5 text-right whitespace-nowrap">{t('parts_profit')}</th>
+                                        <th className="px-3 py-2.5 text-right whitespace-nowrap">{t('subtotal')}</th>
+                                        <th className="px-3 py-2.5 text-right whitespace-nowrap">{t('actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -566,45 +569,72 @@ export default function OrderDetailsPage() {
                                             <tr key={item.id} className="group hover:bg-slate-50 transition-colors">
                                                 {isEditing ? (
                                                     <>
-                                                        <td className="px-8 py-4">
+                                                        <td className="px-3 py-2.5 relative" onClick={(e) => e.stopPropagation()}>
                                                             <input
-                                                                className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-white font-bold text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                className="w-full px-2 py-1.5 rounded-lg border border-slate-200 bg-white font-bold text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                                 value={editItemData.description}
-                                                                onChange={(e) => handleEditItemChange('description', e.target.value)}
+                                                                onChange={(e) => {
+                                                                    handleEditItemChange('description', e.target.value);
+                                                                    setShowEditSearch(true);
+                                                                    setEditItemData({ ...editItemData, description: e.target.value, service_id: null });
+                                                                }}
+                                                                onFocus={() => setShowEditSearch(true)}
                                                                 placeholder={t('description')}
                                                             />
+                                                            {showEditSearch && editItemData.description.length > 0 && (
+                                                                <div className="absolute top-full left-8 right-8 mt-1 bg-white rounded-xl border border-slate-100 shadow-2xl z-50 max-h-48 overflow-y-auto">
+                                                                    {catalog.filter(s => s.name.toLowerCase().includes(editItemData.description.toLowerCase())).map(s => (
+                                                                        <div
+                                                                            key={s.id}
+                                                                            className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                                                            onClick={() => {
+                                                                                setEditItemData({
+                                                                                    ...editItemData,
+                                                                                    service_id: s.id,
+                                                                                    description: s.name,
+                                                                                    labor_price: s.base_price?.toString() || '0'
+                                                                                });
+                                                                                setShowEditSearch(false);
+                                                                            }}
+                                                                        >
+                                                                            <p className="font-bold text-sm text-slate-900">{s.name}</p>
+                                                                            <p className="text-[10px] text-emerald-600 font-black tracking-widest uppercase">$ {s.base_price}</p>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </td>
-                                                        <td className="px-8 py-4">
+                                                        <td className="px-3 py-2.5">
                                                             <input
                                                                 type="number"
-                                                                className="w-full text-right px-3 py-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-sm text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                className="w-full text-right px-2 py-1.5 rounded-lg border border-slate-200 bg-white font-mono font-bold text-xs text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                                 value={editItemData.labor_price}
                                                                 onChange={(e) => handleEditItemChange('labor_price', e.target.value)}
                                                                 placeholder="0"
                                                             />
                                                         </td>
-                                                        <td className="px-8 py-4">
+                                                        <td className="px-3 py-2.5">
                                                             <input
                                                                 type="number"
-                                                                className="w-full text-right px-3 py-2 rounded-lg border border-slate-200 bg-white font-mono font-bold text-sm text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                                className="w-full text-right px-2 py-1.5 rounded-lg border border-slate-200 bg-white font-mono font-bold text-xs text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                                 value={editItemData.parts_price}
                                                                 onChange={(e) => handleEditItemChange('parts_price', e.target.value)}
                                                                 placeholder="0"
                                                             />
                                                         </td>
-                                                        <td className="px-8 py-4">
+                                                        <td className="px-3 py-2.5">
                                                             <input
                                                                 type="number"
-                                                                className="w-full text-right px-3 py-2 rounded-lg border border-dashed border-slate-200 bg-slate-100 font-mono font-black text-sm text-emerald-500/80 focus:outline-none focus:border-blue-400"
+                                                                className="w-full text-right px-2 py-1.5 rounded-lg border border-dashed border-slate-200 bg-slate-100 font-mono font-black text-xs text-emerald-500/80 focus:outline-none focus:border-blue-400"
                                                                 value={editItemData.parts_profit}
                                                                 onChange={(e) => handleEditItemChange('parts_profit', e.target.value)}
                                                                 placeholder="0"
                                                             />
                                                         </td>
-                                                        <td className="px-8 py-4 text-right text-slate-900 font-black whitespace-nowrap">
+                                                        <td className="px-3 py-2.5 text-right text-slate-900 font-black whitespace-nowrap text-xs">
                                                             ${((parseFloat(editItemData.labor_price) || 0) + (parseFloat(editItemData.parts_price) || 0)).toLocaleString()}
                                                         </td>
-                                                        <td className="px-8 py-4 text-right">
+                                                        <td className="px-3 py-2.5 text-right">
                                                             <div className="flex items-center justify-end gap-2">
                                                                 <button
                                                                     onClick={handleSaveEditItem}
@@ -628,37 +658,39 @@ export default function OrderDetailsPage() {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <td className="px-8 py-4">
-                                                            <p className="font-bold text-slate-800">{item.description}</p>
+                                                        <td className="px-3 py-2.5">
+                                                            <p className="font-bold text-slate-800 text-[11px] leading-tight">{item.description}</p>
                                                         </td>
-                                                        <td className="px-8 py-4 text-right font-mono font-bold text-slate-500">${item.labor_price?.toLocaleString()}</td>
-                                                        <td className="px-8 py-4 text-right font-mono font-bold text-slate-500">${item.parts_price?.toLocaleString()}</td>
-                                                        <td className="px-8 py-4 text-right font-mono font-black text-emerald-500/80">${item.parts_profit?.toLocaleString() || '0'}</td>
-                                                        <td className="px-8 py-4 text-right text-slate-900 font-black">${((item.labor_price || 0) + (item.parts_price || 0)).toLocaleString()}</td>
-                                                        <td className="px-8 py-4 text-right">
-                                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setEditingItemId(item.id);
-                                                                        setEditItemData({ ...item });
-                                                                    }}
-                                                                    className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                                                                >
-                                                                    <Pencil size={18} />
-                                                                </button>
-                                                                <button
-                                                                    onClick={async () => {
-                                                                        if (confirm(t('confirm_delete_item'))) {
-                                                                            await api.delete(`/orders/items/${item.id}`);
-                                                                            fetchOrder();
-                                                                            notify('success', t('item_deleted'));
-                                                                        }
-                                                                    }}
-                                                                    className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-                                                                >
-                                                                    <Trash2 size={18} />
-                                                                </button>
-                                                            </div>
+                                                        <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-500 text-[10px]">${item.labor_price?.toLocaleString()}</td>
+                                                        <td className="px-3 py-2.5 text-right font-mono font-bold text-slate-500 text-[10px]">${item.parts_price?.toLocaleString()}</td>
+                                                        <td className="px-3 py-2.5 text-right font-mono font-black text-emerald-500/80 text-[10px]">${item.parts_profit?.toLocaleString() || '0'}</td>
+                                                        <td className="px-3 py-2.5 text-right text-slate-900 font-black text-[10px]">${((item.labor_price || 0) + (item.parts_price || 0)).toLocaleString()}</td>
+                                                        <td className="px-3 py-2.5 text-right">
+                                                            {order.status !== 'delivered' && (
+                                                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingItemId(item.id);
+                                                                            setEditItemData({ ...item });
+                                                                        }}
+                                                                        className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                                                                    >
+                                                                        <Pencil size={18} />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={async () => {
+                                                                            if (confirm(t('confirm_delete_item'))) {
+                                                                                await api.delete(`/orders/items/${item.id}`);
+                                                                                fetchOrder();
+                                                                                notify('success', t('item_deleted'));
+                                                                            }
+                                                                        }}
+                                                                        className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                                                                    >
+                                                                        <Trash2 size={18} />
+                                                                    </button>
+                                                                </div>
+                                                            )}
                                                         </td>
                                                     </>
                                                 )}
@@ -978,7 +1010,7 @@ export default function OrderDetailsPage() {
                 </div>
 
                 {/* Sidebar Details */}
-                <div className="space-y-8">
+                <div className="lg:col-span-3 space-y-8">
                     {/* Status Management */}
                     <div className="bg-slate-900 rounded-[40px] p-8 text-white shadow-2xl shadow-slate-200">
                         <h3 className="font-black uppercase tracking-widest text-xs text-blue-400 mb-6 italic">{t('process_management')}</h3>
@@ -1310,8 +1342,8 @@ export default function OrderDetailsPage() {
             {/* Modal Add Items */}
             {
                 showItemsModal && (
-                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-                        <div className="bg-white rounded-[40px] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-10">
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setActiveSearchIndex(null)}>
+                        <div className="bg-white rounded-[40px] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-10" onClick={(e) => e.stopPropagation()}>
                             <div className="flex justify-between items-center mb-10">
                                 <div>
                                     <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">{t('add_items')}</h3>
@@ -1325,24 +1357,49 @@ export default function OrderDetailsPage() {
                             <div className="space-y-8">
                                 {newItems.map((item, index) => (
                                     <div key={index} className="bg-slate-50 p-6 rounded-3xl space-y-4 relative">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('catalog_service')}</label>
-                                                <select
-                                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
-                                                    onChange={(e) => updateItem(index, 'service_id', e.target.value)}
-                                                >
-                                                    <option value="">{t('custom_item')}</option>
-                                                    {catalog.map(s => <option key={s.id} value={s.id}>{s.name} - ${s.base_price}</option>)}
-                                                </select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('description')}</label>
-                                                <input
-                                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
-                                                    value={item.description}
-                                                    onChange={(e) => updateItem(index, 'description', e.target.value)}
-                                                />
+                                        <div className="grid grid-cols-1 gap-4">
+                                            <div className="space-y-2 relative" onClick={(e) => e.stopPropagation()}>
+                                                <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('description')} / {t('catalog_service')}</label>
+                                                <div className="relative">
+                                                    <input
+                                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
+                                                        placeholder={t('type_to_search_catalog')}
+                                                        value={item.description}
+                                                        onChange={(e) => {
+                                                            updateItem(index, 'description', e.target.value);
+                                                            setActiveSearchIndex(index);
+                                                            // Clear service_id if typing
+                                                            const updated = [...newItems];
+                                                            updated[index].service_id = null;
+                                                            setNewItems(updated);
+                                                        }}
+                                                        onFocus={() => setActiveSearchIndex(index)}
+                                                    />
+                                                    {activeSearchIndex === index && item.description.length > 0 && (
+                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-slate-100 shadow-2xl z-50 max-h-48 overflow-y-auto">
+                                                            {catalog.filter(s => s.name.toLowerCase().includes(item.description.toLowerCase())).map(s => (
+                                                                <div
+                                                                    key={s.id}
+                                                                    className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                                                    onClick={() => {
+                                                                        const updated = [...newItems];
+                                                                        updated[index] = {
+                                                                            ...updated[index],
+                                                                            service_id: s.id,
+                                                                            description: s.name,
+                                                                            labor_price: s.base_price?.toString() || '0'
+                                                                        };
+                                                                        setNewItems(updated);
+                                                                        setActiveSearchIndex(null);
+                                                                    }}
+                                                                >
+                                                                    <p className="font-bold text-sm text-slate-900">{s.name}</p>
+                                                                    <p className="text-[10px] text-emerald-600 font-black tracking-widest uppercase">$ {s.base_price}</p>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
