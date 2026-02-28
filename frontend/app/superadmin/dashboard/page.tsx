@@ -138,6 +138,13 @@ export default function SuperAdminDashboard() {
     const [globalReports, setGlobalReports] = useState<any>(null);
     const [loadingGlobalReports, setLoadingGlobalReports] = useState(false);
     const [comparisonSort, setComparisonSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'orders_this_month', dir: 'desc' });
+    const [chains, setChains] = useState<any[]>([]);
+    const [expandedChains, setExpandedChains] = useState<Set<number>>(new Set());
+    const [showNewChainModal, setShowNewChainModal] = useState(false);
+    const [newChain, setNewChain] = useState({ name: '', slug: '', visibility_level: 'summary', tenant_slugs: [] as string[] });
+    const [newChainUser, setNewChainUser] = useState({ name: '', email: '', password: '', can_see_financials: false });
+    const [chainUserTarget, setChainUserTarget] = useState<number | null>(null);
+    const [savingChain, setSavingChain] = useState(false);
     const { config } = useConfig();
     const { notify } = useNotification();
     const router = useRouter();
@@ -275,18 +282,20 @@ export default function SuperAdminDashboard() {
 
     const fetchData = async () => {
         try {
-            const [wResponse, sResponse, hResponse, aResponse, annResponse] = await Promise.all([
+            const [wResponse, sResponse, hResponse, aResponse, annResponse, chainsRes] = await Promise.all([
                 superApi.get('/workshops'),
                 superApi.get('/stats'),
                 superApi.get('/health'),
                 superApi.get('/anomalies'),
-                superApi.get('/announcements')
+                superApi.get('/announcements'),
+                superApi.get('/chains').catch(() => ({ data: [] }))
             ]);
             setWorkshops(wResponse.data);
             setStats(sResponse.data);
             setSystemHealth(hResponse.data);
             setAnomalies(aResponse.data);
             setAnnouncements(annResponse.data);
+            setChains(chainsRes.data || []);
 
             // If the manage modal is open, update its data too
             if (showManageModal && Array.isArray(wResponse.data)) {
@@ -305,6 +314,78 @@ export default function SuperAdminDashboard() {
             }
         } finally {
             setLoading(false);
+        }
+    };
+
+    const toggleChain = (chainId: number) => {
+        setExpandedChains(prev => {
+            const next = new Set(prev);
+            if (next.has(chainId)) {
+                next.delete(chainId);
+            } else {
+                next.add(chainId);
+            }
+            return next;
+        });
+    };
+
+    const handleCreateChain = async () => {
+        if (!newChain.name || !newChain.slug) return notify('warning', 'Nombre y slug requeridos');
+        setSavingChain(true);
+        try {
+            await superApi.post('/chains', newChain);
+            setShowNewChainModal(false);
+            setNewChain({ name: '', slug: '', visibility_level: 'summary', tenant_slugs: [] });
+            const res = await superApi.get('/chains');
+            setChains(res.data);
+            notify('success', 'Cadena creada');
+        } catch (err) {
+            notify('error', 'Error al crear cadena');
+        } finally {
+            setSavingChain(false);
+        }
+    };
+
+    const handleDecoupleWorkshop = async (chainId: number, slug: string, workshopName: string) => {
+        try {
+            const preview = await superApi.delete(`/chains/${chainId}/members/${slug}?preview=true`);
+            const { to_keep, to_lose } = preview.data;
+            if (!confirm(`Desacoplar "${workshopName}"?\n\n✅ Retiene: ${to_keep} clientes\n❌ Pierde: ${to_lose} clientes\n\n¿Confirmar?`)) return;
+            await superApi.delete(`/chains/${chainId}/members/${slug}`);
+            const res = await superApi.get('/chains');
+            setChains(res.data);
+            fetchData();
+            notify('success', 'Taller desacoplado');
+        } catch (err) {
+            notify('error', 'Error al desacoplar');
+        }
+    };
+
+    const handleAddToChai = async (chainId: number, slug: string) => {
+        if (!slug) return;
+        try {
+            await superApi.post(`/chains/${chainId}/members`, { tenant_slug: slug });
+            const res = await superApi.get('/chains');
+            setChains(res.data);
+            fetchData();
+            notify('success', 'Taller agregado a la cadena');
+        } catch (err) {
+            notify('error', 'Error al agregar taller');
+        }
+    };
+
+    const handleCreateChainUser = async (chainId: number) => {
+        if (!newChainUser.name || !newChainUser.email || !newChainUser.password)
+            return notify('warning', 'Completá todos los campos');
+        try {
+            await superApi.post(`/chains/${chainId}/users`, newChainUser);
+            setNewChainUser({ name: '', email: '', password: '', can_see_financials: false });
+            setChainUserTarget(null);
+            const res = await superApi.get('/chains');
+            setChains(res.data);
+            notify('success', 'Usuario creado');
+        } catch (err) {
+            notify('error', 'El email ya existe en esta cadena');
         }
     };
 
@@ -984,6 +1065,265 @@ export default function SuperAdminDashboard() {
                     </div>
                 </div>
 
+                {/* ── Sección de Cadenas ───────────────────────────────────────── */}
+                {chains.length > 0 && (
+                    <div className="space-y-4 mb-12">
+                        {/* Header de sección */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 w-full">
+                                <div className="h-px w-8 bg-violet-300" />
+                                <h3 className="text-[10px] font-black text-violet-600 uppercase tracking-[0.3em] whitespace-nowrap">
+                                    Cadenas Multi-Sucursal
+                                </h3>
+                                <div className="h-px flex-grow bg-violet-100" />
+                                <span className="text-[9px] font-black bg-violet-100 text-violet-600 px-3 py-1 rounded-full whitespace-nowrap">
+                                    {chains.length} cadena{chains.length !== 1 ? 's' : ''}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Cards de cadenas */}
+                        <div className="space-y-3">
+                            {chains.map(chain => {
+                                const isExpanded = expandedChains.has(chain.id);
+                                const memberSlugs = chain.members?.map((m: any) => m.tenant_slug) || [];
+                                const availableWorkshops = workshops.filter(w => !memberSlugs.includes(w.slug));
+
+                                return (
+                                    <div key={chain.id} className={`bg-white rounded-[2rem] border transition-all duration-300 overflow-hidden ${isExpanded ? 'border-violet-200 shadow-xl shadow-violet-500/5' : 'border-slate-100 shadow-sm hover:border-violet-100'}`}>
+
+                                        {/* Header de la cadena — clickeable para expandir */}
+                                        <div
+                                            className="p-6 flex items-center justify-between cursor-pointer group"
+                                            onClick={() => toggleChain(chain.id)}
+                                        >
+                                            <div className="flex items-center gap-5">
+                                                {/* Ícono cadena */}
+                                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${isExpanded ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-600 group-hover:bg-violet-100'}`}>
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                                                        <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+                                                    </svg>
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-3">
+                                                        <h4 className="text-lg font-black text-slate-900 uppercase italic tracking-tight">{chain.name}</h4>
+                                                        <span className="text-[9px] font-black bg-violet-100 text-violet-600 px-2 py-1 rounded-lg uppercase tracking-widest">
+                                                            /{chain.slug}
+                                                        </span>
+                                                        <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-widest">
+                                                            {chain.visibility_level === 'summary' ? 'Solo resumen' : chain.visibility_level === 'no_prices' ? 'Sin precios' : 'Completo'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+                                                        {chain.members?.map((m: any) => (
+                                                            <span key={m.tenant_slug} className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+                                                                {m.workshop_name || m.tenant_slug}
+                                                            </span>
+                                                        ))}
+                                                        {chain.members?.length === 0 && (
+                                                            <span className="text-[10px] font-bold text-slate-300 italic">Sin talleres aún</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-3">
+                                                <a
+                                                    href={`/chain/${chain.slug}/dashboard`}
+                                                    target="_blank"
+                                                    onClick={e => e.stopPropagation()}
+                                                    className="px-4 py-2 bg-violet-50 text-violet-600 hover:bg-violet-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
+                                                >
+                                                    <ExternalLink size={12} /> Panel
+                                                </a>
+                                                <div className={`p-2 rounded-xl transition-all ${isExpanded ? 'bg-violet-100 text-violet-600' : 'bg-slate-50 text-slate-400'}`}>
+                                                    <ChevronDown size={18} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Panel expandible */}
+                                        {isExpanded && (
+                                            <div className="border-t border-violet-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                                                    {/* ── Talleres miembros ── */}
+                                                    <div className="space-y-4">
+                                                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                            Talleres en esta cadena
+                                                        </h5>
+
+                                                        <div className="space-y-2">
+                                                            {chain.members?.map((m: any) => (
+                                                                <div key={m.tenant_slug} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group/member">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className="w-8 h-8 bg-violet-100 rounded-xl flex items-center justify-center">
+                                                                            <span className="text-[8px] font-black text-violet-600 uppercase">{m.tenant_slug.charAt(0)}</span>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-sm font-black text-slate-900 uppercase italic leading-tight">{m.workshop_name || m.tenant_slug}</p>
+                                                                            <p className="text-[9px] font-bold text-slate-400">/{m.tenant_slug}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => handleDecoupleWorkshop(chain.id, m.tenant_slug, m.workshop_name || m.tenant_slug)}
+                                                                        className="opacity-0 group-hover/member:opacity-100 transition-opacity text-[9px] font-black text-rose-500 hover:text-rose-700 uppercase tracking-widest px-3 py-1.5 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all font-bold"
+                                                                    >
+                                                                        Desacoplar
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+
+                                                            {/* Agregar taller existente */}
+                                                            {availableWorkshops.length > 0 && (
+                                                                <select
+                                                                    defaultValue=""
+                                                                    onChange={e => { handleAddToChai(chain.id, e.target.value); e.target.value = ''; }}
+                                                                    className="w-full bg-violet-50 border-2 border-violet-100 border-dashed rounded-2xl px-4 py-3 text-[10px] font-black text-violet-600 uppercase tracking-widest focus:outline-none focus:border-violet-400 transition-all cursor-pointer"
+                                                                >
+                                                                    <option value="" disabled>+ Agregar taller a esta cadena</option>
+                                                                    {availableWorkshops.map(w => (
+                                                                        <option key={w.slug} value={w.slug}>{w.name} (/{w.slug})</option>
+                                                                    ))}
+                                                                </select>
+                                                            )}
+                                                            {availableWorkshops.length === 0 && (
+                                                                <p className="text-[10px] font-bold text-slate-300 italic text-center py-2">
+                                                                    Todos los talleres ya pertenecen a esta cadena
+                                                                </p>
+                                                            )}
+                                                        </div>
+
+                                                        {/* Visibilidad */}
+                                                        <div className="pt-4 border-t border-slate-100">
+                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Visibilidad cruzada entre talleres</p>
+                                                            <div className="flex gap-2">
+                                                                {([['summary', 'Solo resumen'], ['no_prices', 'Sin precios'], ['full', 'Completo']] as const).map(([val, label]) => (
+                                                                    <button
+                                                                        key={val}
+                                                                        onClick={async () => {
+                                                                            await superApi.patch(`/chains/${chain.id}`, { visibility_level: val });
+                                                                            const res = await superApi.get('/chains');
+                                                                            setChains(res.data);
+                                                                            notify('success', 'Visibilidad actualizada');
+                                                                        }}
+                                                                        className={`flex-grow py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${chain.visibility_level === val ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-400 border-slate-200 hover:border-violet-300 hover:text-violet-600'}`}
+                                                                    >
+                                                                        {label}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* ── Usuarios del panel chain ── */}
+                                                    <div className="space-y-4">
+                                                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                            Usuarios del panel chain
+                                                        </h5>
+
+                                                        <div className="space-y-2">
+                                                            {chain.users?.length === 0 && (
+                                                                <div className="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                                                    <p className="text-[10px] font-bold text-slate-300 uppercase">Sin usuarios aún</p>
+                                                                </div>
+                                                            )}
+                                                            {chain.users?.map((u: any) => (
+                                                                <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group/user">
+                                                                    <div>
+                                                                        <p className="text-sm font-black text-slate-900 uppercase italic leading-tight">{u.name}</p>
+                                                                        <p className="text-[9px] font-bold text-slate-400">{u.email}</p>
+                                                                        {u.can_see_financials ? (
+                                                                            <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Ve ingresos</span>
+                                                                        ) : (
+                                                                            <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Sin ingresos</span>
+                                                                        )}
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={async () => {
+                                                                            if (!confirm(`¿Eliminar usuario ${u.name}?`)) return;
+                                                                            await superApi.delete(`/chains/${chain.id}/users/${u.id}`);
+                                                                            const res = await superApi.get('/chains');
+                                                                            setChains(res.data);
+                                                                            notify('success', 'Usuario eliminado');
+                                                                        }}
+                                                                        className="opacity-0 group-hover/user:opacity-100 transition-opacity p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+
+                                                        {/* Formulario nuevo usuario */}
+                                                        {chainUserTarget === chain.id ? (
+                                                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200 text-left">
+                                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Nuevo usuario</p>
+                                                                <input
+                                                                    placeholder="Nombre completo"
+                                                                    value={newChainUser.name}
+                                                                    onChange={e => setNewChainUser({ ...newChainUser, name: e.target.value })}
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
+                                                                />
+                                                                <input
+                                                                    type="email"
+                                                                    placeholder="Email"
+                                                                    value={newChainUser.email}
+                                                                    onChange={e => setNewChainUser({ ...newChainUser, email: e.target.value })}
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
+                                                                />
+                                                                <input
+                                                                    type="password"
+                                                                    placeholder="Contraseña"
+                                                                    value={newChainUser.password}
+                                                                    onChange={e => setNewChainUser({ ...newChainUser, password: e.target.value })}
+                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
+                                                                />
+                                                                <label className="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-xl border border-slate-200">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={newChainUser.can_see_financials}
+                                                                        onChange={e => setNewChainUser({ ...newChainUser, can_see_financials: e.target.checked })}
+                                                                        className="w-4 h-4 rounded text-violet-600"
+                                                                    />
+                                                                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Puede ver ingresos financieros</span>
+                                                                </label>
+                                                                <div className="flex gap-2">
+                                                                    <button
+                                                                        onClick={() => { setChainUserTarget(null); setNewChainUser({ name: '', email: '', password: '', can_see_financials: false }); }}
+                                                                        className="flex-grow py-2.5 rounded-xl bg-slate-200 text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-300 transition-all"
+                                                                    >
+                                                                        Cancelar
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleCreateChainUser(chain.id)}
+                                                                        className="flex-[2] py-2.5 rounded-xl bg-violet-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-violet-700 transition-all shadow-lg shadow-violet-500/20"
+                                                                    >
+                                                                        Crear Usuario
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => setChainUserTarget(chain.id)}
+                                                                className="w-full py-3 bg-violet-50 border-2 border-violet-100 border-dashed rounded-2xl text-[10px] font-black text-violet-600 uppercase tracking-widest hover:bg-violet-100 transition-all flex items-center justify-center gap-2"
+                                                            >
+                                                                <Plus size={14} /> Agregar Usuario
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
                 {/* Workshops List Section */}
                 <div className="space-y-6">
                     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -991,15 +1331,23 @@ export default function SuperAdminDashboard() {
                             <h3 className="text-3xl font-black text-slate-900 uppercase italic tracking-tight">Ecosistema de Talleres</h3>
                             <p className="text-slate-500 font-bold text-sm tracking-wide">Gestiona el estado, branding y seguridad de cada instancia.</p>
                         </div>
-                        <div className="relative">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                            <input
-                                type="text"
-                                placeholder="Buscar por nombre o slug..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="bg-white border-2 border-slate-100 pl-12 pr-6 py-4 rounded-3xl w-full md:w-96 font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all shadow-sm"
-                            />
+                        <div className="flex flex-col md:flex-row items-center gap-4">
+                            <button
+                                onClick={() => setShowNewChainModal(true)}
+                                className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-violet-500/20 w-full md:w-auto"
+                            >
+                                <Plus size={16} /> Nueva Cadena
+                            </button>
+                            <div className="relative w-full md:w-auto">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por nombre o slug..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="bg-white border-2 border-slate-100 pl-12 pr-6 py-4 rounded-3xl w-full md:w-96 font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all shadow-sm"
+                                />
+                            </div>
                         </div>
                     </div>
 
@@ -1064,6 +1412,16 @@ export default function SuperAdminDashboard() {
                                                 }`}>
                                                 {w.status === 'active' ? 'Operativo' : 'Inactivo'}
                                             </span>
+                                            {(() => {
+                                                const chain = chains.find(c => c.members?.some((m: any) => m.tenant_slug === w.slug));
+                                                if (!chain) return null;
+                                                return (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-violet-100 text-violet-700 border border-violet-200">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
+                                                        {chain.name}
+                                                    </span>
+                                                );
+                                            })()}
                                             {workshopEmailStatus[w.slug] && !workshopEmailStatus[w.slug].loading && !workshopEmailStatus[w.slug].error && (
                                                 <div className="flex gap-1">
                                                     <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${workshopEmailStatus[w.slug].smtp.status === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>SMTP</span>
@@ -2550,6 +2908,113 @@ export default function SuperAdminDashboard() {
                     </div>
                 )
             }
+
+            {/* Modal Nueva Cadena */}
+            {showNewChainModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300">
+                        <div className="flex items-center justify-between mb-8">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">Nueva Cadena</h2>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Grupo multi-sucursal</p>
+                            </div>
+                            <button onClick={() => setShowNewChainModal(false)} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-900 transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Nombre de la cadena</label>
+                                <input
+                                    placeholder="Ej: Talleres García"
+                                    value={newChain.name}
+                                    onChange={e => setNewChain({
+                                        ...newChain,
+                                        name: e.target.value,
+                                        slug: newChain.slug || e.target.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+                                    })}
+                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-all"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Slug (identificador único)</label>
+                                <div className="flex items-center gap-2 bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 focus-within:border-violet-500 transition-all">
+                                    <span className="text-slate-400 font-black text-sm">/chain/</span>
+                                    <input
+                                        placeholder="talleres-garcia"
+                                        value={newChain.slug}
+                                        onChange={e => setNewChain({ ...newChain, slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') })}
+                                        className="flex-grow bg-transparent font-bold text-slate-800 focus:outline-none"
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Visibilidad cruzada entre talleres</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {([['summary', 'Solo resumen', 'Fecha, desc y total'], ['no_prices', 'Sin precios', 'Servicios, sin montos'], ['full', 'Completo', 'Todo visible']] as const).map(([val, label, desc]) => (
+                                        <button
+                                            key={val}
+                                            onClick={() => setNewChain({ ...newChain, visibility_level: val })}
+                                            className={`p-3 rounded-2xl border-2 text-left transition-all ${newChain.visibility_level === val ? 'border-violet-500 bg-violet-50' : 'border-slate-100 bg-slate-50 hover:border-violet-200'}`}
+                                        >
+                                            <p className={`text-[10px] font-black uppercase tracking-widest ${newChain.visibility_level === val ? 'text-violet-700' : 'text-slate-600'}`}>{label}</p>
+                                            <p className="text-[8px] font-bold text-slate-400 mt-0.5">{desc}</p>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Talleres miembros iniciales</label>
+                                <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-2xl border-2 border-slate-100 min-h-[60px]">
+                                    {workshops.map(w => {
+                                        const selected = newChain.tenant_slugs.includes(w.slug);
+                                        return (
+                                            <button
+                                                key={w.slug}
+                                                type="button"
+                                                onClick={() => setNewChain(prev => ({
+                                                    ...prev,
+                                                    tenant_slugs: selected
+                                                        ? prev.tenant_slugs.filter(s => s !== w.slug)
+                                                        : [...prev.tenant_slugs, w.slug]
+                                                }))}
+                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${selected ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-500 border-slate-200 hover:border-violet-300'}`}
+                                            >
+                                                {selected && <Check size={10} />}
+                                                {w.name}
+                                            </button>
+                                        );
+                                    })}
+                                    {workshops.length === 0 && (
+                                        <p className="text-[10px] text-slate-300 italic font-bold">No hay talleres creados aún</p>
+                                    )}
+                                </div>
+                                <p className="text-[9px] text-slate-400 font-bold mt-1 ml-1">Podés agregar o quitar talleres después</p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 mt-8">
+                            <button
+                                onClick={() => { setShowNewChainModal(false); setNewChain({ name: '', slug: '', visibility_level: 'summary', tenant_slugs: [] }); }}
+                                className="flex-grow py-4 rounded-2xl bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all font-bold"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleCreateChain}
+                                disabled={savingChain || !newChain.name || !newChain.slug}
+                                className="flex-[2] py-4 rounded-2xl bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-violet-500/20 font-bold"
+                            >
+                                {savingChain ? 'Creando...' : 'Crear Cadena'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }
