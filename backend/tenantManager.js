@@ -92,7 +92,7 @@ function initTenantDb(db, slug) {
             reminder_time TEXT DEFAULT '09:00',
             messages_enabled INTEGER DEFAULT 1,
             client_portal_language TEXT DEFAULT 'es',
-            enabled_modules TEXT DEFAULT '["clients", "vehicles", "orders", "income", "settings", "dashboard", "reminders", "appointments"]'
+            enabled_modules TEXT DEFAULT '["clients", "vehicles", "orders", "income", "reports", "settings", "dashboard", "reminders", "appointments"]'
         );
 
         CREATE TABLE IF NOT EXISTS clients (
@@ -114,6 +114,7 @@ function initTenantDb(db, slug) {
             plate TEXT UNIQUE NOT NULL,
             brand TEXT NOT NULL,
             model TEXT NOT NULL,
+            version TEXT,
             year INTEGER,
             km INTEGER,
             image_path TEXT,
@@ -121,6 +122,15 @@ function initTenantDb(db, slug) {
             status TEXT CHECK(status IN ('active', 'inactive')) DEFAULT 'active',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS vehicle_reference (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            brand TEXT NOT NULL,
+            model TEXT NOT NULL,
+            version TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(brand, model, version)
         );
 
         CREATE TABLE IF NOT EXISTS service_catalog (
@@ -272,10 +282,11 @@ function initTenantDb(db, slug) {
     addColumn('orders', 'appointment_date', "DATETIME");
     addColumn('orders', 'payment_status', "TEXT DEFAULT 'unpaid'");
     addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
+    addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
 
     // Roles Seeding
     const roles = [
-        { name: 'Admin', permissions: ['dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'users', 'roles', 'reminders', 'appointments', 'suppliers'] },
+        { name: 'Admin', permissions: ['dashboard', 'clients', 'vehicles', 'orders', 'income', 'reports', 'settings', 'users', 'roles', 'reminders', 'appointments', 'suppliers'] },
         { name: 'Technician', permissions: ['dashboard', 'clients', 'vehicles', 'orders', 'reminders', 'appointments'] }
     ];
 
@@ -296,7 +307,7 @@ function initTenantDb(db, slug) {
             INSERT INTO config(workshop_name, footer_text, address, phone, email, whatsapp, business_hours, enabled_modules)
             VALUES(?, 'Powered by SurForge', '-', '-', '-', '-', ?, ?)
         `).run(slug, JSON.stringify({ mon_fri: '09:00 - 18:00', sat: '09:00 - 13:00', sun: 'Closed' }),
-            JSON.stringify(['clients', 'vehicles', 'orders', 'income', 'settings', 'dashboard', 'reminders', 'appointments']));
+            JSON.stringify(['clients', 'vehicles', 'orders', 'income', 'reports', 'settings', 'dashboard', 'reminders', 'appointments']));
     }
 
     // Default Templates (English Identifiers)
@@ -367,7 +378,7 @@ function createTenant(slug, name) {
     }
     const superDb = require('./superDb');
     const apiToken = superDb.generateApiToken();
-    const defaultModules = JSON.stringify(['dashboard', 'clientes', 'vehiculos', 'ordenes', 'ingresos', 'configuracion', 'usuarios', 'roles', 'recordatorios', 'turnos']);
+    const defaultModules = JSON.stringify(['dashboard', 'clients', 'vehicles', 'orders', 'income', 'reports', 'settings', 'users', 'roles', 'reminders', 'appointments']);
     superDb.prepare("INSERT OR IGNORE INTO workshops (slug, name, api_token, enabled_modules) VALUES (?, ?, ?, ?)").run(slug, name || slug, apiToken, defaultModules);
 
     getDb(slug);

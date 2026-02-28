@@ -86,7 +86,7 @@ export const translations: Translations = {
     workshop_status: { en: 'Workshop Status', es: 'Estado del Taller' },
     common_services: { en: 'Common Services', es: 'Servicios frecuentes' },
     tracking: { en: 'Tracking', es: 'Seguimientos' },
-    reports: { en: 'Reports', es: 'Informes' },
+
     units_in_workshop: { en: 'Units in workshop', es: 'Unidades en taller' },
     income_and_reports: { en: 'Income and reports', es: 'Ingresos y reportes' },
     preventive_maintenance: { en: 'Preventive maintenance', es: 'Mantenimiento preventivo' },
@@ -113,7 +113,7 @@ export const translations: Translations = {
     loading: { en: 'Loading...', es: 'Cargando...' },
     success: { en: 'Success', es: 'Éxito' },
     error: { en: 'Error', es: 'Error' },
-    loading_stats: { en: 'Loading stats...', es: 'Cargando estadísticas...' },
+
     operational_summary: { en: 'Operational summary of', es: 'Resumen operativo de' },
     details: { en: 'Details', es: 'Detalles' },
 
@@ -139,8 +139,33 @@ export const translations: Translations = {
     advanced_reports: { en: 'Advanced Reports', es: 'Reportes Avanzados' },
     explore_metrics: { en: 'Explore detailed metrics and interactive charts.', es: 'Explora métricas detalladas y gráficas interactivas.' },
     orders_by_status: { en: 'Orders by Status', es: 'Órdenes por Estado' },
+
+    // Reports & Analytics
+    reports: { en: 'Reports', es: 'Reportes' },
+    reports_desc: { en: 'Advanced metrics and insights', es: 'Métricas e información avanzada' },
+    lead_time: { en: 'Lead Time (Days)', es: 'Tiempo de Reparación (Días)' },
+    profit_breakdown: { en: 'Profit Breakdown', es: 'Ganancia Repuestos vs Mano Obra' },
+    customer_retention: { en: 'Customer Retention', es: 'Retención de Clientes' },
+    top_mechanics: { en: 'Top Techs', es: 'Ranking de Mecánicos' },
+
+    // Data Tools
+    data_tools: { en: 'Data Tools', es: 'Herramientas de Datos' },
+    wipe_operational: { en: 'Wipe Operational Data', es: 'Borrar Datos Operativos' },
+    wipe_users: { en: 'Wipe Users & Roles', es: 'Borrar Usuarios y Roles' },
+    wipe_templates: { en: 'Wipe Templates', es: 'Borrar Plantillas' },
+    seed_operational: { en: 'Seed Operational Data', es: 'Generar Clientes y Órdenes' },
+    seed_users: { en: 'Seed Mechanics', es: 'Generar Mecánico' },
+    seed_templates: { en: 'Restore Templates', es: 'Restaurar Mensajes' },
     top_customers: { en: 'Top Customers', es: 'Top Clientes' },
     most_frequent_services: { en: 'Most Frequent Services', es: 'Servicios más realizados' },
+    loading_stats: { en: 'Loading Statistics...', es: 'Cargando Estadísticas...' },
+    orders_completed: { en: 'orders completed', es: 'órdenes completadas' },
+    dev_mode_only: { en: 'DEV MODE ONLY', es: 'SOLO MODO DESARROLLO' },
+    clear_operations: { en: 'Clear Operations', es: 'Operaciones de Limpieza' },
+    seed_operations: { en: 'Seed Operations', es: 'Operaciones de Generación' },
+    confirm_clear_data: { en: 'ARE YOU SURE? This will delete all operational data (orders, clients, etc.). This cannot be undone.', es: '¿ESTÁS SEGURO? Esto borrará todos los datos operativos (órdenes, clientes, etc.). Esta acción no se puede deshacer.' },
+    confirm_seed_data: { en: 'Seed test data? This will add fake orders and clients for testing purposes.', es: '¿Generar datos de prueba? Esto agregará órdenes y clientes ficticios para pruebas.' },
+    operation_success: { en: 'Operation completed successfully', es: 'Operación completada con éxito' },
     global: { en: 'Global', es: 'Global' },
     veh: { en: 'VEH.', es: 'VEH.' },
     loading_app: { en: 'Loading', es: 'Cargando' },

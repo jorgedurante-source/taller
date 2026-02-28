@@ -57,8 +57,14 @@ import {
     Megaphone,
     AlertTriangle,
     Info,
-    CalendarCheck
+    CalendarCheck,
+    BarChart3,
+    Activity as ActivityIcon
 } from 'lucide-react';
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+    PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area
+} from 'recharts';
 import { THEMES, applyTheme } from '@/lib/theme';
 
 interface Workshop {
@@ -128,6 +134,9 @@ export default function SuperAdminDashboard() {
     const [loadingBackups, setLoadingBackups] = useState(false);
     const [restoreOptions, setRestoreOptions] = useState({ db: true, uploads: true });
     const backupInputRef = useRef<HTMLInputElement>(null);
+    const [showReportsModal, setShowReportsModal] = useState(false);
+    const [globalReports, setGlobalReports] = useState<any>(null);
+    const [loadingGlobalReports, setLoadingGlobalReports] = useState(false);
     const { config } = useConfig();
     const { notify } = useNotification();
     const router = useRouter();
@@ -142,6 +151,19 @@ export default function SuperAdminDashboard() {
             fetchWorkshopBackups(showManageModal.slug);
         }
     }, [showManageModal]);
+
+    const fetchGlobalReports = async () => {
+        setLoadingGlobalReports(true);
+        try {
+            const res = await superApi.get('/reports');
+            setGlobalReports(res.data);
+            setShowReportsModal(true);
+        } catch (err) {
+            notify('error', 'Error al cargar reporte global');
+        } finally {
+            setLoadingGlobalReports(false);
+        }
+    };
 
     const fetchTickets = async () => {
         try {
@@ -375,6 +397,9 @@ export default function SuperAdminDashboard() {
             localStorage.setItem('token', res.data.token);
             localStorage.setItem('user', JSON.stringify(res.data.user));
             localStorage.setItem('current_slug', slug);
+            if (res.data.user.language) {
+                localStorage.setItem('language', res.data.user.language);
+            }
             window.location.href = `/${slug}/dashboard`;
         } catch (err) {
             notify('error', 'Error al conectar con el taller');
@@ -406,43 +431,25 @@ export default function SuperAdminDashboard() {
         }
     };
 
-    const handleSeedData = async (slug: string) => {
-        if (!confirm('¿Insertar datos de prueba? Esto agregará clientes y órdenes ficticias.')) return;
-        try {
-            await superApi.post(`/workshops/${slug}/seed`);
-            notify('success', 'Datos sembrados correctamente');
-            fetchData();
-        } catch (err) {
-            notify('error', 'Error al sembrar datos');
+    const handleDataOperation = async (slug: string, op: 'clear' | 'seed', type: 'operational' | 'users' | 'templates') => {
+        let msg = '';
+        if (op === 'clear') {
+            if (type === 'operational') msg = '¿ESTÁS SEGURO? Esto borrará todos los datos operativos (órdenes, clientes, etc.).';
+            if (type === 'users') msg = '¿ESTÁS SEGURO? Esto borrará todos los usuarios y roles (excepto el administrador).';
+            if (type === 'templates') msg = '¿ESTÁS SEGURO? Esto reseteará todas las plantillas de mensajes.';
+        } else {
+            if (type === 'operational') msg = '¿Generar datos de prueba operativos?';
+            if (type === 'users') msg = '¿Generar usuario mecánico de prueba?';
         }
-    };
 
-    const handleClearData = async (slug: string) => {
-        if (!showManageModal || showManageModal.environment === 'prod') return;
-
-        const confirm1 = confirm('¿LIMPIAR BASE DE DATOS? Se borrarán todas las órdenes, clientes y vehículos.');
-        if (!confirm1) return;
-
-        const confirm2 = confirm('ADVERTENCIA: Esta acción es IRREVERSIBLE. Se borrarán todos los registros operativos del taller. ¿Estás SEGURO de continuar?');
-        if (!confirm2) return;
+        if (msg && !confirm(msg)) return;
 
         try {
-            await superApi.post(`/workshops/${slug}/clear`);
-            notify('success', 'Base de datos limpia correctamente');
+            await superApi.post(`/workshops/${slug}/${op}`, { type });
+            notify('success', 'Operación completada con éxito');
             fetchData();
         } catch (err) {
-            notify('error', 'Error al limpiar base de datos');
-        }
-    };
-
-    const handleReseedTemplates = async (slug: string) => {
-        if (!confirm('¿RESETEAR PLANTILLAS? Esto borrará todos los mensajes actuales del taller y restaurará las plantillas maestras por defecto.')) return;
-        try {
-            await superApi.post(`/workshops/${slug}/reseed-templates`);
-            notify('success', 'Plantillas restauradas correctamente');
-            fetchData();
-        } catch (err) {
-            notify('error', 'Error al restaurar plantillas');
+            notify('error', 'Error al ejecutar operación');
         }
     };
 
@@ -729,6 +736,15 @@ export default function SuperAdminDashboard() {
                                     {tickets.filter(t => t.status === 'open').length}
                                 </span>
                             )}
+                        </button>
+
+                        <button
+                            onClick={() => fetchGlobalReports()}
+                            disabled={loadingGlobalReports}
+                            className={`p-2.5 rounded-xl transition-all group border ${showReportsModal ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/20' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700 hover:text-white hover:border-indigo-500/50'}`}
+                            title="Analytics & Dashboard Global"
+                        >
+                            {loadingGlobalReports ? <RefreshCw className="animate-spin" size={20} /> : <BarChart3 size={20} />}
                         </button>
 
                         <button
@@ -1390,30 +1406,58 @@ export default function SuperAdminDashboard() {
                                         </div>
 
                                         {showManageModal.environment === 'dev' && (
-                                            <div className="pt-2">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block ml-2">Peligro: Limpieza Dev</label>
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    <button
-                                                        onClick={() => handleClearData(showManageModal.slug)}
-                                                        className="bg-rose-50 hover:bg-rose-600 text-rose-600 hover:text-white p-3 rounded-2xl font-black text-[8px] uppercase tracking-widest transition-all border border-rose-100"
-                                                        title="Borrrar todo (Datos)"
-                                                    >
-                                                        Limpiar Base
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleSeedData(showManageModal.slug)}
-                                                        className="bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white p-3 rounded-2xl font-black text-[8px] uppercase tracking-widest transition-all border border-indigo-100"
-                                                        title="Generar Clientes/Órdenes"
-                                                    >
-                                                        Sembrar Mock
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleReseedTemplates(showManageModal.slug)}
-                                                        className="bg-amber-50 hover:bg-amber-600 text-amber-600 hover:text-white p-3 rounded-2xl font-black text-[8px] uppercase tracking-widest transition-all border border-amber-100"
-                                                        title="Resetear Plantillas Mensajes"
-                                                    >
-                                                        Resetear Msg
-                                                    </button>
+                                            <div className="pt-4 space-y-4">
+                                                <div className="flex items-center gap-2 px-2">
+                                                    <Wand2 size={14} className="text-indigo-500" />
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Herramientas de Datos (Modo Dev)</label>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 gap-4">
+                                                    {/* Row 1: Clear */}
+                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Limpiar (Wipe)</p>
+                                                        <div className="grid grid-cols-3 gap-2">
+                                                            <button
+                                                                onClick={() => handleDataOperation(showManageModal.slug, 'clear', 'operational')}
+                                                                className="bg-white hover:bg-rose-500 text-rose-500 hover:text-white p-2.5 rounded-xl font-black text-[9px] uppercase tracking-tighter transition-all border border-rose-100 shadow-sm"
+                                                            >
+                                                                Operativos
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDataOperation(showManageModal.slug, 'clear', 'users')}
+                                                                className="bg-white hover:bg-rose-500 text-rose-500 hover:text-white p-2.5 rounded-xl font-black text-[9px] uppercase tracking-tighter transition-all border border-rose-100 shadow-sm"
+                                                            >
+                                                                Usuarios
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDataOperation(showManageModal.slug, 'clear', 'templates')}
+                                                                className="bg-white hover:bg-amber-500 text-amber-500 hover:text-white p-2.5 rounded-xl font-black text-[9px] uppercase tracking-tighter transition-all border border-amber-100 shadow-sm"
+                                                            >
+                                                                Plantillas
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Row 2: Seed */}
+                                                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Sembrar (Seed)</p>
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <button
+                                                                onClick={() => handleDataOperation(showManageModal.slug, 'seed', 'operational')}
+                                                                className="bg-white hover:bg-indigo-600 text-indigo-600 hover:text-white p-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all border border-indigo-100 shadow-sm flex items-center justify-center gap-2"
+                                                            >
+                                                                <Database size={14} />
+                                                                Clientes/Órdenes
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDataOperation(showManageModal.slug, 'seed', 'users')}
+                                                                className="bg-white hover:bg-blue-600 text-blue-600 hover:text-white p-3 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all border border-blue-100 shadow-sm flex items-center justify-center gap-2"
+                                                            >
+                                                                <Users size={14} />
+                                                                Mecánicos
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             </div>
                                         )}
@@ -1561,65 +1605,71 @@ export default function SuperAdminDashboard() {
                                 </button>
                             </div>
 
-                            <div className="space-y-4 mb-10">
-                                {[
-                                    { key: 'dashboard', label: 'Dashboard / Estadísticas' },
-                                    { key: 'clients', label: 'Gestión de Clientes' },
-                                    { key: 'vehicles', label: 'Gestión de Vehículos' },
-                                    { key: 'orders', label: 'Gestión de Órdenes / OT' },
-                                    { key: 'income', label: 'Reportes de Ingresos' },
-                                    { key: 'settings', label: 'Configuración Interna' },
-                                    { key: 'users', label: 'Gestión de Usuarios' },
-                                    { key: 'roles', label: 'Gestión de Roles' },
-                                    { key: 'reminders', label: 'Seguimientos / Recordatorios' },
-                                    { key: 'appointments', label: 'Turnos / Calendario' },
-                                    { key: 'suppliers', label: 'Gestión de Proveedores' },
-                                    { key: 'audit', label: 'Historial de Auditoría / Logs' }
-                                ].map(module => {
-                                    // Assume enabled_modules is an array, it might be a JSON string if not enriched properly but we enriched it
-                                    const isEnabled = Array.isArray(showModulesModal.enabled_modules) && showModulesModal.enabled_modules.includes(module.key);
-                                    return (
-                                        <label key={module.key} className={`flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-2xl cursor-pointer transition-all border border-slate-100 ${updatingModules ? 'opacity-50 pointer-events-none' : ''}`}>
-                                            <span className="text-sm font-bold text-slate-700">{module.label}</span>
-                                            <div className="relative">
-                                                <input
-                                                    type="checkbox"
-                                                    className="sr-only"
-                                                    checked={isEnabled}
-                                                    disabled={updatingModules}
-                                                    onChange={(e) => {
-                                                        const current = Array.isArray(showModulesModal.enabled_modules)
-                                                            ? showModulesModal.enabled_modules
-                                                            : [];
-                                                        const next = e.target.checked
-                                                            ? [...current, module.key]
-                                                            : current.filter(k => k !== module.key);
-                                                        handleUpdateModules(showModulesModal.slug, next);
-                                                    }}
-                                                />
-                                                <div className={`w-10 h-5 rounded-full transition-colors ${isEnabled ? 'bg-indigo-600' : 'bg-slate-300'}`}>
-                                                    {updatingModules && isEnabled && (
-                                                        <div className="absolute inset-0 flex items-center justify-center">
-                                                            <RefreshCw size={10} className="animate-spin text-white" />
-                                                        </div>
-                                                    )}
+                            <div className="max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="grid grid-cols-2 gap-4 mb-4">
+                                    {[
+                                        { key: 'dashboard', label: 'Dashboard / Estadísticas' },
+                                        { key: 'clients', label: 'Gestión de Clientes' },
+                                        { key: 'vehicles', label: 'Gestión de Vehículos' },
+                                        { key: 'orders', label: 'Gestión de Órdenes / OT' },
+                                        { key: 'income', label: 'Reportes de Ingresos' },
+                                        { key: 'reports', label: 'Reportes Avanzados / BI' },
+                                        { key: 'settings', label: 'Configuración Interna' },
+                                        { key: 'users', label: 'Gestión de Usuarios' },
+                                        { key: 'roles', label: 'Gestión de Roles' },
+                                        { key: 'reminders', label: 'Seguimientos / Recordatorios' },
+                                        { key: 'appointments', label: 'Turnos / Calendario' },
+                                        { key: 'suppliers', label: 'Gestión de Proveedores' },
+                                        { key: 'audit', label: 'Historial de Auditoría / Logs' }
+                                    ].map(module => {
+                                        // Assume enabled_modules is an array, it might be a JSON string if not enriched properly but we enriched it
+                                        const isEnabled = Array.isArray(showModulesModal.enabled_modules) && showModulesModal.enabled_modules.includes(module.key);
+                                        return (
+                                            <label key={module.key} className={`flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-2xl cursor-pointer transition-all border border-slate-100 ${updatingModules ? 'opacity-50 pointer-events-none' : ''}`}>
+                                                <span className="text-sm font-bold text-slate-700">{module.label}</span>
+                                                <div className="relative">
+                                                    <input
+                                                        type="checkbox"
+                                                        className="sr-only"
+                                                        checked={isEnabled}
+                                                        disabled={updatingModules}
+                                                        onChange={(e) => {
+                                                            const current = Array.isArray(showModulesModal.enabled_modules)
+                                                                ? showModulesModal.enabled_modules
+                                                                : [];
+                                                            const next = e.target.checked
+                                                                ? [...current, module.key]
+                                                                : current.filter(k => k !== module.key);
+                                                            handleUpdateModules(showModulesModal.slug, next);
+                                                        }}
+                                                    />
+                                                    <div className={`w-10 h-5 rounded-full transition-colors ${isEnabled ? 'bg-indigo-600' : 'bg-slate-300'}`}>
+                                                        {updatingModules && isEnabled && (
+                                                            <div className="absolute inset-0 flex items-center justify-center">
+                                                                <RefreshCw size={10} className="animate-spin text-white" />
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${isEnabled ? 'translate-x-5' : ''}`}></div>
                                                 </div>
-                                                <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${isEnabled ? 'translate-x-5' : ''}`}></div>
-                                            </div>
-                                        </label>
-                                    );
-                                })}
+                                            </label>
+                                        );
+                                    })}
+                                </div>
                             </div>
 
-                            <button
-                                onClick={() => setShowModulesModal(null)}
-                                className="w-full bg-slate-900 hover:bg-black text-white font-black py-4 rounded-2xl uppercase text-[10px] tracking-widest transition-all"
-                            >
-                                Cerrar y Actualizar
-                            </button>
+                            <div className="mt-8 pt-8 border-t border-slate-50">
+                                <button
+                                    onClick={() => setShowModulesModal(null)}
+                                    className="w-full bg-slate-900 text-white font-black py-4 rounded-2xl shadow-xl shadow-slate-900/20 hover:scale-[1.02] active:scale-95 transition-all text-[10px] uppercase tracking-widest italic"
+                                >
+                                    Finalizar Configuración
+                                </button>
+                            </div>
                         </div>
                     </div>
-                )}
+                )
+            }
 
             {/* Workshop Logs Modal */}
             {showLogsModal && (
@@ -1836,381 +1886,517 @@ export default function SuperAdminDashboard() {
                         </div>
                     </div>
                 </div>
-            )}
+            )
+            }
 
-            {showWorkshopAuditModal && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
-                    <div className="bg-slate-50 w-full max-w-5xl h-[85vh] rounded-[4rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-20 duration-500">
-                        {/* Header */}
-                        <div className="bg-white p-10 border-b border-slate-100 flex justify-between items-center shrink-0">
-                            <div className="flex items-center gap-6">
-                                <div className="p-4 bg-emerald-50 text-emerald-600 rounded-3xl">
-                                    <History size={32} />
+            {
+                showWorkshopAuditModal && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xl z-[150] flex items-center justify-center p-4">
+                        <div className="bg-slate-50 w-full max-w-5xl h-[85vh] rounded-[4rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-20 duration-500">
+                            {/* Header */}
+                            <div className="bg-white p-10 border-b border-slate-100 flex justify-between items-center shrink-0">
+                                <div className="flex items-center gap-6">
+                                    <div className="p-4 bg-emerald-50 text-emerald-600 rounded-3xl">
+                                        <History size={32} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">
+                                            Auditoría: {showWorkshopAuditModal.name}
+                                        </h2>
+                                        <p className="text-slate-400 font-bold text-xs mt-3 uppercase tracking-widest flex items-center gap-2">
+                                            <Database size={14} className="text-emerald-400" />
+                                            Movimientos registrados en la base del taller
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">
-                                        Auditoría: {showWorkshopAuditModal.name}
-                                    </h2>
-                                    <p className="text-slate-400 font-bold text-xs mt-3 uppercase tracking-widest flex items-center gap-2">
-                                        <Database size={14} className="text-emerald-400" />
-                                        Movimientos registrados en la base del taller
-                                    </p>
-                                </div>
+                                <button
+                                    onClick={() => setShowWorkshopAuditModal(null)}
+                                    className="bg-slate-50 p-4 rounded-3xl text-slate-400 hover:text-slate-900 transition-all hover:rotate-90"
+                                >
+                                    <X size={24} />
+                                </button>
                             </div>
-                            <button
-                                onClick={() => setShowWorkshopAuditModal(null)}
-                                className="bg-slate-50 p-4 rounded-3xl text-slate-400 hover:text-slate-900 transition-all hover:rotate-90"
-                            >
-                                <X size={24} />
-                            </button>
-                        </div>
 
-                        {/* Content */}
-                        <div className="flex-grow overflow-y-auto p-10">
-                            {loadingWorkshopAudit ? (
-                                <div className="h-full flex flex-col items-center justify-center gap-6 text-slate-400">
-                                    <RefreshCw size={48} className="animate-spin text-emerald-500" />
-                                    <p className="font-black uppercase tracking-[0.3em] text-[10px]">Accediendo a la base de datos distribuida...</p>
-                                </div>
-                            ) : workshopAuditLogs.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center gap-4 text-slate-300">
-                                    <Search size={64} className="opacity-20" />
-                                    <p className="font-bold italic">No se encontraron registros de auditoría en este taller.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {workshopAuditLogs.map((log) => {
-                                        const isExpanded = expandedAuditIds.includes(log.id);
-                                        const actionColors: any = {
-                                            'UPDATE_ORDER_ITEM': 'bg-amber-100 text-amber-700 border-amber-200',
-                                            'ADD_ORDER_ITEMS': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-                                            'CREATE_ORDER': 'bg-blue-100 text-blue-700 border-blue-200',
-                                            'DELETE': 'bg-red-100 text-red-700 border-red-200'
-                                        };
-                                        const colorClass = actionColors[log.action] || 'bg-slate-100 text-slate-700 border-slate-200';
+                            {/* Content */}
+                            <div className="flex-grow overflow-y-auto p-10">
+                                {loadingWorkshopAudit ? (
+                                    <div className="h-full flex flex-col items-center justify-center gap-6 text-slate-400">
+                                        <RefreshCw size={48} className="animate-spin text-emerald-500" />
+                                        <p className="font-black uppercase tracking-[0.3em] text-[10px]">Accediendo a la base de datos distribuida...</p>
+                                    </div>
+                                ) : workshopAuditLogs.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center gap-4 text-slate-300">
+                                        <Search size={64} className="opacity-20" />
+                                        <p className="font-bold italic">No se encontraron registros de auditoría en este taller.</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {workshopAuditLogs.map((log) => {
+                                            const isExpanded = expandedAuditIds.includes(log.id);
+                                            const actionColors: any = {
+                                                'UPDATE_ORDER_ITEM': 'bg-amber-100 text-amber-700 border-amber-200',
+                                                'ADD_ORDER_ITEMS': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+                                                'CREATE_ORDER': 'bg-blue-100 text-blue-700 border-blue-200',
+                                                'DELETE': 'bg-red-100 text-red-700 border-red-200'
+                                            };
+                                            const colorClass = actionColors[log.action] || 'bg-slate-100 text-slate-700 border-slate-200';
 
-                                        return (
-                                            <div
-                                                key={log.id}
-                                                className={`bg-white rounded-[2rem] border transition-all duration-300 ${isExpanded ? 'border-emerald-200 shadow-xl' : 'border-slate-100 shadow-sm hover:border-emerald-100'}`}
-                                            >
+                                            return (
                                                 <div
-                                                    className="p-6 cursor-pointer flex items-center justify-between gap-4"
-                                                    onClick={() => toggleExpandAudit(log.id)}
+                                                    key={log.id}
+                                                    className={`bg-white rounded-[2rem] border transition-all duration-300 ${isExpanded ? 'border-emerald-200 shadow-xl' : 'border-slate-100 shadow-sm hover:border-emerald-100'}`}
                                                 >
-                                                    <div className="flex items-center gap-6 flex-grow">
-                                                        <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${colorClass}`}>
-                                                            {log.action.replace(/_/g, ' ')}
+                                                    <div
+                                                        className="p-6 cursor-pointer flex items-center justify-between gap-4"
+                                                        onClick={() => toggleExpandAudit(log.id)}
+                                                    >
+                                                        <div className="flex items-center gap-6 flex-grow">
+                                                            <div className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border ${colorClass}`}>
+                                                                {log.action.replace(/_/g, ' ')}
+                                                            </div>
+                                                            <div className="space-y-1 flex-grow">
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-sm font-black text-slate-800 uppercase italic">
+                                                                        {log.user_display_name}
+                                                                    </span>
+                                                                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                                                        {log.entity_type} {log.entity_id ? `#${log.entity_id}` : ''}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex items-center gap-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                    <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(log.created_at).toLocaleString()}</span>
+                                                                    <span className="flex items-center gap-1"><Globe size={12} /> {log.ip_address || 'Local'}</span>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div className="space-y-1 flex-grow">
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="text-sm font-black text-slate-800 uppercase italic">
-                                                                    {log.user_display_name}
-                                                                </span>
-                                                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                                                                    {log.entity_type} {log.entity_id ? `#${log.entity_id}` : ''}
-                                                                </span>
-                                                            </div>
-                                                            <div className="flex items-center gap-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">
-                                                                <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(log.created_at).toLocaleString()}</span>
-                                                                <span className="flex items-center gap-1"><Globe size={12} /> {log.ip_address || 'Local'}</span>
-                                                            </div>
+                                                        <div className={`p-2 rounded-full transition-transform ${isExpanded ? 'bg-emerald-600 text-white rotate-180' : 'bg-slate-50 text-slate-400'}`}>
+                                                            <ChevronDown size={18} />
                                                         </div>
                                                     </div>
-                                                    <div className={`p-2 rounded-full transition-transform ${isExpanded ? 'bg-emerald-600 text-white rotate-180' : 'bg-slate-50 text-slate-400'}`}>
-                                                        <ChevronDown size={18} />
-                                                    </div>
-                                                </div>
 
-                                                {isExpanded && (
-                                                    <div className="px-6 pb-6 pt-2 border-t border-slate-50 animate-in fade-in slide-in-from-top-2 duration-300">
-                                                        <div className="mt-4">
-                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Detalle del Evento</p>
-                                                            <div className="bg-slate-900 p-5 rounded-2xl overflow-x-auto border border-white/5 shadow-inner">
-                                                                <pre className="text-[11px] font-mono text-emerald-400 leading-relaxed">
-                                                                    {(() => {
-                                                                        try {
-                                                                            const parsed = JSON.parse(log.details);
-                                                                            return JSON.stringify(parsed, null, 2);
-                                                                        } catch (e) {
-                                                                            return log.details;
-                                                                        }
-                                                                    })()}
-                                                                </pre>
+                                                    {isExpanded && (
+                                                        <div className="px-6 pb-6 pt-2 border-t border-slate-50 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                            <div className="mt-4">
+                                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Detalle del Evento</p>
+                                                                <div className="bg-slate-900 p-5 rounded-2xl overflow-x-auto border border-white/5 shadow-inner">
+                                                                    <pre className="text-[11px] font-mono text-emerald-400 leading-relaxed">
+                                                                        {(() => {
+                                                                            try {
+                                                                                const parsed = JSON.parse(log.details);
+                                                                                return JSON.stringify(parsed, null, 2);
+                                                                            } catch (e) {
+                                                                                return log.details;
+                                                                            }
+                                                                        })()}
+                                                                    </pre>
+                                                                </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Global Announcements Modal */}
-            {showAnnouncementsModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-end p-6 bg-slate-950/40 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="w-full max-w-xl h-full bg-white rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-500">
-                        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-rose-600 text-white">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md">
-                                    <Megaphone size={24} />
-                                </div>
-                                <div>
-                                    <h2 className="text-2xl font-black uppercase tracking-tighter italic">Central de Comunicaciones</h2>
-                                    <p className="text-[10px] font-black text-rose-100 uppercase tracking-widest mt-1">Anuncios en Tiempo Real</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowAnnouncementsModal(false)}
-                                className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"
-                            >
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <div className="flex-grow overflow-y-auto p-8 space-y-8">
-                            {/* Create New Announcement */}
-                            <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
-                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 italic flex items-center gap-2">
-                                    <PlusCircle size={16} className="text-rose-600" />
-                                    Nuevo Anuncio Global
-                                </h3>
-                                <form onSubmit={handleCreateAnnouncement} className="space-y-4">
-                                    <input
-                                        type="text"
-                                        value={newAnnouncement.title}
-                                        onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
-                                        placeholder="Título del anuncio..."
-                                        className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-sm uppercase tracking-tight focus:border-rose-500 outline-none transition-all"
-                                        required
-                                    />
-                                    <textarea
-                                        value={newAnnouncement.content}
-                                        onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
-                                        placeholder="Contenido del mensaje..."
-                                        className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-xs focus:border-rose-500 outline-none transition-all min-h-[100px]"
-                                        required
-                                    />
-                                    <div className="flex gap-2">
-                                        {['info', 'warning', 'success', 'error'].map(t => (
-                                            <button
-                                                key={t}
-                                                type="button"
-                                                onClick={() => setNewAnnouncement({ ...newAnnouncement, type: t })}
-                                                className={`flex-grow p-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${newAnnouncement.type === t
-                                                    ? 'bg-slate-900 text-white border-slate-900'
-                                                    : 'bg-white text-slate-500 border-slate-100 hover:border-slate-300'
-                                                    }`}
-                                            >
-                                                {t}
-                                            </button>
-                                        ))}
+            {
+                showAnnouncementsModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-end p-6 bg-slate-950/40 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="w-full max-w-xl h-full bg-white rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-500">
+                            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-rose-600 text-white">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md">
+                                        <Megaphone size={24} />
                                     </div>
-                                    <button
-                                        type="submit"
-                                        className="w-full bg-rose-600 hover:bg-rose-700 text-white p-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-rose-500/20"
-                                    >
-                                        Publicar en toda la Red
-                                    </button>
-                                </form>
+                                    <div>
+                                        <h2 className="text-2xl font-black uppercase tracking-tighter italic">Central de Comunicaciones</h2>
+                                        <p className="text-[10px] font-black text-rose-100 uppercase tracking-widest mt-1">Anuncios en Tiempo Real</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowAnnouncementsModal(false)}
+                                    className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"
+                                >
+                                    <X size={24} />
+                                </button>
                             </div>
 
-                            {/* Existing Announcements */}
-                            <div className="space-y-4">
-                                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 italic">Historial de Anuncios</h3>
-                                {announcements.length === 0 ? (
-                                    <div className="text-center p-12 bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-200">
-                                        <Info size={32} className="mx-auto text-slate-300 mb-2" />
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay anuncios registrados</p>
-                                    </div>
-                                ) : (
-                                    announcements.map((a: any) => (
-                                        <div key={a.id} className={`p-5 rounded-[2rem] border transition-all ${a.is_active ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-transparent grayscale opacity-60'}`}>
-                                            <div className="flex justify-between items-start gap-4">
-                                                <div className="flex-grow">
-                                                    <div className="flex items-center gap-2 mb-1">
-                                                        <span className={`w-2 h-2 rounded-full ${a.type === 'error' ? 'bg-rose-500' :
-                                                            a.type === 'warning' ? 'bg-amber-500' :
-                                                                a.type === 'success' ? 'bg-emerald-500' : 'bg-indigo-500'
-                                                            }`}></span>
-                                                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">{a.title}</h4>
+                            <div className="flex-grow overflow-y-auto p-8 space-y-8">
+                                {/* Create New Announcement */}
+                                <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
+                                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 italic flex items-center gap-2">
+                                        <PlusCircle size={16} className="text-rose-600" />
+                                        Nuevo Anuncio Global
+                                    </h3>
+                                    <form onSubmit={handleCreateAnnouncement} className="space-y-4">
+                                        <input
+                                            type="text"
+                                            value={newAnnouncement.title}
+                                            onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                                            placeholder="Título del anuncio..."
+                                            className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-black text-sm uppercase tracking-tight focus:border-rose-500 outline-none transition-all"
+                                            required
+                                        />
+                                        <textarea
+                                            value={newAnnouncement.content}
+                                            onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
+                                            placeholder="Contenido del mensaje..."
+                                            className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl font-bold text-xs focus:border-rose-500 outline-none transition-all min-h-[100px]"
+                                            required
+                                        />
+                                        <div className="flex gap-2">
+                                            {['info', 'warning', 'success', 'error'].map(t => (
+                                                <button
+                                                    key={t}
+                                                    type="button"
+                                                    onClick={() => setNewAnnouncement({ ...newAnnouncement, type: t })}
+                                                    className={`flex-grow p-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${newAnnouncement.type === t
+                                                        ? 'bg-slate-900 text-white border-slate-900'
+                                                        : 'bg-white text-slate-500 border-slate-100 hover:border-slate-300'
+                                                        }`}
+                                                >
+                                                    {t}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button
+                                            type="submit"
+                                            className="w-full bg-rose-600 hover:bg-rose-700 text-white p-4 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all shadow-xl shadow-rose-500/20"
+                                        >
+                                            Publicar en toda la Red
+                                        </button>
+                                    </form>
+                                </div>
+
+                                {/* Existing Announcements */}
+                                <div className="space-y-4">
+                                    <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest mb-4 italic">Historial de Anuncios</h3>
+                                    {announcements.length === 0 ? (
+                                        <div className="text-center p-12 bg-slate-50 rounded-[2.5rem] border border-dashed border-slate-200">
+                                            <Info size={32} className="mx-auto text-slate-300 mb-2" />
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">No hay anuncios registrados</p>
+                                        </div>
+                                    ) : (
+                                        announcements.map((a: any) => (
+                                            <div key={a.id} className={`p-5 rounded-[2rem] border transition-all ${a.is_active ? 'bg-white border-slate-200 shadow-sm' : 'bg-slate-50 border-transparent grayscale opacity-60'}`}>
+                                                <div className="flex justify-between items-start gap-4">
+                                                    <div className="flex-grow">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <span className={`w-2 h-2 rounded-full ${a.type === 'error' ? 'bg-rose-500' :
+                                                                a.type === 'warning' ? 'bg-amber-500' :
+                                                                    a.type === 'success' ? 'bg-emerald-500' : 'bg-indigo-500'
+                                                                }`}></span>
+                                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">{a.title}</h4>
+                                                        </div>
+                                                        <p className="text-[10px] font-bold text-slate-600 line-clamp-2">{a.content}</p>
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase mt-2 tracking-widest">{new Date(a.created_at).toLocaleString()}</p>
                                                     </div>
-                                                    <p className="text-[10px] font-bold text-slate-600 line-clamp-2">{a.content}</p>
-                                                    <p className="text-[8px] font-black text-slate-400 uppercase mt-2 tracking-widest">{new Date(a.created_at).toLocaleString()}</p>
-                                                </div>
-                                                <div className="flex flex-col gap-2">
-                                                    <button
-                                                        onClick={() => handleToggleAnnouncement(a.id)}
-                                                        className={`p-2 rounded-xl transition-all ${a.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}
-                                                        title={a.is_active ? "Desactivar" : "Activar"}
-                                                    >
-                                                        {a.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleDeleteAnnouncement(a.id)}
-                                                        className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all"
-                                                        title="Eliminar"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
+                                                    <div className="flex flex-col gap-2">
+                                                        <button
+                                                            onClick={() => handleToggleAnnouncement(a.id)}
+                                                            className={`p-2 rounded-xl transition-all ${a.is_active ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-200 text-slate-500'}`}
+                                                            title={a.is_active ? "Desactivar" : "Activar"}
+                                                        >
+                                                            {a.is_active ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteAnnouncement(a.id)}
+                                                            className="p-2 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-600 hover:text-white transition-all"
+                                                            title="Eliminar"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))
-                                )}
+                                        ))
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {/* Support Tickets Modal */}
-            {showTicketsModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-end p-6 bg-slate-950/40 backdrop-blur-md animate-in fade-in duration-300">
-                    <div className="w-full max-w-4xl h-full bg-white rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-500">
-                        <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-blue-600 text-white">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md">
-                                    <LifeBuoy size={24} />
-                                </div>
-                                <div>
-                                    <h2 className="text-2xl font-black uppercase tracking-tighter italic">Centro de Soporte</h2>
-                                    <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mt-1">Gestión de Problemas Reportados</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowTicketsModal(false)}
-                                className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"
-                            >
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <div className="flex-grow flex overflow-hidden">
-                            {/* Tickets List */}
-                            <div className="w-1/2 border-r border-slate-100 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-2">Listado de Reportes</p>
-                                {tickets.length === 0 ? (
-                                    <div className="text-center py-20">
-                                        <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">Sin reportes pendientes</p>
+            {
+                showTicketsModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-end p-6 bg-slate-950/40 backdrop-blur-md animate-in fade-in duration-300">
+                        <div className="w-full max-w-4xl h-full bg-white rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right-8 duration-500">
+                            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-blue-600 text-white">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md">
+                                        <LifeBuoy size={24} />
                                     </div>
-                                ) : (
-                                    tickets.map((t: any) => (
-                                        <div
-                                            key={t.id}
-                                            onClick={() => {
-                                                setSelectedTicket(t);
-                                                setReplyText(t.reply || '');
-                                            }}
-                                            className={`p-5 rounded-[2rem] border transition-all cursor-pointer ${selectedTicket?.id === t.id
-                                                ? 'bg-white border-blue-200 shadow-xl shadow-blue-500/5 ring-1 ring-blue-100'
-                                                : 'bg-white/50 border-slate-100 hover:border-blue-100 hover:bg-white'
-                                                }`}
-                                        >
-                                            <div className="flex justify-between items-start mb-2">
-                                                <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${t.status === 'open' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
-                                                    }`}>
-                                                    {t.status === 'open' ? 'Abierto' : 'Resuelto'}
-                                                </span>
-                                                <span className="text-[8px] font-black text-slate-300 uppercase">{new Date(t.created_at).toLocaleDateString()}</span>
-                                            </div>
-                                            <h4 className="text-xs font-black text-slate-900 uppercase italic truncate">{t.subject}</h4>
-                                            <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 truncate">De: {t.workshop_slug} ({t.user_name})</p>
-                                        </div>
-                                    ))
-                                )}
+                                    <div>
+                                        <h2 className="text-2xl font-black uppercase tracking-tighter italic">Centro de Soporte</h2>
+                                        <p className="text-[10px] font-black text-blue-100 uppercase tracking-widest mt-1">Gestión de Problemas Reportados</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowTicketsModal(false)}
+                                    className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"
+                                >
+                                    <X size={24} />
+                                </button>
                             </div>
 
-                            {/* Ticket Detail & Reply */}
-                            <div className="w-1/2 p-10 overflow-y-auto">
-                                {selectedTicket ? (
-                                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                                        <div className="space-y-4">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-6 bg-slate-900 rounded-full" />
-                                                <h3 className="text-lg font-black text-slate-900 uppercase italic">{selectedTicket.subject}</h3>
+                            <div className="flex-grow flex overflow-hidden">
+                                {/* Tickets List */}
+                                <div className="w-1/2 border-r border-slate-100 overflow-y-auto p-6 space-y-4 bg-slate-50/50">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-2">Listado de Reportes</p>
+                                    {tickets.length === 0 ? (
+                                        <div className="text-center py-20">
+                                            <p className="text-xs font-bold text-slate-300 uppercase tracking-widest">Sin reportes pendientes</p>
+                                        </div>
+                                    ) : (
+                                        tickets.map((t: any) => (
+                                            <div
+                                                key={t.id}
+                                                onClick={() => {
+                                                    setSelectedTicket(t);
+                                                    setReplyText(t.reply || '');
+                                                }}
+                                                className={`p-5 rounded-[2rem] border transition-all cursor-pointer ${selectedTicket?.id === t.id
+                                                    ? 'bg-white border-blue-200 shadow-xl shadow-blue-500/5 ring-1 ring-blue-100'
+                                                    : 'bg-white/50 border-slate-100 hover:border-blue-100 hover:bg-white'
+                                                    }`}
+                                            >
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${t.status === 'open' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+                                                        }`}>
+                                                        {t.status === 'open' ? 'Abierto' : 'Resuelto'}
+                                                    </span>
+                                                    <span className="text-[8px] font-black text-slate-300 uppercase">{new Date(t.created_at).toLocaleDateString()}</span>
+                                                </div>
+                                                <h4 className="text-xs font-black text-slate-900 uppercase italic truncate">{t.subject}</h4>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 truncate">De: {t.workshop_slug} ({t.user_name})</p>
                                             </div>
-                                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                                                <p className="text-xs font-bold text-slate-600 leading-relaxed italic">
-                                                    "{selectedTicket.message}"
-                                                </p>
-                                                <div className="flex justify-end mt-4">
-                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{selectedTicket.workshop_name} · {selectedTicket.user_name}</span>
+                                        ))
+                                    )}
+                                </div>
+
+                                {/* Ticket Detail & Reply */}
+                                <div className="w-1/2 p-10 overflow-y-auto">
+                                    {selectedTicket ? (
+                                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-1.5 h-6 bg-slate-900 rounded-full" />
+                                                    <h3 className="text-lg font-black text-slate-900 uppercase italic">{selectedTicket.subject}</h3>
+                                                </div>
+                                                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                                                    <p className="text-xs font-bold text-slate-600 leading-relaxed italic">
+                                                        "{selectedTicket.message}"
+                                                    </p>
+                                                    <div className="flex justify-end mt-4">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{selectedTicket.workshop_name} · {selectedTicket.user_name}</span>
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <div className="space-y-4">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-6 bg-slate-400 rounded-full" />
-                                                <h3 className="text-sm font-black text-slate-900 uppercase italic">Gestión de Estado</h3>
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-1.5 h-6 bg-slate-400 rounded-full" />
+                                                    <h3 className="text-sm font-black text-slate-900 uppercase italic">Gestión de Estado</h3>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    <button
+                                                        onClick={() => handleUpdateTicketStatus(selectedTicket.id, 'resolved')}
+                                                        className={`p-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${selectedTicket.status === 'resolved'
+                                                            ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
+                                                            : 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-600 hover:text-white'
+                                                            }`}
+                                                    >
+                                                        <CheckCircle2 size={16} />
+                                                        Marcar Solucionado
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleUpdateTicketStatus(selectedTicket.id, 'open')}
+                                                        className={`p-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${selectedTicket.status === 'open'
+                                                            ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                                                            : 'bg-amber-50 text-amber-600 border border-amber-100 hover:bg-amber-500 hover:text-white'
+                                                            }`}
+                                                    >
+                                                        <Clock size={16} />
+                                                        Marcar Pendiente
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <button
-                                                    onClick={() => handleUpdateTicketStatus(selectedTicket.id, 'resolved')}
-                                                    className={`p-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${selectedTicket.status === 'resolved'
-                                                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
-                                                        : 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-600 hover:text-white'
-                                                        }`}
-                                                >
-                                                    <CheckCircle2 size={16} />
-                                                    Marcar Solucionado
-                                                </button>
-                                                <button
-                                                    onClick={() => handleUpdateTicketStatus(selectedTicket.id, 'open')}
-                                                    className={`p-4 rounded-2xl flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${selectedTicket.status === 'open'
-                                                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
-                                                        : 'bg-amber-50 text-amber-600 border border-amber-100 hover:bg-amber-500 hover:text-white'
-                                                        }`}
-                                                >
-                                                    <Clock size={16} />
-                                                    Marcar Pendiente
-                                                </button>
-                                            </div>
-                                        </div>
 
-                                        <div className="space-y-4">
-                                            <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
-                                                <h3 className="text-sm font-black text-slate-900 uppercase italic">Tu Respuesta</h3>
+                                            <div className="space-y-4">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-1.5 h-6 bg-blue-600 rounded-full" />
+                                                    <h3 className="text-sm font-black text-slate-900 uppercase italic">Tu Respuesta</h3>
+                                                </div>
+                                                <textarea
+                                                    rows={6}
+                                                    value={replyText}
+                                                    onChange={(e) => setReplyText(e.target.value)}
+                                                    className="w-full bg-slate-50 border-none rounded-[2rem] p-6 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-100 transition-all resize-none shadow-inner"
+                                                    placeholder="Escribe la solución o respuesta técnica..."
+                                                />
+                                                <button
+                                                    onClick={() => handleReplyTicket(selectedTicket.id)}
+                                                    disabled={sendingReply}
+                                                    className="w-full bg-blue-600 hover:bg-blue-700 text-white p-5 rounded-2xl flex items-center justify-center gap-3 shadow-xl shadow-blue-500/10 transition-all text-xs font-black uppercase tracking-widest disabled:opacity-50"
+                                                >
+                                                    {sendingReply ? 'Enviando...' : (
+                                                        <>
+                                                            <Send size={18} />
+                                                            Enviar Solución
+                                                        </>
+                                                    )}
+                                                </button>
                                             </div>
-                                            <textarea
-                                                rows={6}
-                                                value={replyText}
-                                                onChange={(e) => setReplyText(e.target.value)}
-                                                className="w-full bg-slate-50 border-none rounded-[2rem] p-6 text-sm font-bold text-slate-900 focus:ring-4 focus:ring-blue-100 transition-all resize-none shadow-inner"
-                                                placeholder="Escribe la solución o respuesta técnica..."
-                                            />
-                                            <button
-                                                onClick={() => handleReplyTicket(selectedTicket.id)}
-                                                disabled={sendingReply}
-                                                className="w-full bg-blue-600 hover:bg-blue-700 text-white p-5 rounded-2xl flex items-center justify-center gap-3 shadow-xl shadow-blue-500/10 transition-all text-xs font-black uppercase tracking-widest disabled:opacity-50"
-                                            >
-                                                {sendingReply ? 'Enviando...' : (
-                                                    <>
-                                                        <Send size={18} />
-                                                        Enviar Solución
-                                                    </>
-                                                )}
-                                            </button>
                                         </div>
-                                    </div>
-                                ) : (
-                                    <div className="h-full flex flex-col items-center justify-center text-center opacity-30 grayscale">
-                                        <LifeBuoy size={64} className="mb-4" />
-                                        <p className="text-xs font-black uppercase tracking-[0.2em]">Selecciona un reporte<br />para gestionar</p>
-                                    </div>
-                                )}
+                                    ) : (
+                                        <div className="h-full flex flex-col items-center justify-center text-center opacity-30 grayscale">
+                                            <LifeBuoy size={64} className="mb-4" />
+                                            <p className="text-xs font-black uppercase tracking-[0.2em]">Selecciona un reporte<br />para gestionar</p>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+            {/* Global Reports Modal */}
+            {
+                showReportsModal && globalReports && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white w-full max-w-6xl max-h-[90vh] rounded-[40px] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                            <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-900 text-white">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-indigo-600 p-3 rounded-2xl">
+                                        <BarChart3 size={24} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-black italic uppercase tracking-tight">Análisis Global</h2>
+                                        <p className="text-indigo-300 text-[10px] font-bold uppercase tracking-widest mt-0.5 italic">KPIs Consolidados del Sistema</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowReportsModal(false)} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div className="flex-grow overflow-y-auto p-8 bg-slate-50/50">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    {/* Workshop Growth */}
+                                    <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+                                        <div className="flex items-center gap-3">
+                                            <Globe className="text-indigo-500" size={20} />
+                                            <h3 className="font-black text-slate-800 uppercase italic">Crecimiento de Talleres</h3>
+                                        </div>
+                                        <div className="h-[250px] w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <AreaChart data={globalReports.growth}>
+                                                    <defs>
+                                                        <linearGradient id="colorGrowth" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1} />
+                                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Tooltip />
+                                                    <Area type="monotone" dataKey="total" stroke="#6366f1" strokeWidth={4} fillOpacity={1} fill="url(#colorGrowth)" />
+                                                </AreaChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+
+                                    {/* Order Volume */}
+                                    <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+                                        <div className="flex items-center gap-3">
+                                            <ClipboardList className="text-blue-500" size={20} />
+                                            <h3 className="font-black text-slate-800 uppercase italic">Volumen de Órdenes</h3>
+                                        </div>
+                                        <div className="h-[250px] w-full">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <BarChart data={globalReports.orders}>
+                                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                    <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                                    <Tooltip />
+                                                    <Bar dataKey="count" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                                                </BarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+
+                                    {/* Health Distribution */}
+                                    <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+                                        <div className="flex items-center gap-3">
+                                            <ActivityIcon className="text-emerald-500" size={20} />
+                                            <h3 className="font-black text-slate-800 uppercase italic">Estado de Talleres</h3>
+                                        </div>
+                                        <div className="h-[250px] w-full flex items-center">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie
+                                                        data={globalReports.health}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={60}
+                                                        outerRadius={90}
+                                                        paddingAngle={5}
+                                                        dataKey="value"
+                                                    >
+                                                        {globalReports.health.map((entry: any, index: number) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.name === 'active' ? '#10b981' : '#f43f5e'} />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip />
+                                                    <Legend />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+
+                                    {/* Resource Consumption */}
+                                    <div className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm space-y-6">
+                                        <div className="flex items-center gap-3">
+                                            <HardDrive className="text-amber-500" size={20} />
+                                            <h3 className="font-black text-slate-800 uppercase italic">Consumo de Espacio (Top 5)</h3>
+                                        </div>
+                                        <div className="space-y-4">
+                                            {globalReports.storage.map((item: any, idx: number) => (
+                                                <div key={idx} className="flex items-center gap-4">
+                                                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-[10px] font-black text-slate-400">
+                                                        #{idx + 1}
+                                                    </div>
+                                                    <div className="flex-grow">
+                                                        <div className="flex justify-between items-end mb-1">
+                                                            <span className="text-[11px] font-black text-slate-800 uppercase truncate">{item.name}</span>
+                                                            <span className="text-[10px] font-bold text-slate-500">{(item.size / 1024 / 1024).toFixed(1)} MB</span>
+                                                        </div>
+                                                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                                            <div
+                                                                className="h-full bg-amber-400 rounded-full"
+                                                                style={{ width: `${Math.min(100, (item.size / (globalReports.storage[0]?.size || 1)) * 100)}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+        </div >
     );
 }

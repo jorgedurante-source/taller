@@ -31,8 +31,10 @@ import {
     AlertCircle,
     RefreshCw,
     X,
-    Activity
+    Activity,
+    Database
 } from 'lucide-react';
+import { superApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { THEMES, applyTheme, getStoredTheme } from '@/lib/theme';
 import { useSlug } from '@/lib/slug';
@@ -127,6 +129,10 @@ export default function SettingsPage() {
         'dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'users', 'roles', 'reminders', 'appointments', 'suppliers', 'audit'
     ]);
 
+    // Vehicle Reference State
+    const [vehicleRefs, setVehicleRefs] = useState<any[]>([]);
+    const [newRef, setNewRef] = useState({ brand: '', model: '', version: '' });
+
     const permissionsList = config?.enabled_modules && Array.isArray(config.enabled_modules)
         ? permissionsBase.filter(p => config.enabled_modules.includes(p))
         : permissionsBase;
@@ -185,7 +191,8 @@ export default function SettingsPage() {
                 const requests: Promise<any>[] = [
                     api.get('/config'),
                     api.get('/services'),
-                    api.get('/templates')
+                    api.get('/templates'),
+                    api.get('/clients/vehicle-reference')
                 ];
 
                 if (currentUser && !currentUser.isSuperuser) {
@@ -204,6 +211,7 @@ export default function SettingsPage() {
                 const configRes = responses[currentIdx++];
                 const servicesRes = responses[currentIdx++];
                 const templatesRes = responses[currentIdx++];
+                const vehicleRefsRes = responses[currentIdx++];
                 let meRes = (currentUser && !currentUser.isSuperuser) ? responses[currentIdx++] : null;
                 let usersRes = hasPermission('users') ? responses[currentIdx++] : null;
                 let rolesRes = hasPermission('roles') ? responses[currentIdx++] : null;
@@ -229,6 +237,7 @@ export default function SettingsPage() {
 
                 setServices(servicesRes.data);
                 setTemplates(templatesRes.data);
+                setVehicleRefs(vehicleRefsRes.data);
                 if (meRes) setMeData({ ...meRes.data, password: '' });
                 if (usersRes) setUsers(usersRes.data);
                 if (rolesRes) setRoles(rolesRes.data);
@@ -444,6 +453,31 @@ export default function SettingsPage() {
         }
     };
 
+    const handleAddVehicleRef = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            const response = await api.post('/clients/vehicle-reference', newRef);
+            setVehicleRefs(prev => [...prev, { ...newRef, id: response.data.id }].sort((a, b) => a.brand.localeCompare(b.brand)));
+            setNewRef({ brand: '', model: '', version: '' });
+            notify('success', 'Referencia agregada');
+        } catch (err) {
+            notify('error', 'Error al agregar referencia');
+        }
+    };
+
+    const handleDeleteVehicleRef = async (id: number) => {
+        if (!confirm('¿Desea eliminar esta referencia?')) return;
+        try {
+            await api.delete(`/clients/vehicle-reference/${id}`);
+            setVehicleRefs(vehicleRefs.filter(r => r.id !== id));
+            notify('success', 'Referencia eliminada');
+        } catch (err) {
+            notify('error', 'Error al eliminar referencia');
+        }
+    };
+
+
+
     useEffect(() => {
         if (activeTab === 'logs') {
             fetchSystemLogs();
@@ -465,6 +499,7 @@ export default function SettingsPage() {
                 <TabButton active={activeTab === 'global'} onClick={() => setActiveTab('global')} icon={<Globe size={18} />} label={t('global_config')} />
                 <TabButton active={activeTab === 'comms'} onClick={() => setActiveTab('comms')} icon={<MessageSquare size={18} />} label={t('portal_config')} />
                 <TabButton active={activeTab === 'services'} onClick={() => setActiveTab('services')} icon={<Wrench size={18} />} label={t('services_catalog')} />
+                <TabButton active={activeTab === 'vehicles'} onClick={() => setActiveTab('vehicles')} icon={<Database size={18} />} label="Modelos de Vehículos" />
                 {hasPermission('users') && <TabButton active={activeTab === 'users'} onClick={() => setActiveTab('users')} icon={<UserIcon size={18} />} label={t('user_management')} />}
                 {hasPermission('roles') && <TabButton active={activeTab === 'roles'} onClick={() => setActiveTab('roles')} icon={<Shield size={18} />} label={t('roles_and_perms')} />}
                 <TabButton active={activeTab === 'appearance'} onClick={() => setActiveTab('appearance')} icon={<Palette size={18} />} label={t('theme_selection')} />
@@ -480,6 +515,7 @@ export default function SettingsPage() {
                 {currentUser?.isSuperuser && (
                     <TabButton active={activeTab === 'logs'} onClick={() => setActiveTab('logs')} icon={<Activity size={18} />} label="Logs" />
                 )}
+
             </div>
 
             <div className="mt-8">
@@ -1594,6 +1630,87 @@ export default function SettingsPage() {
                         </div>
                     )
                 }
+                {activeTab === 'vehicles' && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <section className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm space-y-8">
+                            <div className="flex items-center gap-4 border-b border-slate-50 pb-6">
+                                <div className="bg-blue-600 text-white p-3 rounded-2xl shadow-xl shadow-blue-600/10">
+                                    <Database size={24} />
+                                </div>
+                                <div>
+                                    <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Base de Modelos</h3>
+                                    <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-0.5">Marcas, Modelos y Versiones</p>
+                                </div>
+                            </div>
+
+                            <form onSubmit={handleAddVehicleRef} className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-3xl border border-slate-100">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Marca</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 font-bold uppercase text-xs outline-none focus:border-blue-500"
+                                        placeholder="Ej: TOYOTA"
+                                        value={newRef.brand}
+                                        onChange={e => setNewRef({ ...newRef, brand: e.target.value.toUpperCase() })}
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Modelo</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 font-bold uppercase text-xs outline-none focus:border-blue-500"
+                                        placeholder="Ej: HILUX"
+                                        value={newRef.model}
+                                        onChange={e => setNewRef({ ...newRef, model: e.target.value.toUpperCase() })}
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Versión (Opcional)</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-2 rounded-xl border border-slate-200 font-bold uppercase text-xs outline-none focus:border-blue-500"
+                                        placeholder="Ej: SRV 4x4"
+                                        value={newRef.version}
+                                        onChange={e => setNewRef({ ...newRef, version: e.target.value.toUpperCase() })}
+                                    />
+                                </div>
+                                <div className="flex items-end">
+                                    <button
+                                        type="submit"
+                                        className="w-full py-2 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg active:scale-95"
+                                    >
+                                        <Plus size={14} className="inline mr-1" /> Agregar
+                                    </button>
+                                </div>
+                            </form>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {vehicleRefs.map((ref: any) => (
+                                    <div key={ref.id} className="p-4 bg-white border border-slate-100 rounded-2xl flex items-center justify-between group hover:border-blue-200 transition-all">
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase">{ref.brand}</span>
+                                                <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
+                                                <span className="text-sm font-black text-slate-800 uppercase italic leading-none">{ref.model}</span>
+                                            </div>
+                                            {ref.version && (
+                                                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mt-1">{ref.version}</p>
+                                            )}
+                                        </div>
+                                        <button
+                                            onClick={() => handleDeleteVehicleRef(ref.id)}
+                                            className="p-2 text-slate-300 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    </div>
+                )}
             </div>
 
             {isLogoOpen && config.logo_path && (
@@ -1619,7 +1736,7 @@ export default function SettingsPage() {
                     </div>
                 </div>
             )}
-        </div>
+        </div >
     );
 }
 

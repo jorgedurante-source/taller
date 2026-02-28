@@ -26,6 +26,7 @@ import {
 import Link from 'next/link';
 import { useNotification } from '@/lib/notification';
 import { useAuth } from '@/lib/auth';
+import VehicleAutocomplete from '@/components/VehicleAutocomplete';
 
 export default function ClientDetailsPage() {
     const { slug } = useSlug();
@@ -58,6 +59,7 @@ export default function ClientDetailsPage() {
     const [newVehicleData, setNewVehicleData] = useState({
         brand: '',
         model: '',
+        version: '',
         plate: '',
         year: '',
         km: ''
@@ -99,7 +101,7 @@ export default function ClientDetailsPage() {
         try {
             await api.post(`/clients/${client.id}/vehicles`, newVehicleData);
             setShowNewVehicleModal(false);
-            setNewVehicleData({ brand: '', model: '', plate: '', year: '', km: '' });
+            setNewVehicleData({ brand: '', model: '', version: '', plate: '', year: '', km: '' });
             fetchData();
         } catch (err: any) {
             notify('error', err.response?.data?.message || 'Error al agregar vehículo');
@@ -296,18 +298,20 @@ export default function ClientDetailsPage() {
                                                 )}
                                             </div>
                                             <div>
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{v.brand}</p>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                    {v.brand} {v.version ? `· ${v.version}` : ''}
+                                                </p>
                                                 <h4 className="text-lg font-black text-slate-900 uppercase italic leading-none">{v.model}</h4>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <select
-                                                value={v.status || 'Activo'}
+                                                value={v.status || 'active'}
                                                 onChange={(e) => handleUpdateVehicleStatus(v, e.target.value)}
-                                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg outline-none border ${v.status === 'Inactivo' ? 'bg-red-50 text-red-500 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}
+                                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg outline-none border ${v.status === 'inactive' ? 'bg-red-50 text-red-500 border-red-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}
                                             >
-                                                <option value="Activo">Activo</option>
-                                                <option value="Inactivo">Inactivo</option>
+                                                <option value="active">Activo</option>
+                                                <option value="inactive">Inactivo</option>
                                             </select>
                                             <button
                                                 onClick={() => handleDeleteVehicle(v.id)}
@@ -484,13 +488,36 @@ export default function ClientDetailsPage() {
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Patente</label>
                                 <input placeholder="AAA 123" value={newVehicleData.plate} onChange={e => setNewVehicleData({ ...newVehicleData, plate: e.target.value.toUpperCase() })} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 font-bold outline-none" />
                             </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Marca</label>
-                                <input placeholder="Ej: Ford" value={newVehicleData.brand} onChange={e => setNewVehicleData({ ...newVehicleData, brand: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 font-bold outline-none" />
-                            </div>
                             <div className="col-span-2 space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Modelo</label>
-                                <input placeholder="Ej: Focus" value={newVehicleData.model} onChange={e => setNewVehicleData({ ...newVehicleData, model: e.target.value })} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 font-bold outline-none" />
+                                <VehicleAutocomplete
+                                    label="Marca"
+                                    value={newVehicleData.brand}
+                                    onChange={(v) => setNewVehicleData({ ...newVehicleData, brand: v, model: '', version: '' })}
+                                    type="brand"
+                                    placeholder="Ej: TOYOTA"
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <VehicleAutocomplete
+                                    label="Modelo"
+                                    value={newVehicleData.model}
+                                    onChange={(v) => setNewVehicleData({ ...newVehicleData, model: v, version: '' })}
+                                    type="model"
+                                    filters={{ brand: newVehicleData.brand }}
+                                    placeholder="Ej: HILUX"
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <VehicleAutocomplete
+                                    label="Versión (Opcional)"
+                                    value={newVehicleData.version}
+                                    onChange={(v) => setNewVehicleData({ ...newVehicleData, version: v })}
+                                    type="version"
+                                    filters={{ brand: newVehicleData.brand, model: newVehicleData.model }}
+                                    placeholder="Ej: SRV 4x4"
+                                />
                             </div>
                             <div className="space-y-2">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Año</label>

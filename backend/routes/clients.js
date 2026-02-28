@@ -9,7 +9,6 @@ const { auth, hasPermission } = require('../middleware/auth');
 const bcrypt = require('bcrypt');
 const { logActivity } = require('../lib/auditLogger');
 
-// Multer storage for vehicle photos
 const storage = multer.diskStorage({
     destination: (req, file, cb) => {
         const slug = req.user?.slug || req.slug;
@@ -36,8 +35,9 @@ router.post('/', auth, hasPermission('clients'), (req, res) => {
 
     // Use a transaction for consistency
     const insertClient = req.db.prepare('INSERT INTO clients (first_name, last_name, nickname, phone, email, address, notes) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    const insertVehicle = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, year, km) VALUES (?, ?, ?, ?, ?, ?)');
+    const insertVehicle = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, version, year, km) VALUES (?, ?, ?, ?, ?, ?, ?)');
     const insertKmHistory = req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)');
+    const insertRef = req.db.prepare('INSERT OR IGNORE INTO vehicle_reference (brand, model, version) VALUES (?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
         const clientResult = insertClient.run(data.first_name, data.last_name, data.nickname, data.phone, data.email, data.address, data.notes);
@@ -49,9 +49,16 @@ router.post('/', auth, hasPermission('clients'), (req, res) => {
                 data.vehicle.plate,
                 data.vehicle.brand,
                 data.vehicle.model,
+                data.vehicle.version || null,
                 data.vehicle.year || null,
                 data.vehicle.km || null
             );
+
+            // Auto-learn reference
+            if (data.vehicle.brand && data.vehicle.model) {
+                insertRef.run(data.vehicle.brand, data.vehicle.model, data.vehicle.version || null);
+            }
+
             // Log initial km
             if (data.vehicle.km && parseInt(data.vehicle.km) > 0) {
                 insertKmHistory.run(vResult.lastInsertRowid, parseInt(data.vehicle.km), 'Kilometraje inicial al registrar vehículo');
@@ -126,14 +133,19 @@ router.get('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
 
 // @route   POST api/clients/:id/vehicles
 router.post('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
-    const { plate, brand, model, year, km, photos } = req.body;
+    const { plate, brand, model, version, year, km, photos } = req.body;
     try {
-        const result = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, year, km, photos) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-            req.params.id, plate, brand, model, year, km, JSON.stringify(photos || [])
+        const result = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, version, year, km, photos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+            req.params.id, plate, brand, model, version || null, year, km, JSON.stringify(photos || [])
         );
 
+        // Auto-learn reference
+        if (brand && model) {
+            req.db.prepare('INSERT OR IGNORE INTO vehicle_reference (brand, model, version) VALUES (?, ?, ?)').run(brand, model, version || null);
+        }
+
         res.json({ id: result.lastInsertRowid, plate, brand, model });
-        logActivity(req.slug, req.user, 'ADD_VEHICLE', 'vehicle', result.lastInsertRowid, { plate, brand, model, clientId: req.params.id }, req);
+        logActivity(req.slug, req.user, 'ADD_VEHICLE', 'vehicle', result.lastInsertRowid, { plate, brand, model, version, clientId: req.params.id }, req);
         // Log initial km
         if (km && parseInt(km) > 0) {
             req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)').run(
@@ -150,19 +162,19 @@ router.post('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
 
 // @route   PUT api/clients/vehicles/:vid
 router.put('/vehicles/:vid', auth, hasPermission('vehicles'), (req, res) => {
-    const { brand, model, plate, year, km, status } = req.body;
+    const { brand, model, version, plate, year, km, status } = req.body;
     try {
         const current = req.db.prepare('SELECT km FROM vehicles WHERE id = ?').get(req.params.vid);
 
         req.db.prepare(`
             UPDATE vehicles 
-            SET brand = ?, model = ?, plate = ?, year = ?, km = ?, status = ? 
+            SET brand = ?, model = ?, version = ?, plate = ?, year = ?, km = ?, status = ? 
             WHERE id = ?
-        `).run(brand, model, plate, year, km, status, req.params.vid);
+        `).run(brand, model, version || null, plate, year, km, status, req.params.vid);
 
-        // Log km change if km actually changed
-        if (current && km !== undefined && km !== null && parseInt(km) !== parseInt(current.km || 0)) {
-            req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km) VALUES (?, ?)').run(req.params.vid, parseInt(km));
+        // Auto-learn reference
+        if (brand && model) {
+            req.db.prepare('INSERT OR IGNORE INTO vehicle_reference (brand, model, version) VALUES (?, ?, ?)').run(brand, model, version || null);
         }
 
         res.json({ message: 'Vehículo actualizado' });
@@ -247,6 +259,39 @@ router.post('/vehicles/:vid/photo', auth, hasPermission('vehicles'), upload.sing
         res.json({ message: 'Foto actualizada', photoPath });
     } catch (err) {
         console.error(err);
+        res.status(500).send('Server error');
+    }
+});
+
+// --- Vehicle Reference Management ---
+
+// @route   GET api/clients/vehicle-reference
+router.get('/vehicle-reference', auth, (req, res) => {
+    try {
+        const refs = req.db.prepare('SELECT * FROM vehicle_reference ORDER BY brand ASC, model ASC, version ASC').all();
+        res.json(refs);
+    } catch (err) {
+        res.status(500).send('Server error');
+    }
+});
+
+// @route   POST api/clients/vehicle-reference
+router.post('/vehicle-reference', auth, hasPermission('settings'), (req, res) => {
+    const { brand, model, version } = req.body;
+    try {
+        const result = req.db.prepare('INSERT OR IGNORE INTO vehicle_reference (brand, model, version) VALUES (?, ?, ?)').run(brand, model, version || null);
+        res.json({ id: result.lastInsertRowid, message: 'Referencia agregada' });
+    } catch (err) {
+        res.status(500).send('Server error');
+    }
+});
+
+// @route   DELETE api/clients/vehicle-reference/:id
+router.delete('/vehicle-reference/:id', auth, hasPermission('settings'), (req, res) => {
+    try {
+        req.db.prepare('DELETE FROM vehicle_reference WHERE id = ?').run(req.params.id);
+        res.json({ message: 'Referencia eliminada' });
+    } catch (err) {
         res.status(500).send('Server error');
     }
 });

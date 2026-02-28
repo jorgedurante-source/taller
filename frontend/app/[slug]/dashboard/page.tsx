@@ -135,14 +135,14 @@ export default function DashboardPage() {
                 </div>
             </header>
 
-            {/* Main Stats Grid */}
-            <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 ${hasPermission('appointments') ? 'xl:grid-cols-5' : ''} gap-6`}>
+            {/* Main Stats Grid - All 6 in one line */}
+            <div className={`grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4`}>
                 <StatCard
                     title={t('active_orders')}
                     value={data?.ordersByStatus
                         .filter((item: any) => !['pending', 'delivered', 'appointment'].includes(item.status))
                         .reduce((acc: number, item: any) => acc + item.count, 0) || 0}
-                    icon={<ClipboardList size={24} />}
+                    icon={<ClipboardList size={20} />}
                     color="blue"
                     description={t('work_in_progress')}
                     onClick={() => router.push(`/${slug}/dashboard/orders`)}
@@ -150,7 +150,7 @@ export default function DashboardPage() {
                 <StatCard
                     title={t('new_clients')}
                     value={data?.newClientsThisMonth || 0}
-                    icon={<Users size={24} />}
+                    icon={<Users size={20} />}
                     color="amber"
                     description={t('registered_this_month')}
                     onClick={() => router.push(`/${slug}/dashboard/clients`)}
@@ -158,25 +158,23 @@ export default function DashboardPage() {
                 <StatCard
                     title={t('waiting_budget')}
                     value={data?.ordersByStatus.find((s: any) => s.status === 'pending')?.count || 0}
-                    icon={<Clock size={24} />}
+                    icon={<Clock size={20} />}
                     color="indigo"
                     description={t('new_budgets')}
                     onClick={() => router.push(`/${slug}/dashboard/orders?status=pending`)}
                 />
-                {hasPermission('appointments') && (
-                    <StatCard
-                        title={t('assigned_appointments')}
-                        value={data?.assignedAppointmentsCount || 0}
-                        icon={<Bell size={24} />}
-                        color="purple"
-                        description={t('scheduled_appointments')}
-                        onClick={() => router.push(`/${slug}/dashboard/appointments`)}
-                    />
-                )}
+                <StatCard
+                    title={t('assigned_appointments')}
+                    value={data?.assignedAppointmentsCount || 0}
+                    icon={<Bell size={20} />}
+                    color="purple"
+                    description={t('scheduled_appointments')}
+                    onClick={() => router.push(`/${slug}/dashboard/appointments`)}
+                />
                 <StatCard
                     title={t('new_messages')}
                     value={data?.unreadMessagesCount || 0}
-                    icon={<MessageSquare size={24} />}
+                    icon={<MessageSquare size={20} />}
                     color={data?.unreadMessagesCount > 0 ? "orange" : "slate"}
                     description={t('unread_replies')}
                     onClick={() => router.push(`/${slug}/dashboard/orders?filter=unread`)}
@@ -184,26 +182,42 @@ export default function DashboardPage() {
                 <StatCard
                     title={t('ready_for_delivery')}
                     value={data?.ordersByStatus.find((s: any) => s.status === 'ready')?.count || 0}
-                    icon={<Car size={24} />}
+                    icon={<Car size={20} />}
                     color="emerald"
                     description={t('finished_vehicles')}
                     onClick={() => router.push(`/${slug}/dashboard/orders?status=ready`)}
                 />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Status Distribution */}
-                <div className="lg:col-span-1 bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
-                    <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight mb-8">{t('workshop_status')}</h3>
-                    <div className="h-[250px] relative">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8 items-center pt-4">
+                {/* Left Shortcuts */}
+                <div className="md:col-span-1 flex flex-col gap-4">
+                    <ShortcutCard
+                        href={`/${slug}/dashboard/orders?filter=active_work`}
+                        title={t('tracking')}
+                        subtitle={t('units_in_workshop')}
+                        icon={<Car className="text-blue-500" />}
+                    />
+                    <ShortcutCard
+                        href={`/${slug}/dashboard/reports`}
+                        title={t('reports')}
+                        subtitle={t('income_and_reports')}
+                        icon={<TrendingUp className="text-indigo-500" />}
+                    />
+                </div>
+
+                {/* Status Distribution - Centered */}
+                <div className="md:col-span-2 bg-white p-6 rounded-[40px] shadow-sm border border-slate-100 flex flex-col items-center">
+                    <h3 className="text-lg font-black text-slate-900 uppercase italic tracking-tight mb-4 self-start">{t('workshop_status')}</h3>
+                    <div className="h-[200px] w-full relative">
                         <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
                                     data={data?.ordersByStatus}
                                     cx="50%"
                                     cy="50%"
-                                    innerRadius={70}
-                                    outerRadius={90}
+                                    innerRadius={60}
+                                    outerRadius={80}
                                     paddingAngle={8}
                                     dataKey="count"
                                     nameKey="status"
@@ -213,92 +227,45 @@ export default function DashboardPage() {
                                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                 </Pie>
-                                <Tooltip />
+                                <Tooltip
+                                    contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', color: '#000' }}
+                                    itemStyle={{ color: '#000' }}
+                                />
                             </PieChart>
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                            <span className="text-3xl font-black text-slate-900">
+                            <span className="text-2xl font-black text-slate-900">
                                 {data?.ordersByStatus.reduce((acc: number, item: any) => acc + item.count, 0) || 0}
                             </span>
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('orders')}</span>
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t('orders')}</span>
                         </div>
                     </div>
-                    <div className="mt-8 space-y-3">
+                    <div className="mt-4 grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-2 w-full">
                         {data?.ordersByStatus.map((item: any, index: number) => (
-                            <div key={item.status} className="flex items-center justify-between group cursor-pointer hover:bg-slate-50 p-2 rounded-xl transition-all" onClick={() => router.push(`/${slug}/dashboard/orders?status=${item.status}`)}>
-                                <div className="flex items-center gap-3">
-                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
-                                    <span className="text-xs font-bold text-slate-500 group-hover:text-slate-900 transition-colors uppercase tracking-tight">{t(item.status)}</span>
+                            <div key={item.status} className="flex items-center justify-between group cursor-pointer hover:bg-slate-50 px-2 py-1 rounded-lg transition-all" onClick={() => router.push(`/${slug}/dashboard/orders?status=${item.status}`)}>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }}></div>
+                                    <span className="text-[9px] font-bold text-slate-500 group-hover:text-slate-900 transition-colors uppercase">{t(item.status)}</span>
                                 </div>
-                                <span className="text-xs font-black text-slate-900">{item.count}</span>
+                                <span className="text-[9px] font-black text-slate-900">{item.count}</span>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                {/* Common Services */}
-                <div className="lg:col-span-2 bg-white rounded-[40px] shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-8 border-b border-slate-50 flex justify-between items-center bg-slate-50/50">
-                        <h3 className="text-lg font-black text-slate-900 uppercase italic">{t('common_services')}</h3>
-                        <div className="bg-white px-3 py-1 rounded-full text-[10px] font-black text-blue-600 border border-slate-100 uppercase tracking-widest">{t('global')}</div>
-                    </div>
-                    <div className="p-4">
-                        <table className="w-full text-left">
-                            <tbody className="divide-y divide-slate-50">
-                                {data?.commonServices.map((service: any, i: number) => (
-                                    <tr key={i} className="hover:bg-slate-50/80 transition-all rounded-2xl group">
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-8 h-8 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-[10px] font-black text-slate-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                                                    {i + 1}
-                                                </div>
-                                                <span className="font-bold text-slate-600 uppercase text-xs">{service.description}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <span className="bg-slate-50 border border-slate-100 text-slate-800 px-3 py-1 rounded-lg text-xs font-black group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-all">
-                                                {service.count} <span className="text-[10px] ml-0.5 opacity-60">{t('veh')}</span>
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            {/* Bottom Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Quick Actions / Shortcuts */}
-                <div className="grid grid-cols-2 gap-4">
-                    <ShortcutCard
-                        href={`/${slug}/dashboard/orders?filter=active_work`}
-                        title={t('tracking')}
-                        subtitle={t('units_in_workshop')}
-                        icon={<Car className="text-blue-500" />}
-                        color="blue"
-                    />
-                    <ShortcutCard
-                        href={`/${slug}/dashboard/income`}
-                        title={t('reports')}
-                        subtitle={t('income_and_reports')}
-                        icon={<TrendingUp className="text-indigo-500" />}
-                        color="indigo"
-                    />
+                {/* Right Shortcuts */}
+                <div className="md:col-span-1 flex flex-col gap-4">
                     <ShortcutCard
                         href={`/${slug}/dashboard/reminders`}
                         title={t('reminders')}
                         subtitle={t('preventive_maintenance')}
                         icon={<Bell className="text-emerald-500" />}
-                        color="emerald"
                     />
                     <ShortcutCard
                         href={`/${slug}/dashboard/settings`}
                         title={t('settings')}
                         subtitle={t('workshop_configuration')}
                         icon={<Settings className="text-slate-500" />}
-                        color="slate"
                     />
                 </div>
             </div>
@@ -337,15 +304,15 @@ function StatCard({ title, value, icon, color, description, onClick }: { title: 
     );
 }
 
-function ShortcutCard({ href, title, subtitle, icon, color }: { href: string, title: string, subtitle: string, icon: React.ReactNode, color: string }) {
+function ShortcutCard({ href, title, subtitle, icon }: { href: string, title: string, subtitle: string, icon: React.ReactNode }) {
     return (
         <Link href={href}>
-            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl transition-all h-full group">
+            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl transition-all h-full group flex flex-col items-center text-center">
                 <div className="p-3 rounded-2xl bg-slate-50 group-hover:scale-110 transition-transform w-fit mb-4">
                     {icon}
                 </div>
-                <h4 className="font-black text-slate-900 uppercase italic text-sm tracking-tight">{title}</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{subtitle}</p>
+                <h4 className="font-black text-slate-900 uppercase italic text-[11px] tracking-tight">{title}</h4>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{subtitle}</p>
             </div>
         </Link>
     );

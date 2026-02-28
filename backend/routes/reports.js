@@ -320,4 +320,411 @@ router.post('/reminders/send-bulk', auth, hasPermission('reminders'), async (req
     });
 });
 
+// @route   GET api/reports/analytics
+router.get('/analytics', auth, hasPermission('reports'), (req, res) => {
+    try {
+        const db = getDb(req);
+
+        const errors = [];
+
+        const leadTimes = (() => {
+            try {
+                return db.prepare(`
+                    SELECT 
+                        strftime('%Y-%m', created_at) as month,
+                        ROUND(AVG(JULIANDAY(delivered_at) - JULIANDAY(created_at)), 1) as avg_days
+                    FROM orders
+                    WHERE delivered_at IS NOT NULL
+                    GROUP BY month
+                    ORDER BY month ASC
+                `).all();
+            } catch (e) {
+                console.error('Error in leadTimes:', e);
+                errors.push('leadTimes');
+                return [];
+            }
+        })();
+
+        const partsLaborData = (() => {
+            try {
+                return db.prepare(`
+                    SELECT 
+                        SUM(oi.labor_price) as total_labor,
+                        SUM(oi.parts_price) as total_parts,
+                        SUM(oi.parts_profit) as total_parts_profit
+                    FROM order_items oi
+                    JOIN orders o ON oi.order_id = o.id
+                    WHERE o.payment_status = 'paid'
+                `).get();
+            } catch (e) {
+                console.error('Error in partsLaborData:', e);
+                errors.push('profitBreakdown');
+                return { total_labor: 0, total_parts: 0, total_parts_profit: 0 };
+            }
+        })();
+
+        const retentionStats = (() => {
+            try {
+                const results = db.prepare(`SELECT client_id, COUNT(*) as order_count FROM orders GROUP BY client_id`).all();
+                let nc = 0, rc = 0;
+                results.forEach(r => {
+                    if (r.order_count === 1) nc++;
+                    else if (r.order_count > 1) rc++;
+                });
+                return { newCount: nc, recurringCount: rc };
+            } catch (e) {
+                console.error('Error in retentionStats:', e);
+                errors.push('retention');
+                return { newCount: 0, recurringCount: 0 };
+            }
+        })();
+
+        const rankings = (() => {
+            try {
+                return db.prepare(`
+                    SELECT 
+                        COALESCE(u.first_name || ' ' || u.last_name, u.username) as name,
+                        COUNT(o.id) as completed_orders
+                    FROM orders o
+                    JOIN users u ON o.created_by_id = u.id
+                    WHERE o.status = 'delivered'
+                    GROUP BY u.id
+                    ORDER BY completed_orders DESC
+                    LIMIT 5
+                `).all();
+            } catch (e) {
+                console.error('Error in rankings:', e);
+                errors.push('rankings');
+                return [];
+            }
+        })();
+
+        const brands = (() => {
+            try {
+                return db.prepare(`
+                    SELECT 
+                        v.brand as name,
+                        COUNT(DISTINCT o.id) as volume,
+                        SUM(oi.labor_price) as labor_income,
+                        SUM(oi.parts_profit) as parts_profit,
+                        SUM(oi.labor_price + oi.parts_profit) as income
+                    FROM orders o
+                    JOIN vehicles v ON o.vehicle_id = v.id
+                    JOIN order_items oi ON o.id = oi.order_id
+                    WHERE o.payment_status = 'paid'
+                    GROUP BY v.brand
+                    ORDER BY income DESC
+                    LIMIT 10
+                `).all();
+            } catch (e) {
+                console.error('Error in brands:', e);
+                errors.push('brands');
+                return [];
+            }
+        })();
+
+        const loyalty = (() => {
+            try {
+                return db.prepare(`
+                    SELECT 
+                        (c.first_name || ' ' || c.last_name) as name,
+                        COUNT(o.id) as visits,
+                        SUM(CASE WHEN o.payment_status = 'paid' THEN 1 ELSE 0 END) as paid_visits
+                    FROM clients c
+                    JOIN orders o ON c.id = o.client_id
+                    GROUP BY c.id
+                    ORDER BY visits DESC
+                    LIMIT 10
+                `).all();
+            } catch (e) {
+                console.error('Error in loyalty:', e);
+                errors.push('loyalty');
+                return [];
+            }
+        })();
+
+        const topServices = (() => {
+            try {
+                return db.prepare(`
+                    SELECT 
+                        description as name, 
+                        COUNT(*) as frequency,
+                        SUM(labor_price) as labor_income
+                    FROM order_items
+                    GROUP BY description
+                    ORDER BY labor_income DESC
+                    LIMIT 10
+                `).all();
+            } catch (e) {
+                console.error('Error in topServices:', e);
+                errors.push('topServices');
+                return [];
+            }
+        })();
+
+        const config = db.prepare('SELECT * FROM config LIMIT 1').get();
+        const partsPercentage = (config?.parts_profit_percentage ?? 100) / 100.0;
+
+        const incomeByMonth = (() => {
+            try {
+                return db.prepare(`
+                    SELECT 
+                        strftime('%Y-%m', o.updated_at) as month,
+                        SUM(oi.labor_price) as labor_income,
+                        SUM(oi.parts_profit) as parts_profit
+                    FROM orders o
+                    JOIN order_items oi ON o.id = oi.order_id
+                    WHERE o.payment_status IN ('paid', 'partial')
+                    GROUP BY month
+                    ORDER BY month ASC
+                    LIMIT 12
+                `).all();
+            } catch (e) {
+                console.error('Error in incomeByMonth:', e);
+                errors.push('incomeByMonth');
+                return [];
+            }
+        })();
+
+        res.json({
+            leadTimes,
+            incomeByMonth,
+            profitBreakdown: [
+                { name: 'Mano de Obra', value: partsLaborData.total_labor || 0 },
+                { name: 'Repuestos (Costo)', value: partsLaborData.total_parts || 0 },
+                { name: 'Repuestos (Ganancia)', value: partsLaborData.total_parts_profit || 0 }
+            ],
+            retention: [
+                { name: 'Nuevos (1 orden)', value: retentionStats.newCount },
+                { name: 'Recurrentes (>1 orden)', value: retentionStats.recurringCount }
+            ],
+            rankings,
+            brands,
+            loyalty,
+            topServices,
+            errors
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Server error on reports data' });
+    }
+});
+
+const ExcelJS = require('exceljs');
+
+// @route   POST api/reports/export-excel
+router.post('/export-excel', auth, hasPermission('reports'), async (req, res) => {
+    try {
+        const db = getDb(req);
+        const { type, startDate, endDate } = req.body;
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Reporte');
+
+        let query = '';
+        let params = [];
+        if (type === 'orders') {
+            let filter = '';
+            if (startDate && endDate) {
+                filter = ` AND DATE(o.created_at) BETWEEN ? AND ? `;
+                params.push(startDate, endDate);
+            }
+            query = `
+                SELECT 
+                    o.id as ID, 
+                    (c.first_name || ' ' || c.last_name) as Cliente,
+                    v.plate as Patente,
+                    v.brand as Marca,
+                    o.status as Estado,
+                    o.payment_status as Pago,
+                    o.created_at as Fecha
+                FROM orders o
+                JOIN clients c ON o.client_id = c.id
+                JOIN vehicles v ON o.vehicle_id = v.id
+                WHERE 1=1 ${filter}
+                ORDER BY o.id DESC
+            `;
+            worksheet.columns = [
+                { header: 'ID', key: 'ID', width: 10 },
+                { header: 'Cliente', key: 'Cliente', width: 30 },
+                { header: 'Patente', key: 'Patente', width: 15 },
+                { header: 'Marca', key: 'Marca', width: 20 },
+                { header: 'Estado', key: 'Estado', width: 15 },
+                { header: 'Pago', key: 'Pago', width: 15 },
+                { header: 'Fecha', key: 'Fecha', width: 20 }
+            ];
+        } else if (type === 'clients') {
+            let filter = '';
+            if (startDate && endDate) {
+                filter = ` WHERE DATE(created_at) BETWEEN ? AND ? `;
+                params.push(startDate, endDate);
+            }
+            query = `SELECT id as ID, first_name as Nombre, last_name as Apellido, phone as Telefono, email as Email FROM clients ${filter} ORDER BY id DESC`;
+            worksheet.columns = [
+                { header: 'ID', key: 'ID', width: 10 },
+                { header: 'Nombre', key: 'Nombre', width: 20 },
+                { header: 'Apellido', key: 'Apellido', width: 20 },
+                { header: 'Teléfono', key: 'Telefono', width: 20 },
+                { header: 'Email', key: 'Email', width: 30 }
+            ];
+        } else {
+            // Default: Income/Services
+            let filter = '';
+            if (startDate && endDate) {
+                filter = ` AND DATE(o.created_at) BETWEEN ? AND ? `;
+                params.push(startDate, endDate);
+            }
+            query = `
+                SELECT 
+                    o.id as OrderID,
+                    oi.description as Servicio,
+                    oi.labor_price as ManoDeObra,
+                    oi.parts_price as Repuestos,
+                    oi.subtotal as Total,
+                    o.created_at as Fecha
+                FROM order_items oi
+                JOIN orders o ON oi.order_id = o.id
+                WHERE o.payment_status = 'paid' ${filter}
+                ORDER BY o.created_at DESC
+            `;
+            worksheet.columns = [
+                { header: 'ID Orden', key: 'OrderID', width: 10 },
+                { header: 'Servicio', key: 'Servicio', width: 40 },
+                { header: 'Mano de Obra', key: 'ManoDeObra', width: 15 },
+                { header: 'Repuestos', key: 'Repuestos', width: 15 },
+                { header: 'Total', key: 'Total', width: 15 },
+                { header: 'Fecha', key: 'Fecha', width: 20 }
+            ];
+        }
+
+        const rows = db.prepare(query).all(params);
+        worksheet.addRows(rows);
+
+        // Styling
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFE0E0E0' }
+        };
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename=reporte_${type}_${Date.now()}.xlsx`);
+
+        await workbook.xlsx.write(res);
+        res.end();
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error al exportar Excel' });
+    }
+});
+
+// @route   GET api/reports/vehicle-filters
+router.get('/vehicle-filters', auth, (req, res) => {
+    try {
+        const db = getDb(req);
+        const brands = db.prepare('SELECT DISTINCT brand FROM vehicles WHERE brand IS NOT NULL ORDER BY brand ASC').all();
+        const models = db.prepare('SELECT DISTINCT brand, model FROM vehicles WHERE model IS NOT NULL ORDER BY model ASC').all();
+        res.json({ brands, models });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching vehicle filters' });
+    }
+});
+
+// @route   GET api/reports/vehicle-stats
+router.get('/vehicle-stats', auth, (req, res) => {
+    const { brand, model } = req.query;
+    try {
+        const db = getDb(req);
+
+        // 1. Lo que más se rompió (Top Defects/Services)
+        let defectsQuery = `
+            SELECT 
+                oi.description as name, 
+                COUNT(*) as count
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            JOIN vehicles v ON o.vehicle_id = v.id
+            WHERE 1=1
+        `;
+        const params = [];
+        if (brand) { defectsQuery += ` AND v.brand = ? `; params.push(brand); }
+        if (model) { defectsQuery += ` AND v.model = ? `; params.push(model); }
+        defectsQuery += ` GROUP BY name ORDER BY count DESC LIMIT 10`;
+        const topDefects = db.prepare(defectsQuery).all(params);
+
+        // 2. Distribución por año
+        let ageQuery = `
+            SELECT 
+                year as name, 
+                COUNT(*) as value
+            FROM vehicles 
+            WHERE year IS NOT NULL
+        `;
+        const ageParams = [];
+        if (brand) { ageQuery += ` AND brand = ? `; ageParams.push(brand); }
+        if (model) { ageQuery += ` AND model = ? `; ageParams.push(model); }
+        ageQuery += ` GROUP BY year ORDER BY year DESC LIMIT 15`;
+        const ageDistribution = db.prepare(ageQuery).all(ageParams);
+
+        // 3. Tendencia de kilometraje (All Visits)
+        let kmTrendQuery = `
+            SELECT 
+                strftime('%Y-%m', vh.recorded_at) as month,
+                AVG(vh.km) as avg_km
+            FROM vehicle_km_history vh
+            JOIN vehicles v ON vh.vehicle_id = v.id
+            WHERE 1=1
+        `;
+        const kmTrendParams = [];
+        if (brand) { kmTrendQuery += ` AND v.brand = ? `; kmTrendParams.push(brand); }
+        if (model) { kmTrendQuery += ` AND v.model = ? `; kmTrendParams.push(model); }
+        kmTrendQuery += ` GROUP BY month ORDER BY month ASC LIMIT 12 `;
+        const kmTrend = db.prepare(kmTrendQuery).all(kmTrendParams);
+
+        // 4. Qué se rompe según kilometraje
+        let kmDefectsQuery = `
+            SELECT 
+                CASE 
+                    WHEN v.km <= 30000 THEN '0-30k'
+                    WHEN v.km <= 60000 THEN '30-60k'
+                    WHEN v.km <= 100000 THEN '60-100k'
+                    WHEN v.km <= 150000 THEN '100-150k'
+                    ELSE '150k+' 
+                END AS km_range,
+                oi.description as defect,
+                COUNT(*) as count
+            FROM order_items oi
+            JOIN orders o ON oi.order_id = o.id
+            JOIN vehicles v ON o.vehicle_id = v.id
+            WHERE 1=1
+        `;
+        const kmDefectsParams = [];
+        if (brand) { kmDefectsQuery += ` AND v.brand = ? `; kmDefectsParams.push(brand); }
+        if (model) { kmDefectsQuery += ` AND v.model = ? `; kmDefectsParams.push(model); }
+        kmDefectsQuery += ` 
+            GROUP BY km_range, defect 
+            HAVING count > 0
+            ORDER BY count DESC 
+            LIMIT 50
+        `;
+        const kmDefectsRaw = db.prepare(kmDefectsQuery).all(kmDefectsParams);
+
+        // Pivot/Group defects by range for better UI consumption
+        const kmDefects = {};
+        kmDefectsRaw.forEach(r => {
+            if (!kmDefects[r.km_range]) kmDefects[r.km_range] = [];
+            if (kmDefects[r.km_range].length < 3) {
+                kmDefects[r.km_range].push({ defect: r.defect, count: r.count });
+            }
+        });
+
+        res.json({ topDefects, ageDistribution, kmTrend, kmDefects });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching vehicle analytics' });
+    }
+});
+
 module.exports = router;

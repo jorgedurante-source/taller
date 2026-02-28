@@ -29,7 +29,8 @@ import {
     AlertTriangle,
     Info,
     CheckCircle,
-    LifeBuoy
+    LifeBuoy,
+    BarChart3
 } from 'lucide-react';
 
 interface Workshop {
@@ -88,6 +89,9 @@ export default function DashboardLayout({
             localStorage.setItem('token', res.data.token);
             localStorage.setItem('user', JSON.stringify(res.data.user));
             localStorage.setItem('current_slug', targetSlug);
+            if (res.data.user.language) {
+                localStorage.setItem('language', res.data.user.language);
+            }
             window.location.href = `/${targetSlug}/dashboard`;
         } catch (err) {
             notify('error', t('error'));
@@ -151,29 +155,24 @@ export default function DashboardLayout({
                     )}
                 </div>
 
-                <nav className="flex-grow p-4 space-y-2">
-                    {hasPermission('dashboard') && <NavItem href={`/${slug}/dashboard`} icon={<LayoutDashboard size={20} />} label={t('dashboard')} />}
-                    {hasPermission('clients') && <NavItem href={`/${slug}/dashboard/clients`} icon={<Users size={20} />} label={t('clients')} />}
-                    {hasPermission('vehicles') && <NavItem href={`/${slug}/dashboard/vehicles`} icon={<Car size={20} />} label={t('vehicles')} />}
-                    {hasPermission('orders') && (
-                        <>
-                            <NavItem href={`/${slug}/dashboard/orders`} icon={<ClipboardList size={20} />} label={t('orders')} />
-                            <NavItem href={`/${slug}/dashboard/orders/create`} icon={<Plus size={20} />} label={t('create')} />
-                        </>
-                    )}
-                    {hasPermission('appointments') && <NavItem href={`/${slug}/dashboard/appointments`} icon={<CalendarIcon size={20} />} label={t('appointments')} />}
-                    {hasPermission('income') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={20} />} label={t('income')} />}
-                    {hasPermission('reminders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={20} />} label={t('reminders')} />}
-                    {hasPermission('suppliers') && <NavItem href={`/${slug}/dashboard/suppliers`} icon={<Truck size={20} />} label={t('suppliers')} />}
-                    {hasPermission('settings') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={20} />} label={t('settings')} />}
-                    <NavItem href={`/${slug}/dashboard/support`} icon={<LifeBuoy size={20} />} label={t('support')} />
+                <nav className="flex-grow p-4 space-y-1">
+                    {hasPermission('dashboard') && <NavItem href={`/${slug}/dashboard`} icon={<LayoutDashboard size={18} />} label={t('dashboard')} />}
+                    {hasPermission('clients') && <NavItem href={`/${slug}/dashboard/clients`} icon={<Users size={18} />} label={t('clients')} />}
+                    {hasPermission('vehicles') && <NavItem href={`/${slug}/dashboard/vehicles`} icon={<Car size={18} />} label={t('vehicles')} />}
+                    {hasPermission('orders') && <NavItem href={`/${slug}/dashboard/orders`} icon={<ClipboardList size={18} />} label={t('orders')} />}
+                    {hasPermission('appointments') && <NavItem href={`/${slug}/dashboard/appointments`} icon={<CalendarIcon size={18} />} label={t('appointments')} />}
+                    {hasPermission('income') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={18} />} label={t('income')} />}
+                    {hasPermission('reminders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={18} />} label={t('reminders')} />}
+                    {hasPermission('suppliers') && <NavItem href={`/${slug}/dashboard/suppliers`} icon={<Truck size={18} />} label={t('suppliers')} />}
+                    {hasPermission('reports') && <NavItem href={`/${slug}/dashboard/reports`} icon={<BarChart3 size={18} />} label={t('reports')} />}
+                    {hasPermission('settings') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={18} />} label={t('settings')} />}
                 </nav>
 
                 <div className="p-4 border-t border-slate-800 space-y-2">
                     {user?.isSuperuser && (
                         <Link href="/superadmin/dashboard">
                             <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600/20 transition-all cursor-pointer">
-                                <ShieldCheck size={20} />
+                                <ShieldCheck size={18} />
                                 <span className="font-bold text-xs uppercase italic">SuperAdmin</span>
                             </div>
                         </Link>
@@ -183,11 +182,18 @@ export default function DashboardLayout({
                             logout();
                             router.push(`/${slug}/login`);
                         }}
-                        className="flex items-center gap-3 px-4 py-3 w-full rounded-lg hover:bg-slate-800 transition-all text-slate-400 hover:text-white"
+                        className="flex items-center gap-3 px-4 py-2 w-full rounded-lg hover:bg-slate-800 transition-all text-slate-400 hover:text-white"
                     >
-                        <LogOut size={20} />
-                        <span className="font-bold text-xs uppercase tracking-widest">{t('logout')}</span>
+                        <LogOut size={18} />
+                        <span className="font-bold text-[10px] uppercase tracking-widest">{t('logout')}</span>
                     </button>
+
+                    <Link href={`/${slug}/dashboard/support`}>
+                        <div className="flex items-center gap-3 px-4 py-2 w-full rounded-lg hover:bg-slate-800/50 transition-all text-slate-500 hover:text-blue-400 group cursor-pointer">
+                            <LifeBuoy size={14} className="group-hover:animate-spin-slow" />
+                            <span className="font-bold text-[9px] uppercase tracking-[0.2em]">{t('support')}</span>
+                        </div>
+                    </Link>
                 </div>
             </aside>
 

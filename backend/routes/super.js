@@ -160,6 +160,7 @@ router.patch('/workshops/:slug', superAuth, (req, res) => {
 // ─── POST /api/super/workshops/:slug/seed ────────────────────────────────────
 router.post('/workshops/:slug/seed', superAuth, (req, res) => {
     const { slug } = req.params;
+    const { type } = req.body; // 'operational', 'users'
     try {
         const workshop = superDb.prepare('SELECT environment FROM workshops WHERE slug = ?').get(slug);
         if (workshop?.environment !== 'dev') {
@@ -167,9 +168,16 @@ router.post('/workshops/:slug/seed', superAuth, (req, res) => {
         }
 
         const db = getDb(slug);
-        const { seedWorkshop } = require('../utils/seeder');
-        seedWorkshop(db);
-        logSystemActivity(req.superUser, 'SEED_WORKSHOP', 'workshop', slug, 'Inserted test data (development mode)', req);
+        const { seedWorkshop, seedUsers } = require('../utils/seeder');
+
+        if (type === 'users') {
+            seedUsers(db);
+            logSystemActivity(req.superUser, 'SEED_USERS', 'workshop', slug, 'Inserted test users', req);
+        } else {
+            seedWorkshop(db);
+            logSystemActivity(req.superUser, 'SEED_WORKSHOP', 'workshop', slug, 'Inserted test data', req);
+        }
+
         res.json({ message: 'Datos de prueba insertados' });
     } catch (err) {
         console.error(err);
@@ -180,6 +188,7 @@ router.post('/workshops/:slug/seed', superAuth, (req, res) => {
 // ─── POST /api/super/workshops/:slug/clear ───────────────────────────────────
 router.post('/workshops/:slug/clear', superAuth, (req, res) => {
     const { slug } = req.params;
+    const { type } = req.body; // 'operational', 'users', 'templates'
     try {
         const workshop = superDb.prepare('SELECT environment FROM workshops WHERE slug = ?').get(slug);
         if (workshop?.environment !== 'dev') {
@@ -187,10 +196,19 @@ router.post('/workshops/:slug/clear', superAuth, (req, res) => {
         }
 
         const db = getDb(slug);
-        const { clearWorkshop } = require('../utils/seeder');
-        clearWorkshop(db);
-        logSystemActivity(req.superUser, 'CLEAR_WORKSHOP', 'workshop', slug, 'Database wiped (development mode)', req);
-        res.json({ message: 'Base de datos del taller limpia' });
+        const { clearOperationalData, clearUsersAndRoles } = require('../utils/seeder');
+
+        if (type === 'users') {
+            clearUsersAndRoles(db);
+            logSystemActivity(req.superUser, 'CLEAR_USERS', 'workshop', slug, 'Wiped users and roles', req);
+        } else if (type === 'templates') {
+            db.prepare('DELETE FROM templates').run();
+            logSystemActivity(req.superUser, 'CLEAR_TEMPLATES', 'workshop', slug, 'Wiped templates', req);
+        } else {
+            clearOperationalData(db);
+            logSystemActivity(req.superUser, 'CLEAR_WORKSHOP', 'workshop', slug, 'Database operational data wiped', req);
+        }
+        res.json({ message: 'Datos eliminados correctamente' });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error al limpiar base de datos' });
@@ -423,15 +441,36 @@ router.post('/impersonate/:slug', superAuth, (req, res) => {
 
     const secret = workshop?.api_token || process.env.MECH_SECRET || process.env.JWT_SECRET || process.env.AUTH_KEY || 'mech_default_secret_321';
 
+    // Get superuser language
+    const superUser = superDb.prepare('SELECT language FROM super_users WHERE id = ?').get(req.superUser.id);
+    const language = superUser?.language || 'es';
+
     const token = jwt.sign(
-        { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions: enabledModules, slug, isSuperuser: true, superId: req.superUser.id },
+        {
+            id: 0,
+            username: `superuser@${slug}`,
+            role: 'superuser',
+            permissions: finalPermissions,
+            slug,
+            isSuperuser: true,
+            superId: req.superUser.id,
+            language
+        },
         secret,
         { expiresIn: '8h' }
     );
 
     res.json({
         token,
-        user: { id: 0, username: `superuser@${slug}`, role: 'superuser', permissions: finalPermissions, isSuperuser: true, slug }
+        user: {
+            id: 0,
+            username: `superuser@${slug}`,
+            role: 'superuser',
+            permissions: finalPermissions,
+            isSuperuser: true,
+            slug,
+            language
+        }
     });
 });
 
@@ -458,6 +497,91 @@ router.get('/stats', superAuth, (req, res) => {
     } catch (err) {
         console.error('[super:/stats] Global error:', err);
         res.status(500).json({ message: 'Error interno al calcular estadísticas' });
+    }
+});
+
+// ─── GET /api/super/reports ──────────────────────────────────────────────────
+router.get('/reports', superAuth, (req, res) => {
+    try {
+        const workshops = listTenants();
+
+        // 1. Crecimiento (Talleres por mes)
+        const activeWorkshopsRaw = superDb.prepare(`
+            SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as count 
+            FROM workshops GROUP BY month ORDER BY month ASC
+        `).all();
+
+        // 2. Volumen Global (Órdenes por día - last 7 days)
+        const currentMs = Date.now();
+        const ordersByDay = {}; // 'YYYY-MM-DD': count
+        for (let i = 0; i < 7; i++) {
+            const d = new Date(currentMs - (i * 86400000));
+            ordersByDay[d.toISOString().split('T')[0]] = 0;
+        }
+
+        // 3. Salud (Activos vs Inactivos)
+        let activosCount = 0;
+        let inactivosCount = 0;
+
+        // 4. Consumo de Espacio
+        const diskUsage = [];
+        const fs = require('fs');
+        const getDirSize = (dirPath) => {
+            let size = 0;
+            if (fs.existsSync(dirPath)) {
+                const files = fs.readdirSync(dirPath, { withFileTypes: true });
+                for (const file of files) {
+                    const fullPath = path.join(dirPath, file.name);
+                    if (file.isDirectory()) size += getDirSize(fullPath);
+                    else size += fs.statSync(fullPath).size;
+                }
+            }
+            return size;
+        };
+
+        for (const w of workshops) {
+            // Health Map
+            const isInactive = w.status === 'inactive';
+            if (isInactive) inactivosCount++;
+            else activosCount++;
+
+            // Orders Map
+            try {
+                const db = getDb(w.slug);
+                const recentOrders = db.prepare(`SELECT date(created_at) as date, COUNT(*) as count FROM orders WHERE created_at >= date('now', '-7 days') GROUP BY date`).all();
+                for (const row of recentOrders) {
+                    if (ordersByDay[row.date] !== undefined) ordersByDay[row.date] += row.count;
+                }
+            } catch (e) { }
+
+            // Disk Usage Map
+            try {
+                const tDir = getTenantDir(w.slug);
+                const bytes = getDirSize(tDir);
+                diskUsage.push({ name: w.name || w.slug, size: bytes });
+            } catch (e) { }
+        }
+
+        // Sort Top 5
+        diskUsage.sort((a, b) => b.size - a.size);
+        const top5Disk = diskUsage.slice(0, 5);
+
+        // Format Global Volume
+        const globalVolume = Object.keys(ordersByDay).sort().map(date => ({ month: date, count: ordersByDay[date] }));
+
+        res.json({
+            growth: activeWorkshopsRaw.map(r => ({ month: r.month, total: r.count })),
+            orders: globalVolume,
+            health: [
+                { name: 'active', value: activosCount },
+                { name: 'inactive', value: inactivosCount }
+            ],
+            storage: top5Disk
+        });
+
+    } catch (err) {
+        console.error('[super:/reports] Global error:', err);
+        res.status(500).json({ message: 'Error interno al generar reportes' });
     }
 });
 
