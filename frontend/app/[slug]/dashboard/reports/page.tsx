@@ -53,7 +53,7 @@ export default function ReportsPage() {
     const [loadingYOY, setLoadingYOY] = useState(false);
     const [priceHistoryData, setPriceHistoryData] = useState<any>(null);
     const [loadingPriceHistory, setLoadingPriceHistory] = useState(false);
-    const [priceHistoryFilter, setPriceHistoryFilter] = useState<string>('');
+    const [priceHistoryFilter, setPriceHistoryFilter] = useState<number | ''>('');
 
     // Export State
     const [showExportModal, setShowExportModal] = useState(false);
@@ -164,14 +164,15 @@ export default function ReportsPage() {
 
     // Filtered price history by selected service
     const filteredPriceHistory = priceHistoryData?.history?.filter((h: any) =>
-        !priceHistoryFilter || h.service_name === priceHistoryFilter
+        !priceHistoryFilter || h.service_id === priceHistoryFilter
     ) || [];
 
     // Chart data: price over time for selected service (or all if none selected)
     const priceChartData = filteredPriceHistory
         .slice()
         .reverse()
-        .map((h: any) => ({
+        .map((h: any, idx: number) => ({
+            id: h.id || idx,
             date: new Date(h.changed_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: '2-digit' }),
             precio: h.new_price,
             servicio: h.service_name,
@@ -431,11 +432,11 @@ export default function ReportsPage() {
                                         <select
                                             className="bg-slate-50 border-none rounded-2xl px-4 py-2 font-bold text-slate-700 text-xs focus:ring-4 focus:ring-indigo-100 transition-all"
                                             value={priceHistoryFilter}
-                                            onChange={e => setPriceHistoryFilter(e.target.value)}
+                                            onChange={e => setPriceHistoryFilter(e.target.value ? Number(e.target.value) : '')}
                                         >
                                             <option value="">Todos los servicios</option>
                                             {priceHistoryData.summary.map((svc: any) => (
-                                                <option key={svc.id} value={svc.name}>{svc.name}</option>
+                                                <option key={svc.id} value={svc.id}>{svc.name}</option>
                                             ))}
                                         </select>
                                         {priceHistoryFilter && (
