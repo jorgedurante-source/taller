@@ -5,16 +5,26 @@ import Link from 'next/link';
 import api from '@/lib/api';
 import {
     ClipboardList,
-    Plus,
+    Calendar,
+    RefreshCw,
+    Download,
     Search,
+    Building2,
+    Tag,
+    X,
+    Filter,
+    Plus,
+    MessageSquare,
+    List,
+    LayoutGrid,
     Car,
     Clock,
     ArrowRight,
-    Filter,
-    CheckCircle2,
-    CircleDollarSign,
     CircleSlash,
-    MessageSquare
+    CircleDollarSign,
+    ChevronLeft,
+    ChevronRight,
+    CheckCircle2
 } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
@@ -31,6 +41,8 @@ export default function OrdersPage() {
     const { hasPermission } = useAuth();
     const { t } = useTranslation();
     const canSeeIncome = hasPermission('income');
+    const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
+    const [collapsedColumns, setCollapsedColumns] = useState<string[]>([]);
 
     const searchParams = useSearchParams();
     const statusParam = searchParams.get('status');
@@ -77,13 +89,43 @@ export default function OrdersPage() {
         fetchOrders();
     }, []);
 
+    const STATUS_SEARCH_ALIASES: Record<string, string[]> = {
+        appointment: ['turno', 'turno asignado', 'appointment'],
+        pending: ['pendiente', 'pending'],
+        quoted: ['presupuestado', 'quoted'],
+        approved: ['aprobado', 'approved'],
+        in_progress: ['en proceso', 'in progress', 'in_progress'],
+        in_repair: ['en reparación', 'en reparacion', 'reparación', 'reparacion', 'in repair', 'in_repair'],
+        waiting_parts: ['esperando repuestos', 'repuestos', 'waiting parts', 'waiting_parts'],
+        ready: ['listo', 'listo para retiro', 'listo para entrega', 'ready'],
+        delivered: ['entregado', 'delivered'],
+        cancelled: ['cancelado', 'cancelled'],
+    };
+
+    // Given a search query, returns the English status keys that match
+    const resolveStatusAliases = (query: string): string[] => {
+        const q = query.toLowerCase().trim();
+        const matched: string[] = [];
+        for (const [statusKey, aliases] of Object.entries(STATUS_SEARCH_ALIASES)) {
+            if (aliases.some(alias => alias.includes(q) || q.includes(alias))) {
+                matched.push(statusKey);
+            }
+        }
+        return matched;
+    };
+
     const filteredOrders = orders.filter(o => {
-        const query = search.toLowerCase();
-        const matchesSearch = (
+        const query = search.toLowerCase().trim();
+
+        // Resolve query to possible English status keys
+        const matchedStatuses = query ? resolveStatusAliases(query) : [];
+
+        const matchesSearch = !query || (
             (o.client_name || '').toLowerCase().includes(query) ||
             (o.plate || '').toLowerCase().includes(query) ||
             (o.model || '').toLowerCase().includes(query) ||
-            (o.status || '').toLowerCase().includes(query)
+            (o.status || '').toLowerCase().includes(query) ||
+            matchedStatuses.includes(o.status)
         );
 
         if (onlyUnread) {
@@ -91,12 +133,12 @@ export default function OrdersPage() {
         }
 
         if (showAll) {
-            // History mode: only delivered orders
-            return matchesSearch && o.status === 'delivered';
+            // History mode: delivered and cancelled orders
+            return matchesSearch && (o.status === 'delivered' || o.status === 'cancelled');
         }
 
-        // Default: all active orders (everything except delivered)
-        return matchesSearch && o.status !== 'delivered';
+        // Default: all active orders (everything except delivered and cancelled)
+        return matchesSearch && o.status !== 'delivered' && o.status !== 'cancelled';
     });
 
     const getStatusColor = (status: string) => {
@@ -110,6 +152,7 @@ export default function OrdersPage() {
             case 'ready': return 'bg-indigo-100 text-indigo-700';
             case 'waiting_parts': return 'bg-rose-100 text-rose-700';
             case 'delivered': return 'bg-slate-900 text-white';
+            case 'cancelled': return 'bg-red-100 text-red-600';
             default: return 'bg-slate-50 text-slate-500';
         }
     };
@@ -203,18 +246,35 @@ export default function OrdersPage() {
                 <button className="bg-white p-4 rounded-2xl border border-slate-100 text-slate-400 hover:text-slate-900 transition-all">
                     <Filter size={20} />
                 </button>
+
+                <div className="bg-slate-100 p-1.5 rounded-2xl flex items-center gap-1">
+                    <button
+                        onClick={() => setViewMode('list')}
+                        className={`p-2.5 rounded-xl transition-all ${viewMode === 'list' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        title={t('list_view')}
+                    >
+                        <List size={20} />
+                    </button>
+                    <button
+                        onClick={() => setViewMode('kanban')}
+                        className={`p-2.5 rounded-xl transition-all ${viewMode === 'kanban' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                        title={t('kanban_view')}
+                    >
+                        <LayoutGrid size={20} />
+                    </button>
+                </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-                {loading ? (
-                    <p className="p-10 text-center text-slate-400 font-bold">{t('loading_orders')}</p>
-                ) : filteredOrders.length === 0 ? (
-                    <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
-                        <ClipboardList size={48} className="mx-auto text-slate-200 mb-4" />
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">{t('no_orders')}</p>
-                    </div>
-                ) : (
-                    filteredOrders.map(order => (
+            {loading ? (
+                <p className="p-10 text-center text-slate-400 font-bold">{t('loading_orders')}</p>
+            ) : filteredOrders.length === 0 ? (
+                <div className="py-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
+                    <ClipboardList size={48} className="mx-auto text-slate-200 mb-4" />
+                    <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">{t('no_orders')}</p>
+                </div>
+            ) : viewMode === 'list' ? (
+                <div className="grid grid-cols-1 gap-4">
+                    {filteredOrders.map(order => (
                         <div key={order.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm hover:shadow-xl transition-all flex flex-col lg:flex-row lg:items-center gap-6 group">
                             <div className="flex items-center gap-4 lg:w-1/4">
                                 <div className="bg-blue-50 text-blue-600 p-4 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all">
@@ -268,9 +328,104 @@ export default function OrdersPage() {
                                 </Link>
                             </div>
                         </div>
-                    ))
-                )}
-            </div>
+                    ))}
+                </div>
+            ) : (
+                <div className="flex gap-6 overflow-x-auto pb-8 min-h-[600px] scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent items-start">
+                    {(showAll
+                        ? ['cancelled', 'delivered']
+                        : ['appointment', 'pending', 'quoted', 'approved', 'in_progress', 'waiting_parts', 'ready']
+                    ).map(status => {
+                        const isCollapsed = collapsedColumns.includes(status);
+                        const statusOrders = filteredOrders.filter(o => o.status === status || (status === 'in_progress' && o.status === 'in_repair'));
+
+                        return (
+                            <div key={status} className={`flex-shrink-0 transition-all duration-300 flex flex-col gap-4 ${isCollapsed ? 'w-16' : 'w-80'}`}>
+                                <div className={`flex items-center justify-between px-2 ${isCollapsed ? 'flex-col gap-4 py-4 min-h-[400px]' : ''}`}>
+                                    <div
+                                        className={`flex items-center gap-2 cursor-pointer hover:opacity-70 transition-all ${isCollapsed ? 'rotate-90 origin-center whitespace-nowrap' : ''}`}
+                                        onClick={() => {
+                                            if (isCollapsed) setCollapsedColumns(collapsedColumns.filter(c => c !== status));
+                                            else setCollapsedColumns([...collapsedColumns, status]);
+                                        }}
+                                    >
+                                        <span className={`w-2 h-2 rounded-full ${getStatusColor(status).split(' ')[0]}`}></span>
+                                        <h3 className="font-black text-slate-900 uppercase tracking-widest text-[11px]">{t(status)}</h3>
+                                    </div>
+                                    {!isCollapsed && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-lg text-[10px] font-black">
+                                                {statusOrders.length}
+                                            </span>
+                                            <button
+                                                onClick={() => setCollapsedColumns([...collapsedColumns, status])}
+                                                className="text-slate-300 hover:text-slate-600 transition-all"
+                                            >
+                                                <ChevronLeft size={14} />
+                                            </button>
+                                        </div>
+                                    )}
+                                    {isCollapsed && (
+                                        <button
+                                            onClick={() => setCollapsedColumns(collapsedColumns.filter(c => c !== status))}
+                                            className="text-slate-300 hover:text-slate-600 p-2 bg-slate-100 rounded-full"
+                                        >
+                                            <ChevronRight size={14} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {!isCollapsed && (
+                                    <div className="flex-1 space-y-4 bg-slate-50/50 p-3 rounded-[32px] border border-slate-100 min-h-[500px]">
+                                        {statusOrders.map(order => (
+                                            <div key={order.id} className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all group relative">
+                                                <div className="flex flex-col gap-3">
+                                                    <div className="flex justify-between items-start">
+                                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">#{order.id}</span>
+                                                        {order.unread_messages > 0 && (
+                                                            <span className="bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[8px] font-black">
+                                                                {order.unread_messages}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="font-black text-slate-900 uppercase italic tracking-tighter text-sm leading-tight text-blue-600 group-hover:underline cursor-pointer">
+                                                            <Link href={`/${slug}/dashboard/orders/${order.id}`}>
+                                                                {order.client_name}
+                                                            </Link>
+                                                        </h4>
+                                                        <p className="text-[10px] font-bold text-slate-500 uppercase mt-1">{order.brand} {order.model}</p>
+                                                        <p className="text-[10px] font-black text-slate-900 mt-0.5 font-mono tracking-widest">{order.plate}</p>
+                                                    </div>
+
+                                                    <div className="flex justify-between items-center pt-2 border-t border-slate-50">
+                                                        <div className="flex items-center gap-1.5 text-slate-400">
+                                                            <Clock size={12} />
+                                                            <span className="text-[9px] font-bold">{new Date(order.created_at).toLocaleDateString()}</span>
+                                                        </div>
+                                                        {canSeeIncome && order.order_total > 0 && (
+                                                            <p className="font-black text-slate-900 text-xs">${Number(order.order_total).toLocaleString()}</p>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex flex-wrap gap-1 mt-1">
+                                                        {getPaymentBadge(order)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {statusOrders.length === 0 && (
+                                            <div className="h-20 flex items-center justify-center border border-dashed border-slate-200 rounded-2xl opacity-40">
+                                                <p className="text-[10px] font-bold uppercase text-slate-400">{t('empty')}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div >
     );
 }

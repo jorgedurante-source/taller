@@ -425,6 +425,7 @@ export default function OrderDetailsPage() {
             case 'quoted': return 'bg-orange-50 text-orange-600 border-orange-100';
             case 'ready': return 'bg-indigo-50 text-indigo-600 border-indigo-100';
             case 'delivered': return 'bg-slate-900 text-white border-slate-800';
+            case 'cancelled': return 'bg-red-50 text-red-600 border-red-100';
             case 'response_received': return 'bg-blue-600 text-white border-blue-700';
             case 'response_sent': return 'bg-slate-800 text-white border-slate-900';
             default: return 'bg-slate-50 text-slate-500 border-slate-100';
@@ -1002,6 +1003,7 @@ export default function OrderDetailsPage() {
                                     )}
                                     <option value="ready" className="text-slate-900">{t('ready')}</option>
                                     <option value="delivered" className="text-slate-900">{t('delivered')}</option>
+                                    <option value="cancelled" className="text-slate-900">{t('cancelled')}</option>
                                 </select>
                             </div>
 

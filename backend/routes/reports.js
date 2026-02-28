@@ -789,6 +789,9 @@ router.get('/debt', auth, hasPermission('reports'), (req, res) => {
     try {
         const db = getDb(req);
 
+        const validStatuses = ['approved', 'in_repair', 'in_progress', 'waiting_parts', 'ready', 'delivered'];
+        const statusPlaceholders = validStatuses.map(() => '?').join(',');
+
         const clientsWithDebt = db.prepare(`
             SELECT 
                 c.id,
@@ -804,11 +807,12 @@ router.get('/debt', auth, hasPermission('reports'), (req, res) => {
                 FROM order_items 
                 GROUP BY order_id
             ) ot ON o.id = ot.order_id
-            WHERE o.payment_status IN ('pending', 'partial')
+            WHERE o.payment_status IN ('unpaid', 'partial')
+              AND o.status IN (${statusPlaceholders})
             GROUP BY c.id
             HAVING outstanding > 0
             ORDER BY outstanding DESC
-        `).all();
+        `).all(validStatuses);
 
         const summary = db.prepare(`
             SELECT 
@@ -821,11 +825,37 @@ router.get('/debt', auth, hasPermission('reports'), (req, res) => {
                 FROM order_items 
                 GROUP BY order_id
             ) ot ON o.id = ot.order_id
-            WHERE o.payment_status IN ('pending', 'partial')
-            AND (ot.total - o.payment_amount) > 0
-        `).get();
+            WHERE o.payment_status IN ('unpaid', 'partial')
+              AND (ot.total - o.payment_amount) > 0
+              AND o.status IN (${statusPlaceholders})
+        `).get(validStatuses);
 
-        res.json({ clients: clientsWithDebt, summary });
+        // Per-order detail for drill-down in UI
+        const ordersDetail = db.prepare(`
+            SELECT
+                o.id as order_id,
+                o.status as order_status,
+                (c.first_name || ' ' || c.last_name) as client_name,
+                c.id as client_id,
+                ot.total as total_amount,
+                o.payment_amount as paid_amount,
+                (ot.total - o.payment_amount) as outstanding,
+                o.created_at,
+                o.updated_at
+            FROM orders o
+            JOIN clients c ON o.client_id = c.id
+            JOIN (
+                SELECT order_id, SUM(subtotal) as total
+                FROM order_items GROUP BY order_id
+            ) ot ON o.id = ot.order_id
+            WHERE o.payment_status IN ('unpaid', 'partial')
+              AND (ot.total - o.payment_amount) > 0
+              AND o.status IN (${statusPlaceholders})
+            ORDER BY outstanding DESC
+            LIMIT 100
+        `).all(validStatuses);
+
+        res.json({ clients: clientsWithDebt, summary, ordersDetail });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error fetching debt data' });

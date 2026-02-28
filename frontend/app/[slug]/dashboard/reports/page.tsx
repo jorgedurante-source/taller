@@ -51,6 +51,9 @@ export default function ReportsPage() {
     const [loadingProd, setLoadingProd] = useState(false);
     const [loadingDur, setLoadingDur] = useState(false);
     const [loadingYOY, setLoadingYOY] = useState(false);
+    const [priceHistoryData, setPriceHistoryData] = useState<any>(null);
+    const [loadingPriceHistory, setLoadingPriceHistory] = useState(false);
+    const [priceHistoryFilter, setPriceHistoryFilter] = useState<string>('');
 
     // Export State
     const [showExportModal, setShowExportModal] = useState(false);
@@ -112,11 +115,25 @@ export default function ReportsPage() {
         }
     };
 
+    const fetchPriceHistoryData = async () => {
+        setLoadingPriceHistory(true);
+        try {
+            const res = await api.get('/services/price-history');
+            setPriceHistoryData(res.data);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoadingPriceHistory(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'vehicles') {
             fetchVehicleStats();
         } else if (activeTab === 'deuda') {
             fetchOperationalData();
+        } else if (activeTab === 'finances' || activeTab === 'price-history') {
+            fetchPriceHistoryData();
         }
     }, [vFilters, activeTab]);
 
@@ -144,6 +161,21 @@ export default function ReportsPage() {
     useEffect(() => {
         fetchData();
     }, []);
+
+    // Filtered price history by selected service
+    const filteredPriceHistory = priceHistoryData?.history?.filter((h: any) =>
+        !priceHistoryFilter || h.service_name === priceHistoryFilter
+    ) || [];
+
+    // Chart data: price over time for selected service (or all if none selected)
+    const priceChartData = filteredPriceHistory
+        .slice()
+        .reverse()
+        .map((h: any) => ({
+            date: new Date(h.changed_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: '2-digit' }),
+            precio: h.new_price,
+            servicio: h.service_name,
+        }));
 
     if (loading) return (
         <div className="flex items-center justify-center p-20">
@@ -187,10 +219,11 @@ export default function ReportsPage() {
             <div className="flex gap-2 p-1.5 bg-slate-100 rounded-[2rem] w-fit">
                 {[
                     { id: 'general', label: 'General', icon: <TrendingUp size={16} /> },
-                    { id: 'finances', label: 'Finanzas / Servicios', icon: <DollarSign size={16} /> },
+                    { id: 'finances', label: 'Finanzas y Precios', icon: <DollarSign size={16} /> },
                     { id: 'customers', label: 'Clientes', icon: <Users size={16} /> },
                     { id: 'vehicles', label: 'Vehículos', icon: <Car size={16} /> },
-                    { id: 'deuda', label: 'Deuda / Productividad', icon: <AlertCircle size={16} /> }
+                    { id: 'deuda', label: 'Deuda / Productividad', icon: <AlertCircle size={16} /> },
+                    { id: 'price-history', label: t('price_history'), icon: <Tag size={16} /> }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -374,7 +407,182 @@ export default function ReportsPage() {
                                 </ResponsiveContainer>
                             </div>
                         </ReportCard>
+
                     </>
+                )}
+
+                {activeTab === 'price-history' && (
+                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 mt-8">
+                        <ReportCard
+                            title={t('price_history')}
+                            icon={<TrendingUp className="text-violet-500" size={20} />}
+                        >
+                            {loadingPriceHistory ? (
+                                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                    <RefreshCw className="animate-spin text-violet-500" size={32} />
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">{t('loading')}...</p>
+                                </div>
+                            ) : priceHistoryData?.summary?.length > 0 ? (
+                                <div className="space-y-6 mt-4">
+
+                                    {/* Filter by service */}
+                                    <div className="flex items-center gap-3">
+                                        <Filter size={14} className="text-slate-400" />
+                                        <select
+                                            className="bg-slate-50 border-none rounded-2xl px-4 py-2 font-bold text-slate-700 text-xs focus:ring-4 focus:ring-indigo-100 transition-all"
+                                            value={priceHistoryFilter}
+                                            onChange={e => setPriceHistoryFilter(e.target.value)}
+                                        >
+                                            <option value="">Todos los servicios</option>
+                                            {priceHistoryData.summary.map((svc: any) => (
+                                                <option key={svc.id} value={svc.name}>{svc.name}</option>
+                                            ))}
+                                        </select>
+                                        {priceHistoryFilter && (
+                                            <button
+                                                onClick={() => setPriceHistoryFilter('')}
+                                                className="text-[10px] font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest transition-colors"
+                                            >
+                                                × Limpiar
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Evolution chart — shown when a service is selected and has data */}
+                                    {priceChartData.length >= 2 && (
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+                                                Evolución de precio{priceHistoryFilter ? ` — ${priceHistoryFilter}` : ''}
+                                            </p>
+                                            <div className="h-[300px] w-full">
+                                                <ResponsiveContainer width="100%" height="100%">
+                                                    <LineChart data={priceChartData} margin={{ top: 5, right: 30, bottom: 5, left: 20 }}>
+                                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                        <XAxis
+                                                            dataKey="date"
+                                                            axisLine={false}
+                                                            tickLine={false}
+                                                            tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                                        />
+                                                        <YAxis
+                                                            axisLine={false}
+                                                            tickLine={false}
+                                                            tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                                            tickFormatter={(v) => `$${Number(v).toLocaleString('es-AR')}`}
+                                                        />
+                                                        <Tooltip
+                                                            contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
+                                                            formatter={(value: any) => [`$${Number(value).toLocaleString('es-AR')}`, 'Precio']}
+                                                        />
+                                                        <Line
+                                                            type="monotone"
+                                                            dataKey="precio"
+                                                            stroke="#8b5cf6"
+                                                            strokeWidth={3}
+                                                            dot={{ fill: '#8b5cf6', r: 5, strokeWidth: 2, stroke: '#fff' }}
+                                                            activeDot={{ r: 7 }}
+                                                        />
+                                                    </LineChart>
+                                                </ResponsiveContainer>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Summary table */}
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-sm">
+                                            <thead>
+                                                <tr className="border-b border-slate-100">
+                                                    <th className="text-left py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Servicio</th>
+                                                    <th className="text-right py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Precio Inicial</th>
+                                                    <th className="text-right py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Precio Actual</th>
+                                                    <th className="text-right py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Variación</th>
+                                                    <th className="text-right py-3 px-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cambios</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {(priceHistoryFilter
+                                                    ? priceHistoryData.summary.filter((s: any) => s.name === priceHistoryFilter)
+                                                    : priceHistoryData.summary
+                                                ).map((svc: any) => {
+                                                    const pctChange = svc.initial_price && svc.initial_price > 0
+                                                        ? Math.round(((svc.current_price - svc.initial_price) / svc.initial_price) * 100)
+                                                        : null;
+                                                    return (
+                                                        <tr
+                                                            key={svc.id}
+                                                            className={`border-b border-slate-50 transition-colors cursor-pointer ${priceHistoryFilter === svc.name ? 'bg-violet-50/50' : 'hover:bg-slate-50/50'}`}
+                                                            onClick={() => setPriceHistoryFilter(priceHistoryFilter === svc.name ? '' : svc.name)}
+                                                        >
+                                                            <td className="py-4 px-4 font-black text-slate-800 uppercase italic text-xs">{svc.name}</td>
+                                                            <td className="py-4 px-4 text-right font-bold text-slate-400 text-xs tabular-nums">
+                                                                {svc.initial_price != null ? `$${Number(svc.initial_price).toLocaleString('es-AR')}` : '—'}
+                                                            </td>
+                                                            <td className="py-4 px-4 text-right font-black text-slate-900 text-xs tabular-nums">
+                                                                ${Number(svc.current_price).toLocaleString('es-AR')}
+                                                            </td>
+                                                            <td className="py-4 px-4 text-right">
+                                                                {pctChange !== null ? (
+                                                                    <span className={`text-[10px] font-black px-2 py-1 rounded-lg ${pctChange > 0 ? 'bg-red-50 text-red-600' : pctChange < 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}>
+                                                                        {pctChange > 0 ? '+' : ''}{pctChange}%
+                                                                    </span>
+                                                                ) : <span className="text-slate-300 text-xs">—</span>}
+                                                            </td>
+                                                            <td className="py-4 px-4 text-right text-[10px] font-black text-slate-400">
+                                                                {svc.change_count} {t('changes')}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                        <p className="text-[10px] font-bold text-slate-300 mt-2 px-4 italic">
+                                            Hacé clic en una fila para filtrar el gráfico por ese servicio.
+                                        </p>
+                                    </div>
+
+                                    {/* Change log */}
+                                    {filteredPriceHistory.length > 0 && (
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
+                                                Log de cambios{priceHistoryFilter ? ` — ${priceHistoryFilter}` : ''}
+                                            </p>
+                                            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                                {filteredPriceHistory.slice(0, 30).map((entry: any) => (
+                                                    <div key={entry.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl">
+                                                        <div>
+                                                            <p className="text-xs font-black text-slate-800 uppercase italic">{entry.service_name}</p>
+                                                            <p className="text-[10px] font-bold text-slate-400">
+                                                                {new Date(entry.changed_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                                {entry.changed_by ? ` · ${entry.changed_by}` : ''}
+                                                            </p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-xs font-bold">
+                                                            {entry.old_price != null && (
+                                                                <span className="text-slate-400 line-through tabular-nums">${Number(entry.old_price).toLocaleString('es-AR')}</span>
+                                                            )}
+                                                            <span className="font-black text-slate-900 tabular-nums">${Number(entry.new_price).toLocaleString('es-AR')}</span>
+                                                            {entry.pct_change !== null && (
+                                                                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${entry.pct_change > 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                                    {entry.pct_change > 0 ? '+' : ''}{entry.pct_change}%
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                </div>
+                            ) : (
+                                <div className="py-16 text-center text-slate-400">
+                                    <p className="font-bold italic text-sm">{t('no_price_changes')}</p>
+                                    <p className="text-[11px] mt-1">Los cambios futuros se registrarán automáticamente.</p>
+                                </div>
+                            )}
+                        </ReportCard>
+                    </div>
                 )}
 
                 {activeTab === 'customers' && (
@@ -724,15 +932,14 @@ export default function ReportsPage() {
                             </div>
                         </ReportCard>
 
-                        {/* PRODUCTIVIDAD SEMANAL */}
                         <ReportCard
-                            title="Productividad por Día"
+                            title={t('productivity_by_day')}
                             icon={<Calendar className="text-blue-500" size={20} />}
                         >
                             <div className="mt-4 flex justify-between items-center mb-6">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Últimos 90 días</span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('last_90_days')}</span>
                                 <span className="bg-blue-600 text-white text-[9px] font-black px-3 py-1 rounded-full uppercase italic">
-                                    PICO: {productivityData?.busiestDay || '--'}
+                                    {t('peak')}: {productivityData?.busiestDay || '--'}
                                 </span>
                             </div>
                             <div className="h-[250px] w-full">
@@ -752,7 +959,7 @@ export default function ReportsPage() {
 
                         {/* HOURLY DISTRIBUTION */}
                         <ReportCard
-                            title="Órdenes por hora del día"
+                            title={t('orders_by_hour')}
                             icon={<Clock className="text-purple-500" size={20} />}
                         >
                             <div className="h-[300px] w-full mt-4">
@@ -770,14 +977,14 @@ export default function ReportsPage() {
 
                         {/* DURACION PROMEDIO */}
                         <ReportCard
-                            title="Duración promedio por servicio"
+                            title={t('avg_duration_by_service')}
                             icon={<Clock className="text-amber-500" size={20} />}
                             className="lg:col-span-2"
                         >
                             <div className="mt-4 flex justify-between items-center mb-6">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Días desde apertura a entrega</span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('days_from_open_to_delivery')}</span>
                                 <span className="bg-amber-100 text-amber-600 text-[10px] font-black px-4 py-1 rounded-full uppercase italic">
-                                    Promedio General: {serviceDurationData?.overallAvgDays} días
+                                    {t('overall_avg')}: {serviceDurationData?.overallAvgDays} {t('days')}
                                 </span>
                             </div>
                             <div className="h-[350px] w-full mt-4">
@@ -795,7 +1002,7 @@ export default function ReportsPage() {
 
                         {/* COMPARATIVO AÑO A AÑO */}
                         <ReportCard
-                            title="Comparativo Año a Año"
+                            title={t('year_to_year_comparison')}
                             icon={<TrendingUp className="text-blue-500" size={20} />}
                             className="lg:col-span-2"
                         >
@@ -803,15 +1010,15 @@ export default function ReportsPage() {
                                 <div className="flex gap-6">
                                     <div className="flex items-center gap-2">
                                         <div className="w-3 h-3 rounded-full bg-blue-600" />
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Año Actual</span>
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('current_year')}</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <div className="w-3 h-3 rounded-full bg-slate-200" />
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Año Anterior</span>
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t('previous_year')}</span>
                                     </div>
                                 </div>
                                 <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase italic tracking-widest border ${yoyData?.totalPctChange >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
-                                    {yoyData?.totalPctChange >= 0 ? '+' : ''}{yoyData?.totalPctChange}% vs Año Anterior
+                                    {yoyData?.totalPctChange >= 0 ? '+' : ''}{yoyData?.totalPctChange}% {t('vs_previous_year')}
                                 </span>
                             </div>
                             <div className="h-[350px] w-full mt-4">
@@ -832,97 +1039,99 @@ export default function ReportsPage() {
             </div>
 
             {/* Export Modal */}
-            {showExportModal && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-10 animate-in fade-in zoom-in duration-300">
-                        <div className="flex justify-between items-start mb-10">
-                            <div>
-                                <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter">Exportar Datos</h2>
-                                <p className="text-[11px] text-slate-400 font-black uppercase tracking-widest mt-2 flex items-center gap-2">
-                                    <Download size={14} className="text-indigo-500" />
-                                    Generar Reporte Excel Personalizado
-                                </p>
-                            </div>
-                            <button onClick={() => setShowExportModal(false)} className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-slate-900 transition-all">
-                                <X size={24} />
-                            </button>
-                        </div>
-
-                        <div className="space-y-8">
-                            <div className="space-y-3">
-                                <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo de Reporte</label>
-                                <div className="grid grid-cols-3 gap-3">
-                                    {[
-                                        { id: 'orders', label: 'Órdenes', icon: <ClipboardList size={16} /> },
-                                        { id: 'income', label: 'Finanzas', icon: <DollarSign size={16} /> },
-                                        { id: 'clients', label: 'Clientes', icon: <Users size={16} /> }
-                                    ].map(type => (
-                                        <button
-                                            key={type.id}
-                                            onClick={() => setExportParams({ ...exportParams, type: type.id })}
-                                            className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${exportParams.type === type.id
-                                                ? 'bg-indigo-50 border-indigo-500 text-indigo-600'
-                                                : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-200'
-                                                }`}
-                                        >
-                                            {type.icon}
-                                            <span className="text-[10px] font-black uppercase tracking-wider">{type.label}</span>
-                                        </button>
-                                    ))}
+            {
+                showExportModal && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl p-10 animate-in fade-in zoom-in duration-300">
+                            <div className="flex justify-between items-start mb-10">
+                                <div>
+                                    <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter">{t('export_data')}</h2>
+                                    <p className="text-[11px] text-slate-400 font-black uppercase tracking-widest mt-2 flex items-center gap-2">
+                                        <Download size={14} className="text-indigo-500" />
+                                        {t('custom_excel_report')}
+                                    </p>
                                 </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="space-y-3">
-                                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Fecha Desde</label>
-                                    <input
-                                        type="date"
-                                        value={exportParams.startDate}
-                                        onChange={(e) => setExportParams({ ...exportParams, startDate: e.target.value })}
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-800 focus:ring-4 focus:ring-indigo-100 transition-all text-sm"
-                                    />
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Fecha Hasta</label>
-                                    <input
-                                        type="date"
-                                        value={exportParams.endDate}
-                                        onChange={(e) => setExportParams({ ...exportParams, endDate: e.target.value })}
-                                        className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-800 focus:ring-4 focus:ring-indigo-100 transition-all text-sm"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="pt-4 space-y-4">
-                                <button
-                                    onClick={handleExportExcel}
-                                    disabled={exporting}
-                                    className="w-full bg-indigo-600 text-white font-black py-6 rounded-[2rem] shadow-xl shadow-indigo-600/20 hover:scale-[1.02] active:scale-95 transition-all text-[12px] uppercase tracking-[0.2em] italic flex items-center justify-center gap-3"
-                                >
-                                    {exporting ? (
-                                        <>
-                                            <RefreshCw size={20} className="animate-spin" />
-                                            Generando...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Download size={20} />
-                                            Descargar Excel
-                                        </>
-                                    )}
+                                <button onClick={() => setShowExportModal(false)} className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-slate-900 transition-all">
+                                    <X size={24} />
                                 </button>
-                                <button
-                                    onClick={() => setShowExportModal(false)}
-                                    className="w-full font-black py-4 rounded-[1.5rem] bg-slate-50 text-slate-400 hover:bg-slate-100 transition-all uppercase text-[10px] tracking-widest"
-                                >
-                                    Cerrar
-                                </button>
+                            </div>
+
+                            <div className="space-y-8">
+                                <div className="space-y-3">
+                                    <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('report_type')}</label>
+                                    <div className="grid grid-cols-3 gap-3">
+                                        {[
+                                            { id: 'orders', label: t('orders'), icon: <ClipboardList size={16} /> },
+                                            { id: 'income', label: t('finances'), icon: <DollarSign size={16} /> },
+                                            { id: 'clients', label: t('clients'), icon: <Users size={16} /> }
+                                        ].map(type => (
+                                            <button
+                                                key={type.id}
+                                                onClick={() => setExportParams({ ...exportParams, type: type.id })}
+                                                className={`p-4 rounded-2xl flex flex-col items-center gap-2 border-2 transition-all ${exportParams.type === type.id
+                                                    ? 'bg-indigo-50 border-indigo-500 text-indigo-600'
+                                                    : 'bg-white border-slate-100 text-slate-400 hover:border-indigo-200'
+                                                    }`}
+                                            >
+                                                {type.icon}
+                                                <span className="text-[10px] font-black uppercase tracking-wider">{type.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('from_date')}</label>
+                                        <input
+                                            type="date"
+                                            value={exportParams.startDate}
+                                            onChange={(e) => setExportParams({ ...exportParams, startDate: e.target.value })}
+                                            className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-800 focus:ring-4 focus:ring-indigo-100 transition-all text-sm"
+                                        />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('to_date')}</label>
+                                        <input
+                                            type="date"
+                                            value={exportParams.endDate}
+                                            onChange={(e) => setExportParams({ ...exportParams, endDate: e.target.value })}
+                                            className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-slate-800 focus:ring-4 focus:ring-indigo-100 transition-all text-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="pt-4 space-y-4">
+                                    <button
+                                        onClick={handleExportExcel}
+                                        disabled={exporting}
+                                        className="w-full bg-indigo-600 text-white font-black py-6 rounded-[2rem] shadow-xl shadow-indigo-600/20 hover:scale-[1.02] active:scale-95 transition-all text-[12px] uppercase tracking-[0.2em] italic flex items-center justify-center gap-3"
+                                    >
+                                        {exporting ? (
+                                            <>
+                                                <RefreshCw size={20} className="animate-spin" />
+                                                {t('generating')}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Download size={20} />
+                                                {t('download_excel')}
+                                            </>
+                                        )}
+                                    </button>
+                                    <button
+                                        onClick={() => setShowExportModal(false)}
+                                        className="w-full font-black py-4 rounded-[1.5rem] bg-slate-50 text-slate-400 hover:bg-slate-100 transition-all uppercase text-[10px] tracking-widest"
+                                    >
+                                        {t('close')}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }
 

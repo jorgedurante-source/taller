@@ -10,7 +10,8 @@ import {
     AlertCircle,
     FileText,
     MessageSquare,
-    History as HistoryIcon
+    History as HistoryIcon,
+    X
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 
@@ -142,7 +143,7 @@ export default function PublicOrderPage() {
                         </div>
 
                         <div className="space-y-8">
-                            {order.appointment_date && (order.status === 'Turno asignado' || order.status === 'pending') && (
+                            {order.appointment_date && (order.status === 'appointment' || order.status?.toLowerCase().includes('turno')) && (
                                 <div className="bg-indigo-50 border border-indigo-100 rounded-[32px] p-6 flex items-center gap-6 animate-in zoom-in-95 duration-500">
                                     <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
                                         <Calendar size={32} />
@@ -166,6 +167,19 @@ export default function PublicOrderPage() {
                                             })()} hs.
                                         </h3>
                                         <p className="text-indigo-500 font-bold text-xs mt-1">{t('see_you_there')}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {order.status === 'cancelled' && (
+                                <div className="bg-red-50 border border-red-100 rounded-[32px] p-6 flex items-center gap-6 animate-in zoom-in-95 duration-500">
+                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-red-100 flex items-center justify-center text-red-500 shrink-0">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Estado de la Orden</p>
+                                        <h3 className="text-xl font-black text-red-900 uppercase italic">Orden Cancelada</h3>
+                                        <p className="text-sm text-red-600 font-bold mt-1">Esta orden fue cancelada. Contactá al taller para más información.</p>
                                     </div>
                                 </div>
                             )}
