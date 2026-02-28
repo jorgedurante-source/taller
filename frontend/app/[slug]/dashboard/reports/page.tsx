@@ -39,9 +39,18 @@ export default function ReportsPage() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState('general');
     const [data, setData] = useState<any>(null);
-    const [vehicleFilters, setVehicleFilters] = useState({ brands: [], models: [] });
-    const [vFilters, setVFilters] = useState({ brand: '', model: '' });
+    const [vehicleFilters, setVehicleFilters] = useState({ brands: [], models: [], versions: [] });
+    const [vFilters, setVFilters] = useState({ brand: '', model: '', version: '' });
     const [vehicleStats, setVehicleStats] = useState<any>(null);
+    const [debtData, setDebtData] = useState<any>(null);
+    const [productivityData, setProductivityData] = useState<any>(null);
+    const [serviceDurationData, setServiceDurationData] = useState<any>(null);
+    const [yoyData, setYoyData] = useState<any>(null);
+
+    const [loadingDebt, setLoadingDebt] = useState(false);
+    const [loadingProd, setLoadingProd] = useState(false);
+    const [loadingDur, setLoadingDur] = useState(false);
+    const [loadingYOY, setLoadingYOY] = useState(false);
 
     // Export State
     const [showExportModal, setShowExportModal] = useState(false);
@@ -77,9 +86,37 @@ export default function ReportsPage() {
         }
     };
 
+    const fetchOperationalData = async () => {
+        setLoadingDebt(true);
+        setLoadingProd(true);
+        setLoadingDur(true);
+        setLoadingYOY(true);
+        try {
+            const [debtRes, prodRes, durRes, yoyRes] = await Promise.all([
+                api.get('/reports/debt'),
+                api.get('/reports/productivity'),
+                api.get('/reports/service-duration'),
+                api.get('/reports/yoy')
+            ]);
+            setDebtData(debtRes.data);
+            setProductivityData(prodRes.data);
+            setServiceDurationData(durRes.data);
+            setYoyData(yoyRes.data);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoadingDebt(false);
+            setLoadingProd(false);
+            setLoadingDur(false);
+            setLoadingYOY(false);
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'vehicles') {
             fetchVehicleStats();
+        } else if (activeTab === 'deuda') {
+            fetchOperationalData();
         }
     }, [vFilters, activeTab]);
 
@@ -152,7 +189,8 @@ export default function ReportsPage() {
                     { id: 'general', label: 'General', icon: <TrendingUp size={16} /> },
                     { id: 'finances', label: 'Finanzas / Servicios', icon: <DollarSign size={16} /> },
                     { id: 'customers', label: 'Clientes', icon: <Users size={16} /> },
-                    { id: 'vehicles', label: 'Vehículos', icon: <Car size={16} /> }
+                    { id: 'vehicles', label: 'Vehículos', icon: <Car size={16} /> },
+                    { id: 'deuda', label: 'Deuda / Productividad', icon: <AlertCircle size={16} /> }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -401,7 +439,7 @@ export default function ReportsPage() {
                                 <select
                                     className="bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-800 focus:ring-4 focus:ring-indigo-100 transition-all text-xs min-w-[180px]"
                                     value={vFilters.brand}
-                                    onChange={(e) => setVFilters({ brand: e.target.value, model: '' })}
+                                    onChange={(e) => setVFilters({ brand: e.target.value, model: '', version: '' })}
                                 >
                                     <option value="">Todas las marcas</option>
                                     {vehicleFilters.brands.map((b: any) => (
@@ -414,12 +452,26 @@ export default function ReportsPage() {
                                 <select
                                     className="bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-800 focus:ring-4 focus:ring-indigo-100 transition-all text-xs min-w-[180px]"
                                     value={vFilters.model}
-                                    onChange={(e) => setVFilters({ ...vFilters, model: e.target.value })}
+                                    onChange={(e) => setVFilters({ ...vFilters, model: e.target.value, version: '' })}
                                     disabled={!vFilters.brand}
                                 >
                                     <option value="">Todos los modelos</option>
                                     {vehicleFilters.models.filter((m: any) => m.brand === vFilters.brand).map((m: any) => (
                                         <option key={m.model} value={m.model}>{m.model}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Versión</label>
+                                <select
+                                    className="bg-slate-50 border-none rounded-2xl p-3 font-bold text-slate-800 focus:ring-4 focus:ring-indigo-100 transition-all text-xs min-w-[180px]"
+                                    value={vFilters.version}
+                                    onChange={(e) => setVFilters({ ...vFilters, version: e.target.value })}
+                                    disabled={!vFilters.model}
+                                >
+                                    <option value="">Todas las versiones</option>
+                                    {vehicleFilters.versions.filter((v: any) => v.brand === vFilters.brand && v.model === vFilters.model).map((v: any) => (
+                                        <option key={v.version} value={v.version}>{v.version}</option>
                                     ))}
                                 </select>
                             </div>
@@ -491,32 +543,69 @@ export default function ReportsPage() {
                             </ReportCard>
 
                             <ReportCard
-                                title="Kilometraje al Ingresar"
+                                title="Intensidad de Mantenimiento"
                                 icon={<Gauge className="text-emerald-500" size={20} />}
                             >
-                                <div className="h-[350px] w-full mt-4">
+                                <div className="mt-4 flex items-center justify-between px-6 py-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                                    <div>
+                                        <p className="text-[10px] font-black text-emerald-600/70 uppercase tracking-widest leading-none">Intervalo Promedio</p>
+                                        <p className="text-2xl font-black text-emerald-700 italic mt-1">~{vehicleStats?.visitStats?.avg_interval?.toLocaleString() || 0} km</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-emerald-600/70 uppercase tracking-widest leading-none">Muestra</p>
+                                        <p className="text-sm font-black text-emerald-700 mt-1">{vehicleStats?.visitStats?.sample_size || 0} ingresos</p>
+                                    </div>
+                                </div>
+
+                                <div className="h-[300px] w-full mt-8 flex flex-col items-center justify-center">
+                                    <p className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest self-start">INTENSIDAD DE SERVICES POR KILOMETRAJE</p>
+                                    {(!vehicleStats?.visitDistribution || vehicleStats.visitDistribution.length === 0) ? (
+                                        <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
+                                            <Gauge size={40} className="opacity-20" />
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-center max-w-[200px]">No hay registros de kilometraje suficientes para generar el gráfico de intensidad.</p>
+                                        </div>
+                                    ) : (
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={vehicleStats?.visitDistribution}>
+                                                <defs>
+                                                    <linearGradient id="colorKm" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                                                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} label={{ value: 'Servicios', angle: -90, position: 'insideLeft', fontSize: 10, fontWeight: 'bold', offset: 0 }} />
+                                                <Tooltip
+                                                    contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', color: '#000' }}
+                                                    itemStyle={{ color: '#000' }}
+                                                    formatter={(value, name, props) => [`${value} servicios`, `Rango ${props.payload.name}`]}
+                                                />
+                                                <Area type="monotone" dataKey="value" stroke="#10b981" fillOpacity={1} fill="url(#colorKm)" strokeWidth={3} />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    )}
+                                </div>
+
+                                <div className="h-[200px] w-full mt-8">
+                                    <p className="text-[10px] font-black text-slate-400 mb-4 uppercase tracking-widest">RANKING POR MARCA (INTERVALO AVG)</p>
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <LineChart data={vehicleStats?.kmTrend}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                            <XAxis
-                                                dataKey="month"
-                                                axisLine={false}
-                                                tickLine={false}
-                                                tick={{ fontSize: 10, fontWeight: 'bold' }}
-                                            />
-                                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                        <BarChart data={vehicleStats?.brandIntervals} layout="vertical" margin={{ left: -20, right: 30 }}>
+                                            <XAxis type="number" hide />
+                                            <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 'bold' }} width={80} />
                                             <Tooltip
                                                 contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', color: '#000' }}
-                                                itemStyle={{ color: '#000' }}
-                                                formatter={(value) => [`${Math.round(Number(value)).toLocaleString()} km`, 'KM Promedio']}
+                                                cursor={{ fill: '#f8fafc' }}
+                                                formatter={(value) => [`${(value as number).toLocaleString()} km`, 'Intervalo Promedio']}
                                             />
-                                            <Line type="monotone" dataKey="avg_km" stroke="#10b981" strokeWidth={4} dot={{ r: 6, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 8 }} />
-                                        </LineChart>
+                                            <Bar dataKey="value" fill="#10b981" radius={[0, 10, 10, 0]} barSize={15} />
+                                        </BarChart>
                                     </ResponsiveContainer>
                                 </div>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-4 p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-6 p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
                                     <TrendingUp size={12} className="inline mr-2 text-emerald-500" />
-                                    Promedio de kilómetros registrados en la primera visita de cada vehículo.
+                                    Analiza en qué kilometrajes el taller recibe más unidades para optimizar stock de repuestos según el odómetro.
                                 </p>
                             </ReportCard>
 
@@ -557,6 +646,188 @@ export default function ReportsPage() {
                             </ReportCard>
                         </div>
                     </div>
+                )}
+
+                {activeTab === 'deuda' && (
+                    <>
+                        {/* KPI SUMARY DEUDA */}
+                        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4">
+                                <div className="p-3 bg-red-50 text-red-600 rounded-2xl">
+                                    <AlertCircle size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Deuda Total</p>
+                                    <p className="text-2xl font-black text-red-600 mt-1">$ {debtData?.summary?.total_outstanding?.toLocaleString() || 0}</p>
+                                </div>
+                            </div>
+                            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4">
+                                <div className="p-3 bg-slate-50 text-slate-600 rounded-2xl">
+                                    <Users size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Clientes Deudores</p>
+                                    <p className="text-2xl font-black text-slate-900 mt-1">{debtData?.summary?.clients_with_debt || 0}</p>
+                                </div>
+                            </div>
+                            <div className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4">
+                                <div className="p-3 bg-slate-50 text-slate-600 rounded-2xl">
+                                    <ClipboardList size={24} />
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Órdenes Pendientes</p>
+                                    <p className="text-2xl font-black text-slate-900 mt-1">{debtData?.summary?.orders_with_debt || 0}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* TABLA DE DEUDORES */}
+                        <ReportCard
+                            title="Cuentas Corrientes Pendientes"
+                            icon={<DollarSign className="text-red-500" size={20} />}
+                            className="lg:col-span-2"
+                        >
+                            <div className="mt-6 overflow-hidden border border-slate-100 rounded-[2rem]">
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-100">
+                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase">Cliente</th>
+                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase text-center">Órdenes</th>
+                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase text-right">Facturado</th>
+                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase text-right">Pagado</th>
+                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase text-right">Deuda</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {debtData?.clients?.map((d: any) => (
+                                            <tr key={d.id} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="px-6 py-4">
+                                                    <p className="font-bold text-slate-900 uppercase italic text-sm">{d.name}</p>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="bg-white border border-slate-100 px-2.5 py-1 rounded-lg text-[10px] font-black text-slate-500">
+                                                        {d.orders_count}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-bold text-slate-500 text-sm">$ {d.total_amount?.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-right font-bold text-emerald-600 text-sm">$ {d.paid_amount?.toLocaleString()}</td>
+                                                <td className="px-6 py-4 text-right font-black text-red-600 text-sm italic">$ {d.outstanding?.toLocaleString()}</td>
+                                            </tr>
+                                        ))}
+                                        {(!debtData?.clients || debtData.clients.length === 0) && (
+                                            <tr>
+                                                <td colSpan={5} className="px-6 py-12 text-center text-slate-400 font-bold italic">No hay deudas pendientes</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </ReportCard>
+
+                        {/* PRODUCTIVIDAD SEMANAL */}
+                        <ReportCard
+                            title="Productividad por Día"
+                            icon={<Calendar className="text-blue-500" size={20} />}
+                        >
+                            <div className="mt-4 flex justify-between items-center mb-6">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Últimos 90 días</span>
+                                <span className="bg-blue-600 text-white text-[9px] font-black px-3 py-1 rounded-full uppercase italic">
+                                    PICO: {productivityData?.busiestDay || '--'}
+                                </span>
+                            </div>
+                            <div className="h-[250px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={productivityData?.byWeekday}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                        <Tooltip labelStyle={{ fontWeight: 'black', textTransform: 'uppercase' }} />
+                                        <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }} />
+                                        <Bar name="Abiertas" dataKey="opened" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                                        <Bar name="Cerradas" dataKey="closed" fill="#10b981" radius={[4, 4, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </ReportCard>
+
+                        {/* HOURLY DISTRIBUTION */}
+                        <ReportCard
+                            title="Órdenes por hora del día"
+                            icon={<Clock className="text-purple-500" size={20} />}
+                        >
+                            <div className="h-[300px] w-full mt-4">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={productivityData?.byHour}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                        <Tooltip formatter={(value) => [value, 'Órdenes']} />
+                                        <Bar dataKey="count" fill="#8b5cf6" radius={[6, 6, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </ReportCard>
+
+                        {/* DURACION PROMEDIO */}
+                        <ReportCard
+                            title="Duración promedio por servicio"
+                            icon={<Clock className="text-amber-500" size={20} />}
+                            className="lg:col-span-2"
+                        >
+                            <div className="mt-4 flex justify-between items-center mb-6">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Días desde apertura a entrega</span>
+                                <span className="bg-amber-100 text-amber-600 text-[10px] font-black px-4 py-1 rounded-full uppercase italic">
+                                    Promedio General: {serviceDurationData?.overallAvgDays} días
+                                </span>
+                            </div>
+                            <div className="h-[350px] w-full mt-4">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={serviceDurationData?.byService} layout="vertical">
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                                        <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} width={120} />
+                                        <Tooltip cursor={{ fill: '#fff8eb' }} formatter={(value) => [value, 'Días promedio']} />
+                                        <Bar dataKey="avg_days" fill="#f59e0b" radius={[0, 10, 10, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </ReportCard>
+
+                        {/* COMPARATIVO AÑO A AÑO */}
+                        <ReportCard
+                            title="Comparativo Año a Año"
+                            icon={<TrendingUp className="text-blue-500" size={20} />}
+                            className="lg:col-span-2"
+                        >
+                            <div className="mt-4 flex justify-between items-center mb-8">
+                                <div className="flex gap-6">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-blue-600" />
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Año Actual</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-3 h-3 rounded-full bg-slate-200" />
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Año Anterior</span>
+                                    </div>
+                                </div>
+                                <span className={`text-[10px] font-black px-4 py-1.5 rounded-full uppercase italic tracking-widest border ${yoyData?.totalPctChange >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                                    {yoyData?.totalPctChange >= 0 ? '+' : ''}{yoyData?.totalPctChange}% vs Año Anterior
+                                </span>
+                            </div>
+                            <div className="h-[350px] w-full mt-4">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={yoyData?.comparison}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 'bold' }} />
+                                        <Tooltip />
+                                        <Bar dataKey="current_income" name="Año Actual" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                                        <Bar dataKey="prev_income" name="Año Anterior" fill="#e2e8f0" radius={[6, 6, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </ReportCard>
+                    </>
                 )}
             </div>
 
@@ -655,9 +926,9 @@ export default function ReportsPage() {
     );
 }
 
-function ReportCard({ title, icon, children, error }: { title: string, icon: React.ReactNode, children: React.ReactNode, error?: boolean }) {
+function ReportCard({ title, icon, children, error, className = '' }: { title: string, icon: React.ReactNode, children: React.ReactNode, error?: boolean, className?: string }) {
     return (
-        <section className={`bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all group overflow-hidden relative ${error ? 'border-red-100 bg-red-50/10' : ''}`}>
+        <section className={`bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all group overflow-hidden relative ${error ? 'border-red-100 bg-red-50/10' : ''} ${className}`}>
             {error && (
                 <div className="absolute top-4 right-8 z-10">
                     <span className="flex items-center gap-1.5 px-3 py-1 bg-red-100 text-red-600 rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse">

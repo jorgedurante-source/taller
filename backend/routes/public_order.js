@@ -10,7 +10,7 @@ router.get('/:token', (req, res) => {
 
         const order = req.db.prepare(`
             SELECT o.id, o.status, o.description, o.created_at, o.updated_at, o.appointment_date,
-                   v.brand, v.model, v.plate,
+                   v.brand, v.model, v.version, v.plate,
                    (SELECT workshop_name FROM config LIMIT 1) as workshop_name,
                    (SELECT phone FROM config LIMIT 1) as workshop_phone,
                    (SELECT address FROM config LIMIT 1) as workshop_address,
@@ -37,7 +37,23 @@ router.get('/:token', (req, res) => {
             ORDER BY created_at DESC
         `).all(order.id);
 
-        res.json({ ...order, items, history });
+        // Include vehicle health data for the client portal (only high-confidence predictions)
+        let vehicleHealth = [];
+        try {
+            vehicleHealth = req.db.prepare(`
+                SELECT service_description, predicted_next_date, predicted_next_km,
+                       avg_km_interval, avg_day_interval, confidence, last_done_at
+                FROM service_intervals
+                WHERE vehicle_id = (SELECT vehicle_id FROM orders WHERE share_token = ?)
+                  AND confidence >= 50
+                ORDER BY predicted_next_date ASC
+                LIMIT 5
+            `).all(token);
+        } catch (e) {
+            // Table may not exist on older tenants — fail silently
+        }
+
+        res.json({ ...order, items, history, vehicleHealth });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error al obtener la orden' });

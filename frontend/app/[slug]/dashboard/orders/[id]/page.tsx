@@ -57,6 +57,7 @@ export default function OrderDetailsPage() {
     const [reminderDays, setReminderDays] = useState('');
     const [appointmentDate, setAppointmentDate] = useState('');
     const [appointmentTime, setAppointmentTime] = useState('');
+    const [currentKm, setCurrentKm] = useState('');
     const [showItemsModal, setShowItemsModal] = useState(false);
     const [sendingEmail, setSendingEmail] = useState(false);
     const [catalog, setCatalog] = useState<any[]>([]);
@@ -91,6 +92,7 @@ export default function OrderDetailsPage() {
             setPaymentStatus(orderRes.data.payment_status || 'unpaid');
             setPaymentAmount(orderRes.data.payment_amount || 0);
             setReminderDays(orderRes.data.reminder_days ? String(orderRes.data.reminder_days) : '');
+            setCurrentKm(orderRes.data.km ? String(orderRes.data.km) : '');
             if (orderRes.data.appointment_date) {
                 // SQLite might use space or T
                 const cleanDate = orderRes.data.appointment_date.includes('T')
@@ -206,7 +208,8 @@ export default function OrderDetailsPage() {
                 status: newStatus,
                 notes: statusNotes,
                 reminder_days: reminderDays || null,
-                appointment_date: finalAppointmentDate
+                appointment_date: finalAppointmentDate,
+                current_km: currentKm || null
             });
             setStatusNotes('');
             setReminderDays('');
@@ -1063,6 +1066,20 @@ export default function OrderDetailsPage() {
                                 </div>
                             )}
 
+                            {newStatus === 'delivered' && (
+                                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200 bg-emerald-600/10 p-4 rounded-xl border border-emerald-600/20">
+                                    <label className="text-[10px] font-black text-emerald-400 uppercase tracking-widest ml-1">{t('current_km')} <span className="opacity-50">(Ref: {order?.km || '---'})</span></label>
+                                    <input
+                                        type="number"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl px-5 py-4 text-sm font-bold text-white outline-none focus:ring-2 focus:ring-emerald-500/50 placeholder:text-white/20"
+                                        placeholder={t('enter_km_placeholder') || "Ej: 125400"}
+                                        value={currentKm}
+                                        onChange={(e) => setCurrentKm(e.target.value)}
+                                    />
+                                    <p className="text-[9px] text-emerald-400/60 font-medium uppercase tracking-wider ml-1">Esto actualizará el historial del vehículo</p>
+                                </div>
+                            )}
+
                             {newStatus === 'appointment' && config?.enabled_modules?.includes('appointments') && (
                                 <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-200 bg-white/5 p-4 rounded-xl border border-white/10">
                                     <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest ml-1 flex items-center gap-2">
@@ -1252,7 +1269,7 @@ export default function OrderDetailsPage() {
                                     </div>
                                 )}
                                 <div>
-                                    <h5 className="text-lg font-black text-slate-900 uppercase italic tracking-tight leading-tight">{order.brand} {order.model}</h5>
+                                    <h5 className="text-lg font-black text-slate-900 uppercase italic tracking-tight leading-tight">{order.brand} {order.model} {order.version || ''}</h5>
                                     <Link
                                         href={`/${slug}/dashboard/vehicles/${order.vehicle_id}`}
                                         className="text-blue-600 font-black font-mono tracking-widest text-sm bg-blue-50 hover:bg-blue-600 hover:text-white px-3 py-1 rounded-lg inline-block mt-1 transition-all"

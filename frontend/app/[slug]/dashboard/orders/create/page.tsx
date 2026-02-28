@@ -282,13 +282,13 @@ export default function CreateOrderPage() {
                             >
                                 <option value="">-- Seleccionar --</option>
                                 {vehicles.map(v => (
-                                    <option key={v.id} value={v.id}>{v.brand} {v.model} - {v.plate}</option>
+                                    <option key={v.id} value={v.id}>{v.brand} {v.model} {v.version || ''} - {v.plate}</option>
                                 ))}
                             </select>
                         </div>
                         {selectedVehicle && (
                             <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                                <p className="text-emerald-900 font-bold">{selectedVehicle.brand} {selectedVehicle.model}</p>
+                                <p className="text-emerald-900 font-bold">{selectedVehicle.brand} {selectedVehicle.model} {selectedVehicle.version || ''}</p>
                                 <p className="text-emerald-600 font-mono tracking-widest uppercase">{selectedVehicle.plate}</p>
                             </div>
                         )}

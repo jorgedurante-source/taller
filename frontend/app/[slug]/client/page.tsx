@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { useRouter, useParams } from 'next/navigation';
 import { useNotification } from '@/lib/notification';
+import { useTranslation } from '@/lib/i18n';
 
 export default function ClientDashboardPage() {
     const { clientUser, clientLogout, loading: authLoading } = useAuth();
@@ -29,6 +30,7 @@ export default function ClientDashboardPage() {
     const [config, setConfig] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const { notify } = useNotification();
+    const { t } = useTranslation();
     const router = useRouter();
     const params = useParams();
     const slug = params?.slug as string;
@@ -162,8 +164,8 @@ export default function ClientDashboardPage() {
         </div>
     );
 
-    const currentOrder = data?.orders?.find((o: any) => o.status !== 'Entregado' && o.status !== 'Cancelado');
-    const pastOrders = data?.orders?.filter((o: any) => o.status === 'Entregado');
+    const currentOrder = data?.orders?.find((o: any) => !['Entregado', 'Cancelado', 'Cerrado', 'Liquidado', 'delivered', 'cancelled', 'canceled', 'closed', 'liquidated'].includes(o.status?.toLowerCase()));
+    const pastOrders = data?.orders?.filter((o: any) => ['Entregado', 'Cerrado', 'Liquidado', 'delivered', 'closed', 'liquidated'].includes(o.status?.toLowerCase()));
     const vehiclesData = data?.vehicles || [];
 
     return (
@@ -199,7 +201,7 @@ export default function ClientDashboardPage() {
                         </div>
                     )}
                     <div className="hidden md:block text-right">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente Conectado</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('connected_client')}</p>
                         <p className="text-sm font-bold text-slate-900">{data?.client?.first_name} {data?.client?.last_name}</p>
                     </div>
                     <button onClick={clientLogout} className="bg-slate-100 hover:bg-red-50 p-3 rounded-2xl text-slate-400 hover:text-red-500 transition-all">
@@ -216,7 +218,7 @@ export default function ClientDashboardPage() {
                         className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative ${activeTab === 'summary' ? '' : 'text-[var(--text-muted)] hover:opacity-80'}`}
                         style={{ color: activeTab === 'summary' ? 'var(--accent)' : undefined }}
                     >
-                        Resumen de Servicios
+                        {t('summary_of_services')}
                         {activeTab === 'summary' && <div className="absolute bottom-0 left-0 right-0 h-1 rounded-full animate-in fade-in slide-in-from-bottom-1" style={{ backgroundColor: 'var(--accent)' }}></div>}
                     </button>
                     <button
@@ -224,7 +226,7 @@ export default function ClientDashboardPage() {
                         className={`pb-4 text-sm font-black uppercase tracking-widest transition-all relative ${activeTab === 'vehicles' ? '' : 'text-[var(--text-muted)] hover:opacity-80'}`}
                         style={{ color: activeTab === 'vehicles' ? 'var(--accent)' : undefined }}
                     >
-                        Mis Vehículos ({vehiclesData.length})
+                        {t('my_vehicles')} ({vehiclesData.length})
                         {activeTab === 'vehicles' && <div className="absolute bottom-0 left-0 right-0 h-1 rounded-full animate-in fade-in slide-in-from-bottom-1" style={{ backgroundColor: 'var(--accent)' }}></div>}
                     </button>
                     <div className="flex-grow" />
@@ -233,7 +235,7 @@ export default function ClientDashboardPage() {
                         className="text-white px-6 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all mb-3 shadow-lg opacity-90 hover:opacity-100 italic"
                         style={{ backgroundColor: 'var(--accent)' }}
                     >
-                        Solicitar Turno
+                        {t('request_appointment')}
                     </button>
                 </div>
 
@@ -250,44 +252,44 @@ export default function ClientDashboardPage() {
                                                     <Wrench size={32} />
                                                 </div>
                                                 <div>
-                                                    <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1 italic">Vibrando Ahora</p>
+                                                    <p className="text-[10px] font-black text-[var(--text-muted)] uppercase tracking-widest mb-1 italic">{t('vibrating_now')}</p>
                                                     <h2 className="text-3xl font-black text-[var(--text-primary)] tracking-tight uppercase leading-none">{currentOrder.model}</h2>
                                                     <p className="font-black tracking-[0.2em] font-mono text-sm mt-1" style={{ color: 'var(--accent)' }}>{currentOrder.plate}</p>
                                                 </div>
                                             </div>
-                                            <div className={`px-8 py-3 rounded-2xl font-black text-xs tracking-[0.2em] shadow-sm flex items-center gap-3 border ${currentOrder.status === 'Finalizado'
+                                            <div className={`px-8 py-3 rounded-2xl font-black text-xs tracking-[0.2em] shadow-sm flex items-center gap-3 border ${['Finalizado', 'Entregado', 'delivered', 'closed', 'liquidated'].includes(currentOrder.status?.toLowerCase())
                                                 ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
                                                 : 'bg-[var(--accent-light)] border-[var(--border)] animate-pulse'
                                                 }`}
-                                                style={currentOrder.status !== 'Finalizado' ? { color: 'var(--accent)' } : undefined}
+                                                style={!['Finalizado', 'Entregado', 'delivered', 'closed', 'liquidated'].includes(currentOrder.status?.toLowerCase()) ? { color: 'var(--accent)' } : undefined}
                                             >
-                                                <div className={`w-2 h-2 rounded-full ${currentOrder.status === 'Finalizado' ? 'bg-emerald-500' : ''}`} style={currentOrder.status !== 'Finalizado' ? { backgroundColor: 'var(--accent)' } : undefined}></div>
-                                                {currentOrder.status.toUpperCase()}
+                                                <div className={`w-2 h-2 rounded-full ${['Finalizado', 'Entregado', 'delivered', 'closed', 'liquidated'].includes(currentOrder.status?.toLowerCase()) ? 'bg-emerald-500' : ''}`} style={!['Finalizado', 'Entregado', 'delivered', 'closed', 'liquidated'].includes(currentOrder.status?.toLowerCase()) ? { backgroundColor: 'var(--accent)' } : undefined}></div>
+                                                {t(currentOrder.status).toUpperCase()}
                                             </div>
                                         </div>
 
                                         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pt-10 border-t border-slate-100">
                                             <div className="space-y-2">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tarea</p>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('task')}</p>
                                                 <p className="font-bold text-slate-800 text-lg">{currentOrder.description}</p>
                                             </div>
                                             <div className="space-y-2">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{currentOrder.status === 'Turno asignado' ? 'Día de tu Turno' : 'Último Movimiento'}</p>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{['Turno asignado', 'appointment'].includes(currentOrder.status?.toLowerCase()) ? t('day_of_appointment') : t('last_movement')}</p>
                                                 <div className="font-bold text-slate-800 flex items-center gap-2">
-                                                    {currentOrder.status === 'Turno asignado' ? (
+                                                    {['Turno asignado', 'appointment'].includes(currentOrder.status?.toLowerCase()) ? (
                                                         <>
                                                             <Calendar size={16} className="text-indigo-500" />
                                                             <span className="text-indigo-600">
                                                                 {(() => {
-                                                                    if (!currentOrder.appointment_date) return 'Pendiente de asignar';
+                                                                    if (!currentOrder.appointment_date) return t('to_be_confirmed');
                                                                     const cleanDate = currentOrder.appointment_date.includes('T')
                                                                         ? currentOrder.appointment_date
                                                                         : currentOrder.appointment_date.replace(' ', 'T');
                                                                     const d = new Date(cleanDate);
                                                                     return !isNaN(d.getTime())
                                                                         ? d.toLocaleString('es-AR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
-                                                                        : 'Pendiente de asignar';
-                                                                })()} hs.
+                                                                        : t('to_be_confirmed');
+                                                                })()} {t('hs')}.
                                                             </span>
                                                         </>
                                                     ) : (
@@ -299,12 +301,12 @@ export default function ClientDashboardPage() {
                                                 </div>
                                             </div>
                                             <div className="space-y-2">
-                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Avance</p>
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('progress')}</p>
                                                 <div className="space-y-1">
                                                     <p className="font-bold text-slate-700 italic">
-                                                        {currentOrder.status === 'Finalizado'
-                                                            ? '¡Tu vehículo está listo para retirar!'
-                                                            : 'Estamos trabajando según lo previsto.'}
+                                                        {['Finalizado', 'Entregado', 'ready', 'delivered'].includes(currentOrder.status?.toLowerCase())
+                                                            ? t('ready_to_pickup')
+                                                            : t('working_as_planned')}
                                                     </p>
                                                     {currentOrder.last_note && (
                                                         <p className="text-xs text-slate-500 font-medium bg-slate-50 p-2 rounded-lg border border-slate-100 flex items-center gap-2">
@@ -315,12 +317,12 @@ export default function ClientDashboardPage() {
                                                 </div>
                                             </div>
                                             <div className="space-y-2 flex flex-col justify-center">
-                                                {(currentOrder.has_budget > 0 || ['Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'].includes(currentOrder.status)) && (
+                                                {(currentOrder.has_budget > 0 || ['Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado', 'quoted', 'approved', 'ready', 'delivered'].includes(currentOrder.status)) && (
                                                     <button
                                                         onClick={() => handleDownloadPDF(currentOrder)}
                                                         className="flex items-center gap-2 bg-slate-900 text-white px-4 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all shadow-lg italic"
                                                     >
-                                                        <Download size={14} /> Descargar Presupuesto
+                                                        <Download size={14} /> {t('download_budget')}
                                                     </button>
                                                 )}
                                             </div>
@@ -332,13 +334,58 @@ export default function ClientDashboardPage() {
                                             <CheckCircle2 size={48} />
                                         </div>
                                         <div className="max-w-md mx-auto">
-                                            <h2 className="text-2xl font-black text-slate-900 uppercase italic">Todo al día</h2>
-                                            <p className="text-slate-500 font-bold mt-2">No tenés reparaciones en curso ahora. Dejá tu vehículo en {config?.workshop_name || 'el taller'} y seguilo desde acá.</p>
+                                            <h2 className="text-2xl font-black text-slate-900 uppercase italic">{t('all_up_to_date')}</h2>
+                                            <p className="text-slate-500 font-bold mt-2">{t('no_repairs_in_progress')}</p>
                                         </div>
                                     </div>
                                 )}
                             </div>
                         </section>
+
+                        {/* Health Summary in Summary Tab for visibility */}
+                        {vehiclesData.length > 0 && (
+                            <section className="space-y-6">
+                                <div className="flex justify-between items-center">
+                                    <div className="flex items-center gap-4">
+                                        <div className="bg-emerald-600 p-2 rounded-lg text-white">
+                                            <Plus size={20} />
+                                        </div>
+                                        <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">{t('vehicle_health_status')}</h3>
+                                    </div>
+                                    <button onClick={() => setActiveTab('vehicles')} className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-indigo-600">
+                                        {t('view_all_vehicles')} →
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {vehiclesData.slice(0, 2).map((v: any, idx: number) => (
+                                        <div key={`summary-health-${v.id}-${idx}`} className="bg-white p-6 rounded-[28px] border border-slate-100 shadow-sm flex items-center gap-6">
+                                            <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 shrink-0">
+                                                <Car size={24} />
+                                            </div>
+                                            <div className="flex-grow">
+                                                <div className="flex justify-between items-start mb-1">
+                                                    <h4 className="font-black text-slate-900 uppercase italic opacity-80">{v.brand} {v.model}</h4>
+                                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${!v.predicted_next_km ? 'bg-slate-100 text-slate-500' :
+                                                        (v.last_km > v.predicted_next_km ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600')
+                                                        }`}>
+                                                        {!v.predicted_next_km ? t('pending') : (v.last_km > v.predicted_next_km ? t('critical') : t('optimum'))}
+                                                    </span>
+                                                </div>
+                                                {v.predicted_next_km && (
+                                                    <div className="h-1.5 w-full bg-slate-50 rounded-full mt-2 overflow-hidden">
+                                                        <div
+                                                            className={`h-full ${v.last_km > v.predicted_next_km ? 'bg-red-500' : 'bg-emerald-500'}`}
+                                                            style={{ width: `${Math.min(100, (v.last_km / v.predicted_next_km) * 100)}%` }}
+                                                        ></div>
+                                                    </div>
+                                                )}
+                                                {!v.predicted_next_km && <p className="text-[9px] font-bold text-slate-400 mt-1 italic">{t('history_required_prediction')}</p>}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                        )}
 
                         {/* Historial */}
                         <section className="space-y-8">
@@ -346,7 +393,7 @@ export default function ClientDashboardPage() {
                                 <div className="bg-indigo-600 p-2 rounded-lg text-white">
                                     <History size={20} />
                                 </div>
-                                <h2 className="text-2xl font-black text-[var(--text-primary)] uppercase italic">Historial de Visitas</h2>
+                                <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">{t('visit_history')}</h3>
                             </div>
 
                             <div className="bg-[var(--bg-card)] rounded-[32px] border border-[var(--border)] shadow-sm overflow-hidden">
@@ -383,14 +430,16 @@ export default function ClientDashboardPage() {
                                                                 <Download size={16} />
                                                             </button>
                                                         )}
-                                                        <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black tracking-widest">ENTREGADO</span>
+                                                        <span className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest ${['Cancelado', 'cancelled', 'canceled'].includes(order.status?.toLowerCase()) ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                            {t(order.status).toUpperCase()}
+                                                        </span>
                                                     </td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
                                 ) : (
-                                    <div className="p-16 text-center text-slate-400 font-bold italic">No registramos visitas pasadas aún.</div>
+                                    <div className="p-16 text-center text-slate-400 font-bold italic">{t('no_registered_visits')}</div>
                                 )}
                             </div>
                         </section>
@@ -401,21 +450,21 @@ export default function ClientDashboardPage() {
                     <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
                         <header className="flex justify-between items-center">
                             <div>
-                                <h2 className="text-2xl font-black text-slate-900 uppercase italic">Mis Unidades</h2>
-                                <p className="text-slate-500 font-bold text-sm">Gestioná los vehículos registrados en el taller.</p>
+                                <h2 className="text-2xl font-black text-slate-900 uppercase italic">{t('my_units')}</h2>
+                                <p className="text-slate-500 font-bold text-sm">{t('manage_registered_vehicles')}</p>
                             </div>
                             <button
                                 onClick={() => setShowVehicleModal(true)}
                                 className="text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all flex items-center gap-2 shadow-xl opacity-90 hover:opacity-100"
                                 style={{ backgroundColor: 'var(--accent)' }}
                             >
-                                <Plus size={18} /> Agregar Vehículo
+                                <Plus size={18} /> {t('add_vehicle')}
                             </button>
                         </header>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {vehiclesData.map((v: any) => (
-                                <div key={v.id} className="bg-[var(--bg-card)] p-8 rounded-[32px] border border-[var(--border)] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden">
+                            {vehiclesData.map((v: any, idx: number) => (
+                                <div key={`vehicle-card-${v.id}-${idx}`} className="bg-[var(--bg-card)] p-8 rounded-[32px] border border-[var(--border)] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group relative overflow-hidden">
                                     <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 scale-150 rotate-12 transition-all">
                                         <Car size={80} />
                                     </div>
@@ -427,13 +476,43 @@ export default function ClientDashboardPage() {
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div className="bg-slate-50 p-3 rounded-xl">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Año</p>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('year')}</p>
                                             <p className="text-sm font-bold text-slate-800">{v.year || '---'}</p>
                                         </div>
                                         <div className="bg-slate-50 p-3 rounded-xl">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">KMs</p>
-                                            <p className="text-sm font-bold text-slate-800">{v.km ? `${v.km.toLocaleString()} km` : '---'}</p>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('kms')}</p>
+                                            <p className="text-sm font-bold text-slate-800">{(v.last_km || v.km || 0).toLocaleString()} km</p>
                                         </div>
+                                    </div>
+
+                                    {/* Indicador de Salud del Vehículo */}
+                                    <div className="mt-6 space-y-2">
+                                        <div className="flex justify-between items-end">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{t('health_status')}</p>
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-widest ${!v.predicted_next_km ? 'bg-slate-100 text-slate-500' :
+                                                (v.last_km > v.predicted_next_km ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600')
+                                                }`}>
+                                                {!v.predicted_next_km ? t('pending') : (v.last_km > v.predicted_next_km ? t('critical') : t('optimum'))}
+                                            </span>
+                                        </div>
+                                        {v.predicted_next_km ? (
+                                            <div className="space-y-1">
+                                                <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                                    <div
+                                                        className={`h-full transition-all duration-1000 ${v.last_km > v.predicted_next_km ? 'bg-red-500' : 'bg-emerald-500'
+                                                            }`}
+                                                        style={{ width: `${Math.min(100, (v.last_km / v.predicted_next_km) * 100)}%` }}
+                                                    ></div>
+                                                </div>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase">
+                                                    {t('next_suggested_service')}: <span className="text-slate-600">{v.predicted_next_km.toLocaleString()} km</span>
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <p className="text-[9px] font-medium text-slate-400 italic">
+                                                {t('first_service_to_activate')}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="mt-6 pt-6 border-t border-[var(--border)]">
                                         <button
@@ -441,7 +520,7 @@ export default function ClientDashboardPage() {
                                             className="w-full bg-[var(--bg-card)] hover:bg-[var(--bg-surface)] text-[var(--text-primary)] border border-[var(--border)] py-3 rounded-xl flex items-center justify-center gap-2 font-black text-[10px] uppercase tracking-widest transition-colors shadow-sm"
                                             title={`Descargar Historial Mantenimiento - ${v.plate}`}
                                         >
-                                            <FileText size={16} style={{ color: 'var(--accent)' }} /> Historial Clínico
+                                            <FileText size={16} style={{ color: 'var(--accent)' }} /> {t('clinical_history')}
                                         </button>
                                     </div>
                                 </div>
@@ -451,8 +530,8 @@ export default function ClientDashboardPage() {
                         {vehiclesData.length === 0 && (
                             <div className="text-center py-20 bg-white rounded-[40px] border border-dashed border-slate-200">
                                 <Car size={48} className="mx-auto text-slate-200 mb-4" />
-                                <p className="text-slate-500 font-bold uppercase tracking-widest text-sm italic">No tenés vehículos cargados aún</p>
-                                <button onClick={() => setShowVehicleModal(true)} className="mt-4 text-blue-600 font-black uppercase text-xs hover:underline tracking-widest">Cargá el primero ahora</button>
+                                <p className="text-slate-500 font-bold uppercase tracking-widest text-sm italic">{t('no_vehicles_loaded')}</p>
+                                <button onClick={() => setShowVehicleModal(true)} className="mt-4 text-blue-600 font-black uppercase text-xs hover:underline tracking-widest">{t('load_first_now')}</button>
                             </div>
                         )}
                     </div>
@@ -465,8 +544,8 @@ export default function ClientDashboardPage() {
                     <div className="bg-white rounded-[40px] w-full max-w-lg shadow-2xl animate-in zoom-in-95 duration-200 overflow-hidden">
                         <div className="p-10 pb-0 flex justify-between items-center">
                             <div>
-                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Registrar Unidad</h3>
-                                <p className="text-slate-400 text-xs font-black uppercase tracking-[0.2em]">Alta de Vehículo {config?.workshop_name || 'Taller'}</p>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">{t('register_unit')}</h3>
+                                <p className="text-slate-400 text-xs font-black uppercase tracking-[0.2em]">{t('vehicle_registration')} {config?.workshop_name || 'Taller'}</p>
                             </div>
                             <button onClick={() => setShowVehicleModal(false)} className="text-slate-400 hover:text-slate-900 p-2">
                                 <Plus size={24} className="rotate-45" />
@@ -476,7 +555,7 @@ export default function ClientDashboardPage() {
                         <form onSubmit={handleAddVehicle} className="p-10 space-y-6">
                             <div className="grid grid-cols-2 gap-5">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Patente</label>
+                                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('plate')}</label>
                                     <input
                                         required
                                         className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-slate-50/50 text-slate-900 font-black uppercase tracking-widest font-mono"
@@ -486,7 +565,7 @@ export default function ClientDashboardPage() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Año</label>
+                                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('year')}</label>
                                     <input
                                         type="number"
                                         className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-slate-50/50 text-slate-900 font-black"
@@ -499,7 +578,7 @@ export default function ClientDashboardPage() {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Marca</label>
+                                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('brand')}</label>
                                     <input
                                         required
                                         className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-slate-50/50 text-slate-900 font-black uppercase"
@@ -509,7 +588,7 @@ export default function ClientDashboardPage() {
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">Modelo</label>
+                                    <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('model')}</label>
                                     <input
                                         required
                                         className="w-full px-5 py-4 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-slate-50/50 text-slate-900 font-black uppercase"

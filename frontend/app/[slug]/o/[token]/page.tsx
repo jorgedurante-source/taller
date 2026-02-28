@@ -134,7 +134,7 @@ export default function PublicOrderPage() {
                             </div>
                             <div className="bg-slate-900 text-white p-8 rounded-[32px] shadow-2xl">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{t('vehicle')}</p>
-                                <h3 className="text-xl font-black italic uppercase tracking-tighter">{order.brand} {order.model}</h3>
+                                <h3 className="text-xl font-black italic uppercase tracking-tighter">{order.brand} {order.model} {order.version}</h3>
                                 <div className="flex items-center gap-2 mt-2 text-indigo-400 font-black tracking-widest uppercase">
                                     <span className="text-sm">{order.plate}</span>
                                 </div>
@@ -237,6 +237,49 @@ export default function PublicOrderPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Vehicle Health — only shown if backend returned predictions */}
+                {order.vehicleHealth && order.vehicleHealth.length > 0 && (
+                    <div className="bg-white rounded-[40px] p-8 shadow-lg border border-slate-100">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+                            </div>
+                            <div>
+                                <h4 className="text-lg font-black text-slate-900 uppercase italic tracking-tight">
+                                    Próximos Servicios
+                                </h4>
+                                <p className="text-[11px] font-bold text-slate-400">
+                                    Basado en el historial de tu vehículo
+                                </p>
+                            </div>
+                        </div>
+                        <div className="space-y-3">
+                            {order.vehicleHealth.map((item: any, i: number) => {
+                                const isOverdue = item.predicted_next_date && new Date(item.predicted_next_date) < new Date();
+                                return (
+                                    <div key={i} className={`flex items-center justify-between p-4 rounded-2xl border ${isOverdue ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'
+                                        }`}>
+                                        <span className={`text-sm font-black uppercase italic tracking-tight ${isOverdue ? 'text-red-700' : 'text-slate-800'
+                                            }`}>
+                                            {item.service_description}
+                                        </span>
+                                        <span className={`text-[11px] font-black uppercase ${isOverdue ? 'text-red-500' : 'text-slate-500'
+                                            }`}>
+                                            {isOverdue ? 'Pendiente' :
+                                                item.predicted_next_km ? `~${item.predicted_next_km.toLocaleString()} km` :
+                                                    item.predicted_next_date ? new Date(item.predicted_next_date).toLocaleDateString(language === 'es' ? 'es-AR' : 'en-US', { month: 'short', year: 'numeric' }) :
+                                                        ''}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 mt-4 text-center italic">
+                            Estas estimaciones se calculan automáticamente según el historial registrado en el taller.
+                        </p>
+                    </div>
+                )}
 
                 <div className="bg-slate-900 rounded-[40px] p-8 md:p-10 text-white flex flex-col md:flex-row items-center justify-between gap-8">
                     <div className="text-center md:text-left">

@@ -25,7 +25,18 @@ router.get('/me', auth, (req, res) => {
             return res.status(404).json({ message: 'Client profile not found' });
         }
 
-        const vehicles = req.db.prepare('SELECT * FROM vehicles WHERE client_id = ?').all(client.id);
+        const vehicles = req.db.prepare(`
+            SELECT v.*, 
+                MIN(si.predicted_next_km) as predicted_next_km, 
+                MIN(si.predicted_next_date) as predicted_next_date, 
+                MAX(si.confidence) as confidence, 
+                AVG(si.avg_km_interval) as avg_km_interval,
+                (SELECT km FROM vehicle_km_history WHERE vehicle_id = v.id ORDER BY recorded_at DESC LIMIT 1) as last_km
+            FROM vehicles v
+            LEFT JOIN service_intervals si ON v.id = si.vehicle_id
+            WHERE v.client_id = ?
+            GROUP BY v.id
+        `).all(client.id);
 
         const orders = req.db.prepare(`
       SELECT o.*, v.plate, v.model,

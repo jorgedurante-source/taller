@@ -24,6 +24,7 @@ import {
 import Link from 'next/link';
 import { useNotification } from '@/lib/notification';
 import { useAuth } from '@/lib/auth';
+import { Shield, ShieldAlert, ShieldCheck, ShieldOff, AlertTriangle } from 'lucide-react';
 
 export default function VehicleDetailsPage() {
     const { slug } = useSlug();
@@ -43,6 +44,7 @@ export default function VehicleDetailsPage() {
     const [vehicle, setVehicle] = useState<any>(null);
     const [orders, setOrders] = useState<any[]>([]);
     const [kmHistory, setKmHistory] = useState<any[]>([]);
+    const [healthData, setHealthData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     // KM edit state
@@ -53,16 +55,18 @@ export default function VehicleDetailsPage() {
 
     const fetchData = useCallback(async () => {
         try {
-            const [vehiclesRes, ordersRes, kmRes] = await Promise.all([
+            const [vehiclesRes, ordersRes, kmRes, healthRes] = await Promise.all([
                 api.get('/clients/all-vehicles'),
                 api.get('/orders'),
-                api.get(`/clients/vehicles/${params.id}/km-history`)
+                api.get(`/clients/vehicles/${params.id}/km-history`),
+                api.get(`/clients/vehicles/${params.id}/health`).catch(() => ({ data: null }))
             ]);
 
             const currentVehicle = vehiclesRes.data.find((v: any) => v.id === parseInt(params.id as string));
             setVehicle(currentVehicle);
             setOrders(ordersRes.data.filter((o: any) => o.vehicle_id === parseInt(params.id as string)));
             setKmHistory(kmRes.data);
+            setHealthData(healthRes.data);
             if (currentVehicle) setNewKm(String(currentVehicle.km || ''));
         } catch (err) {
             console.error('Error fetching vehicle details', err);
@@ -288,6 +292,97 @@ export default function VehicleDetailsPage() {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+                    {/* Vehicle Health Card */}
+                    {healthData && (
+                        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-8 overflow-hidden">
+                            <div className="flex items-center gap-3 mb-6">
+                                {healthData.healthScore === null ? (
+                                    <div className="bg-slate-100 p-2.5 rounded-xl text-slate-400"><Shield size={18} /></div>
+                                ) : healthData.healthScore >= 80 ? (
+                                    <div className="bg-emerald-50 p-2.5 rounded-xl text-emerald-600"><ShieldCheck size={18} /></div>
+                                ) : healthData.healthScore >= 50 ? (
+                                    <div className="bg-amber-50 p-2.5 rounded-xl text-amber-500"><ShieldAlert size={18} /></div>
+                                ) : (
+                                    <div className="bg-red-50 p-2.5 rounded-xl text-red-500"><ShieldOff size={18} /></div>
+                                )}
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salud del Vehículo</p>
+                                    {healthData.healthScore !== null ? (
+                                        <p className={`text-2xl font-black tracking-tighter ${healthData.healthScore >= 80 ? 'text-emerald-600' :
+                                                healthData.healthScore >= 50 ? 'text-amber-500' : 'text-red-500'
+                                            }`}>{healthData.healthScore}%</p>
+                                    ) : (
+                                        <p className="text-xs font-bold text-slate-400 italic">Acumulando datos...</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Score bar */}
+                            {healthData.healthScore !== null && (
+                                <div className="w-full h-2 bg-slate-100 rounded-full mb-6 overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full transition-all duration-700 ${healthData.healthScore >= 80 ? 'bg-emerald-500' :
+                                                healthData.healthScore >= 50 ? 'bg-amber-400' : 'bg-red-500'
+                                            }`}
+                                        style={{ width: `${healthData.healthScore}%` }}
+                                    />
+                                </div>
+                            )}
+
+                            {/* Service intervals list */}
+                            <div className="space-y-2">
+                                {healthData.intervals?.length === 0 && (
+                                    <p className="text-[11px] font-bold text-slate-400 italic text-center py-4">
+                                        No hay servicios registrados aún
+                                    </p>
+                                )}
+                                {healthData.intervals?.map((interval: any, i: number) => (
+                                    <div key={i} className={`flex items-start justify-between p-3 rounded-2xl border transition-all ${interval.status === 'overdue' ? 'bg-red-50 border-red-100' :
+                                            interval.status === 'ok' ? 'bg-emerald-50/50 border-emerald-100' :
+                                                'bg-slate-50 border-slate-100'
+                                        }`}>
+                                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${interval.status === 'overdue' ? 'bg-red-500' :
+                                                    interval.status === 'ok' ? 'bg-emerald-500' : 'bg-slate-300'
+                                                }`} />
+                                            <p className="text-[11px] font-black text-slate-800 uppercase italic tracking-tight truncate">
+                                                {interval.service_description}
+                                            </p>
+                                        </div>
+                                        <div className="text-right flex-shrink-0 ml-2">
+                                            {interval.status === 'overdue' ? (
+                                                <p className="text-[10px] font-black text-red-600 uppercase">Vencido</p>
+                                            ) : interval.status === 'ok' && interval.predicted_next_km ? (
+                                                <p className="text-[10px] font-black text-emerald-600">
+                                                    ~{interval.predicted_next_km.toLocaleString('es-AR')} km
+                                                </p>
+                                            ) : interval.status === 'ok' && interval.predicted_next_date ? (
+                                                <p className="text-[10px] font-black text-emerald-600">
+                                                    {new Date(interval.predicted_next_date).toLocaleDateString('es-AR', { month: 'short', year: 'numeric' })}
+                                                </p>
+                                            ) : (
+                                                <p className="text-[10px] font-bold text-slate-400">Sin datos</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Stats footer */}
+                            {(healthData.stats?.overdue > 0 || healthData.stats?.onTime > 0) && (
+                                <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
+                                        ✓ {healthData.stats.onTime} al día
+                                    </span>
+                                    {healthData.stats.overdue > 0 && (
+                                        <span className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-1">
+                                            <AlertTriangle size={10} /> {healthData.stats.overdue} vencido{healthData.stats.overdue > 1 ? 's' : ''}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

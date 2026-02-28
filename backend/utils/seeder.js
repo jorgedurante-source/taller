@@ -123,7 +123,10 @@ function seedWorkshop(db) {
     const adminUser = db.prepare("SELECT id FROM users WHERE username = 'admin'").get();
     const adminId = adminUser ? adminUser.id : null;
 
-    const insertClient = db.prepare('INSERT INTO clients (first_name, last_name, nickname, phone, email, address) VALUES (?, ?, ?, ?, ?, ?)');
+    // Seed vehicle references first
+    seedVehicleReference(db);
+
+    const insertClient = db.prepare('INSERT INTO clients (first_name, last_name, nickname, phone, email, address, password) VALUES (?, ?, ?, ?, ?, ?, ?)');
     const insertVehicle = db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, version, year, km) VALUES (?, ?, ?, ?, ?, ?, ?)');
     const insertOrder = db.prepare('INSERT INTO orders (client_id, vehicle_id, description, status, payment_status, payment_amount, created_at, updated_at, created_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insertItem = db.prepare('INSERT INTO order_items (order_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?)');
@@ -133,6 +136,7 @@ function seedWorkshop(db) {
         const clientIds = [];
         // 1. Insert 20 Clients
         const timestamp = Date.now();
+        const hashedClientPass = bcrypt.hashSync('123456', 10);
         for (let i = 0; i < 20; i++) {
             const first = firstNames[Math.floor(Math.random() * firstNames.length)];
             const last = lastNames[Math.floor(Math.random() * lastNames.length)];
@@ -142,7 +146,8 @@ function seedWorkshop(db) {
                 first.toLowerCase() + timestamp + i,
                 '11' + (Math.floor(10000000 + Math.random() * 90000000)),
                 `${first.toLowerCase()}.${last.toLowerCase()}${timestamp}${i}@test.com`,
-                `Calle Falsa ${100 + i}`
+                `Calle Falsa ${100 + i}`,
+                hashedClientPass
             );
             clientIds.push(res.lastInsertRowid);
         }
@@ -159,7 +164,7 @@ function seedWorkshop(db) {
                 String.fromCharCode(65 + Math.floor(Math.random() * 26)) +
                 Math.floor(100 + Math.random() * 900)).toUpperCase() + '-' + clientId;
 
-            const km = Math.floor(Math.random() * 200000);
+            const initialKm = Math.floor(Math.random() * 50000); // Start with lower KM so we can grow
             const res = insertVehicle.run(
                 clientId,
                 plate,
@@ -167,18 +172,30 @@ function seedWorkshop(db) {
                 model,
                 version,
                 2000 + Math.floor(Math.random() * 24),
-                km
+                initialKm
             );
             const vehicleId = res.lastInsertRowid;
-            vehicleIds.push({ id: vehicleId, clientId });
+            vehicleIds.push({ id: vehicleId, clientId, currentKm: initialKm });
 
-            // Create initial KM history entry
-            db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes, recorded_at) VALUES (?, ?, ?, ?)').run(
-                vehicleId,
-                km,
-                'Kilometraje inicial (Semilla)',
-                new Date(Date.now() - Math.floor(Math.random() * 1000 * 60 * 60 * 24 * 180)).toISOString() // Random date up to 6 months ago
-            );
+            // Create multiple history entries to simulate visits
+            const numVisits = 1 + Math.floor(Math.random() * 3); // 1 to 3 visits
+            let lastKm = initialKm;
+            let lastDate = new Date(Date.now() - 1000 * 60 * 60 * 24 * 365); // Start 1 year ago
+
+            for (let v = 0; v < numVisits; v++) {
+                db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes, recorded_at) VALUES (?, ?, ?, ?)').run(
+                    vehicleId,
+                    lastKm,
+                    v === 0 ? 'Registro inicial' : `Mantenimiento preventivo ${v}`,
+                    lastDate.toISOString()
+                );
+
+                // Advance KM and Date for next visit
+                lastKm += 7000 + Math.floor(Math.random() * 8000); // 7k to 15k km between visits
+                lastDate = new Date(lastDate.getTime() + 1000 * 60 * 60 * 24 * 90); // ~3 months later
+            }
+            // Update vehicle current KM to the last visit
+            db.prepare('UPDATE vehicles SET km = ? WHERE id = ?').run(lastKm, vehicleId);
         }
 
         // 3. Insert 10 Services (only if catalog is small)

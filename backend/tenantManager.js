@@ -221,6 +221,24 @@ function initTenantDb(db, slug) {
             FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
         );
 
+        CREATE TABLE IF NOT EXISTS service_intervals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vehicle_id INTEGER NOT NULL,
+            service_description TEXT NOT NULL,
+            last_done_at DATETIME,
+            last_done_km INTEGER,
+            avg_km_interval INTEGER,
+            avg_day_interval INTEGER,
+            predicted_next_date DATE,
+            predicted_next_km INTEGER,
+            confidence INTEGER DEFAULT 0,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_service_intervals_unique
+        ON service_intervals(vehicle_id, service_description);
+
         CREATE TABLE IF NOT EXISTS suppliers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -283,6 +301,7 @@ function initTenantDb(db, slug) {
     addColumn('orders', 'payment_status', "TEXT DEFAULT 'unpaid'");
     addColumn('orders', 'status', "TEXT DEFAULT 'pending'");
     addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
+    addColumn('vehicles', 'version', "TEXT");
 
     // Roles Seeding
     const roles = [
@@ -338,6 +357,14 @@ function initTenantDb(db, slug) {
     if (!adminExists && adminRoleId) {
         const hashed = bcrypt.hashSync('admin123', 10);
         db.prepare("INSERT INTO users (username, password, role_id, role) VALUES (?, ?, ?, 'admin')").run('admin', hashed, adminRoleId);
+    }
+
+    // Auto-seed vehicle reference data if empty
+    try {
+        const { seedVehicleReference } = require('./utils/seeder');
+        seedVehicleReference(db);
+    } catch (e) {
+        console.error(`[tenant:${slug}] Failed to auto-seed vehicle references:`, e.message);
     }
 }
 

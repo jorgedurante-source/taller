@@ -36,7 +36,7 @@ const auth = (req, res, next) => {
                     }
                 }
                 superDb.prepare('UPDATE super_users SET last_activity = CURRENT_TIMESTAMP WHERE id = ?').run(decoded.superId);
-            } else if (req.db && decoded.id && decoded.role !== 'cliente') {
+            } else if (req.db && decoded.id && decoded.role !== 'client' && decoded.role !== 'cliente') {
                 const uRec = req.db.prepare('SELECT last_activity FROM users WHERE id = ?').get(decoded.id);
                 if (uRec && uRec.last_activity) {
                     const timeout = parseInt(superDb.prepare("SELECT value FROM global_settings WHERE key = 'user_session_timeout'").get()?.value || '60');

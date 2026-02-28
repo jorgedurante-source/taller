@@ -58,7 +58,17 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('current_slug') : null;
+    let slug = typeof window !== 'undefined' ? localStorage.getItem('current_slug') : null;
+
+    // Proactively detect slug from URL if we're in a tenant context
+    if (typeof window !== 'undefined') {
+        const pathParts = window.location.pathname.split('/');
+        if (pathParts[1] && pathParts[1] !== 'superadmin' && pathParts[1] !== 'api') {
+            slug = pathParts[1];
+            // Also sync it back to localStorage for other parts of the app
+            localStorage.setItem('current_slug', slug);
+        }
+    }
 
     if (token) config.headers.Authorization = `Bearer ${token}`;
 
@@ -92,7 +102,15 @@ export const clientApi = axios.create({
 
 clientApi.interceptors.request.use((config) => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('client_token') : null;
-    const slug = typeof window !== 'undefined' ? localStorage.getItem('current_slug') : null;
+    let slug = typeof window !== 'undefined' ? localStorage.getItem('current_slug') : null;
+
+    if (typeof window !== 'undefined') {
+        const pathParts = window.location.pathname.split('/');
+        if (pathParts[1] && pathParts[1] !== 'superadmin' && pathParts[1] !== 'api') {
+            slug = pathParts[1];
+            localStorage.setItem('current_slug', slug);
+        }
+    }
 
     if (token) config.headers.Authorization = `Bearer ${token}`;
 

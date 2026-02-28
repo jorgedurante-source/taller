@@ -89,7 +89,7 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
         const template = req.db.prepare("SELECT * FROM templates WHERE trigger_status = 'pending'").get();
         if (template) {
             const order = req.db.prepare(`
-                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, u.first_name as user_first_name, u.last_name as user_last_name
+                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.version, u.first_name as user_first_name, u.last_name as user_last_name
                 FROM orders o
                 JOIN clients c ON o.client_id = c.id
                 JOIN vehicles v ON o.vehicle_id = v.id
@@ -146,7 +146,7 @@ router.get('/:id', auth, hasPermission('orders'), (req, res) => {
     try {
         const order = req.db.prepare(`
             SELECT o.*, (c.first_name || ' ' || c.last_name) as client_name, c.phone as client_phone, c.email as client_email,
-                   v.plate, v.brand, v.model, v.year,
+                   v.plate, v.brand, v.model, v.version, v.year, v.km,
                    u.username as created_by_name
             FROM orders o
             JOIN clients c ON o.client_id = c.id
@@ -176,9 +176,19 @@ router.get('/:id', auth, hasPermission('orders'), (req, res) => {
 
 // @route   PUT api/orders/:id/status
 router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
-    const { status, notes, reminder_days, appointment_date } = req.body;
+    const { status, notes, reminder_days, appointment_date, current_km } = req.body;
     try {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
+
+        // KM update if provided
+        if (current_km && parseInt(current_km) > 0) {
+            const order_data = req.db.prepare('SELECT vehicle_id FROM orders WHERE id = ?').get(req.params.id);
+            if (order_data) {
+                req.db.prepare('UPDATE vehicles SET km = ? WHERE id = ?').run(parseInt(current_km), order_data.vehicle_id);
+                req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)')
+                    .run(order_data.vehicle_id, parseInt(current_km), `Actualizado al entregar orden #${req.params.id}`);
+            }
+        }
 
         // Fetch current order to check delivery date
         const currentOrder = req.db.prepare('SELECT status, delivered_at, payment_status, payment_amount FROM orders WHERE id = ?').get(req.params.id);
@@ -235,7 +245,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
         const template = req.db.prepare('SELECT * FROM templates WHERE trigger_status = ?').get(status);
         if (template) {
             const order = req.db.prepare(`
-                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.km, u.first_name as user_first_name, u.last_name as user_last_name
+                SELECT o.*, c.first_name, c.nickname, c.email, v.model, v.brand, v.version, v.km, u.first_name as user_first_name, u.last_name as user_last_name
                 FROM orders o
                 JOIN clients c ON o.client_id = c.id
                 JOIN vehicles v ON o.vehicle_id = v.id
@@ -291,6 +301,19 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
 
                 sendEmail(req.db, order.email, `Actualización (Orden #${order.id}) - ${status}`, message, attachments)
                     .catch(err => console.error('Delayed email error:', err));
+            }
+        }
+
+        // Trigger interval learning when order is delivered
+        if (status === 'delivered') {
+            try {
+                const { recalculateIntervals } = require('../lib/intervalLearner');
+                const orderForLearner = req.db.prepare('SELECT vehicle_id FROM orders WHERE id = ?').get(req.params.id);
+                if (orderForLearner?.vehicle_id) {
+                    recalculateIntervals(req.db, orderForLearner.vehicle_id);
+                }
+            } catch (e) {
+                console.error('[intervalLearner] Failed silently:', e.message);
             }
         }
 

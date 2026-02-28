@@ -232,6 +232,92 @@ router.get('/vehicles/:vid/km-history', auth, hasPermission('vehicles'), (req, r
     }
 });
 
+// @route   GET api/clients/vehicles/:vid/health
+// @desc    Get vehicle health score and predicted service intervals
+router.get('/vehicles/:vid/health', auth, hasPermission('vehicles'), (req, res) => {
+    const vehicleId = parseInt(req.params.vid);
+    const db = req.db;
+
+    try {
+        const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(vehicleId);
+        if (!vehicle) return res.status(404).json({ message: 'Vehículo no encontrado' });
+
+        const intervals = db.prepare(`
+            SELECT * FROM service_intervals
+            WHERE vehicle_id = ?
+            ORDER BY confidence DESC, predicted_next_date ASC
+        `).all(vehicleId);
+
+        const now = new Date();
+        const currentKm = vehicle.km || 0;
+        let onTime = 0, overdue = 0, unknown = 0;
+
+        const annotated = intervals.map(interval => {
+            let status = 'unknown';
+            let urgency = 0;
+
+            if (interval.confidence >= 25) {
+                const dateOverdue = interval.predicted_next_date
+                    ? new Date(interval.predicted_next_date) < now
+                    : false;
+                const kmOverdue = interval.predicted_next_km
+                    ? currentKm > interval.predicted_next_km
+                    : false;
+
+                if (dateOverdue || kmOverdue) {
+                    status = 'overdue';
+                    overdue++;
+                    if (interval.predicted_next_km && currentKm > interval.predicted_next_km) {
+                        urgency = Math.min(
+                            Math.round(((currentKm - interval.predicted_next_km) / (interval.avg_km_interval || 5000)) * 100),
+                            100
+                        );
+                    } else if (interval.predicted_next_date) {
+                        const daysLate = Math.round((now - new Date(interval.predicted_next_date)) / 86400000);
+                        urgency = Math.min(
+                            Math.round((daysLate / (interval.avg_day_interval || 180)) * 100),
+                            100
+                        );
+                    }
+                } else {
+                    status = 'ok';
+                    onTime++;
+                }
+            } else {
+                unknown++;
+            }
+
+            return { ...interval, status, urgency };
+        });
+
+        const total = onTime + overdue;
+        const healthScore = total > 0 ? Math.round((onTime / total) * 100) : null;
+
+        const timeline = db.prepare(`
+            SELECT o.id, o.status, o.delivered_at, o.created_at, v.km,
+                   GROUP_CONCAT(oi.description, ' · ') as services
+            FROM orders o
+            JOIN order_items oi ON o.id = oi.order_id
+            JOIN vehicles v ON o.vehicle_id = v.id
+            WHERE o.vehicle_id = ? AND o.status = 'delivered'
+            GROUP BY o.id
+            ORDER BY o.delivered_at DESC
+            LIMIT 10
+        `).all(vehicleId);
+
+        res.json({
+            vehicle,
+            healthScore,
+            intervals: annotated,
+            timeline,
+            stats: { onTime, overdue, unknown }
+        });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching vehicle health' });
+    }
+});
+
 // @route   DELETE api/clients/vehicles/:vid
 router.delete('/vehicles/:vid', auth, hasPermission('vehicles'), (req, res) => {
     try {

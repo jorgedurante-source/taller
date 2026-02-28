@@ -8,6 +8,7 @@ import { Plus, Search, User, Phone, Mail, X, Car, Hash, Calendar, ArrowRight, Ma
 import { useNotification } from '@/lib/notification';
 import { useAuth } from '@/lib/auth';
 import { useTranslation } from '@/lib/i18n';
+import VehicleAutocomplete from '@/components/VehicleAutocomplete';
 
 export default function ClientsPage() {
     const { slug } = useSlug();
@@ -41,6 +42,7 @@ export default function ClientsPage() {
             plate: '',
             brand: '',
             model: '',
+            version: '',
             year: '',
             km: ''
         }
@@ -77,7 +79,7 @@ export default function ClientsPage() {
             setFormData({
                 first_name: '', last_name: '', nickname: '', phone: '', email: '', address: '', notes: '',
                 addVehicle: true,
-                vehicle: { plate: '', brand: '', model: '', year: '', km: '' }
+                vehicle: { plate: '', brand: '', model: '', version: '', year: '', km: '' }
             });
         } catch (err: any) {
             notify('error', err.response?.data?.message || 'Error al crear el cliente');
@@ -247,14 +249,28 @@ export default function ClientsPage() {
                                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('plate')}</label>
                                             <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-black text-slate-900 uppercase italic outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.plate} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, plate: e.target.value } })} />
                                         </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('brand')}</label>
-                                            <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.brand} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, brand: e.target.value } })} />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('model')}</label>
-                                            <input required className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.model} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, model: e.target.value } })} />
-                                        </div>
+                                        <VehicleAutocomplete
+                                            label={t('brand')}
+                                            value={formData.vehicle.brand}
+                                            onChange={val => setFormData({ ...formData, vehicle: { ...formData.vehicle, brand: val, model: '', version: '' } })}
+                                            type="brand"
+                                            required
+                                        />
+                                        <VehicleAutocomplete
+                                            label={t('model')}
+                                            value={formData.vehicle.model}
+                                            onChange={val => setFormData({ ...formData, vehicle: { ...formData.vehicle, model: val, version: '' } })}
+                                            type="model"
+                                            filters={{ brand: formData.vehicle.brand }}
+                                            required
+                                        />
+                                        <VehicleAutocomplete
+                                            label="Versión"
+                                            value={formData.vehicle.version}
+                                            onChange={val => setFormData({ ...formData, vehicle: { ...formData.vehicle, version: val } })}
+                                            type="version"
+                                            filters={{ brand: formData.vehicle.brand, model: formData.vehicle.model }}
+                                        />
                                         <div className="space-y-2">
                                             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{t('year')}</label>
                                             <input type="number" className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-4 font-bold text-slate-900 outline-none focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-400 transition-all" value={formData.vehicle.year} onChange={e => setFormData({ ...formData, vehicle: { ...formData.vehicle, year: e.target.value } })} />
