@@ -1407,4 +1407,150 @@ router.put('/tickets/:id/status', superAuth, (req, res) => {
     }
 });
 
+// ── GET /api/super/chains ─────────────────────────────────────────────────────
+router.get('/chains', superAuth, (req, res) => {
+    const chains = superDb.prepare(`
+        SELECT tc.*, COUNT(cm.id) as member_count
+        FROM tenant_chains tc
+        LEFT JOIN chain_members cm ON cm.chain_id = tc.id
+        GROUP BY tc.id ORDER BY tc.created_at DESC
+    `).all();
+
+    const result = chains.map(chain => {
+        const members = superDb.prepare(`
+            SELECT cm.tenant_slug, w.name as workshop_name
+            FROM chain_members cm
+            LEFT JOIN workshops w ON w.slug = cm.tenant_slug
+            WHERE cm.chain_id = ?
+        `).all(chain.id);
+        const users = superDb.prepare(
+            'SELECT id, name, email, can_see_financials FROM chain_users WHERE chain_id = ?'
+        ).all(chain.id);
+        return { ...chain, members, users };
+    });
+    res.json(result);
+});
+
+// ── POST /api/super/chains ────────────────────────────────────────────────────
+router.post('/chains', superAuth, (req, res) => {
+    const { name, slug, visibility_level = 'summary', tenant_slugs = [] } = req.body;
+    if (!name || !slug) return res.status(400).json({ message: 'Name and slug required' });
+
+    try {
+        const result = superDb.prepare(
+            'INSERT INTO tenant_chains (name, slug, visibility_level) VALUES (?,?,?)'
+        ).run(name, slug, visibility_level);
+        const chainId = result.lastInsertRowid;
+
+        for (const ts of tenant_slugs) {
+            superDb.prepare('INSERT OR IGNORE INTO chain_members (chain_id, tenant_slug) VALUES (?,?)').run(chainId, ts);
+            superDb.prepare('UPDATE workshops SET chain_id = ? WHERE slug = ?').run(chainId, ts);
+        }
+        res.json({ id: chainId, name, slug });
+    } catch (e) {
+        res.status(400).json({ message: e.message });
+    }
+});
+
+// ── PATCH /api/super/chains/:id ───────────────────────────────────────────────
+router.patch('/chains/:id', superAuth, (req, res) => {
+    const { name, visibility_level } = req.body;
+    if (name) superDb.prepare('UPDATE tenant_chains SET name = ? WHERE id = ?').run(name, req.params.id);
+    if (visibility_level) superDb.prepare('UPDATE tenant_chains SET visibility_level = ? WHERE id = ?').run(visibility_level, req.params.id);
+    res.json({ message: 'Updated' });
+});
+
+// ── POST /api/super/chains/:id/members ───────────────────────────────────────
+router.post('/chains/:id/members', superAuth, (req, res) => {
+    const { tenant_slug } = req.body;
+    superDb.prepare('INSERT OR IGNORE INTO chain_members (chain_id, tenant_slug) VALUES (?,?)').run(req.params.id, tenant_slug);
+    superDb.prepare('UPDATE workshops SET chain_id = ? WHERE slug = ?').run(req.params.id, tenant_slug);
+    res.json({ message: 'Member added' });
+});
+
+// ── DELETE /api/super/chains/:id/members/:slug ────────────────────────────────
+// Decouple a tenant from the chain — apply retention rules
+router.delete('/chains/:id/members/:slug', superAuth, (req, res) => {
+    const { id, slug } = req.params;
+    const { preview } = req.query;
+
+    try {
+        const db = getDb(slug);
+        const chain = superDb.prepare('SELECT * FROM tenant_chains WHERE id = ?').get(id);
+        if (!chain) return res.status(404).json({ message: 'Chain not found' });
+
+        // Clients to KEEP: source_tenant = this slug OR has orders here
+        const toKeep = db.prepare(`
+            SELECT DISTINCT c.id, c.uuid, c.first_name, c.last_name, c.source_tenant,
+                COUNT(o.id) as local_orders
+            FROM clients c
+            LEFT JOIN orders o ON o.client_id = c.id
+            WHERE c.source_tenant = ? OR o.id IS NOT NULL
+            GROUP BY c.id
+        `).all(slug);
+
+        // Clients to LOSE: foreign clients with no local orders
+        const toLose = db.prepare(`
+            SELECT c.id, c.uuid, c.first_name, c.last_name, c.source_tenant
+            FROM clients c
+            WHERE c.source_tenant != ? AND c.source_tenant IS NOT NULL
+              AND c.id NOT IN (SELECT client_id FROM orders)
+        `).all(slug);
+
+        if (preview === 'true') {
+            return res.json({
+                to_keep: toKeep.length, to_lose: toLose.length,
+                preview_keep: toKeep.slice(0, 5), preview_lose: toLose.slice(0, 5)
+            });
+        }
+
+        // Execute decoupling
+        for (const client of toLose) {
+            db.prepare('DELETE FROM clients WHERE id = ?').run(client.id);
+        }
+
+        // Clear source_tenant on kept clients that originated here (they're fully local now)
+        db.prepare("UPDATE clients SET source_tenant = NULL WHERE source_tenant = ?").run(slug);
+
+        // Remove from chain
+        superDb.prepare('DELETE FROM chain_members WHERE chain_id = ? AND tenant_slug = ?').run(id, slug);
+        superDb.prepare('UPDATE workshops SET chain_id = NULL WHERE slug = ?').run(slug);
+
+        // Cancel pending sync jobs for this tenant
+        superDb.prepare(`UPDATE sync_queue SET status='cancelled' WHERE (source_slug=? OR target_slug=?) AND status='pending'`).run(slug, slug);
+
+        res.json({ message: 'Decoupled', kept: toKeep.length, removed: toLose.length });
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+
+// ── POST /api/super/chains/:id/users ─────────────────────────────────────────
+router.post('/chains/:id/users', superAuth, (req, res) => {
+    const { name, email, password, can_see_financials = 0 } = req.body;
+    const hash = require('bcrypt').hashSync(password, 10);
+    try {
+        const result = superDb.prepare(
+            'INSERT INTO chain_users (chain_id, name, email, password, can_see_financials) VALUES (?,?,?,?,?)'
+        ).run(req.params.id, name, email, hash, can_see_financials ? 1 : 0);
+        res.json({ id: result.lastInsertRowid, name, email });
+    } catch (e) {
+        res.status(400).json({ message: 'Email already exists in this chain' });
+    }
+});
+
+// ── DELETE /api/super/chains/:id/users/:userId ────────────────────────────────
+router.delete('/chains/:id/users/:userId', superAuth, (req, res) => {
+    superDb.prepare('DELETE FROM chain_users WHERE id = ? AND chain_id = ?').run(req.params.userId, req.params.id);
+    res.json({ message: 'User deleted' });
+});
+
+// ── GET /api/super/chains/:id/sync-status ────────────────────────────────────
+router.get('/chains/:id/sync-status', superAuth, (req, res) => {
+    const pending = superDb.prepare("SELECT COUNT(*) as c FROM sync_queue WHERE chain_id=? AND status='pending'").get(req.params.id);
+    const failed = superDb.prepare("SELECT COUNT(*) as c FROM sync_queue WHERE chain_id=? AND status='failed'").get(req.params.id);
+    const recent = superDb.prepare("SELECT * FROM sync_queue WHERE chain_id=? ORDER BY created_at DESC LIMIT 20").all(req.params.id);
+    res.json({ pending: pending.c, failed: failed.c, recent });
+});
+
 module.exports = router;

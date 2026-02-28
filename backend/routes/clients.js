@@ -25,22 +25,81 @@ const upload = multer({ storage });
 // db is injected per-request via req.db (tenant middleware)
 // Each route reads db from req.db
 router.get('/', auth, hasPermission('clients'), (req, res) => {
-    const clients = req.db.prepare("SELECT *, (first_name || ' ' || last_name) as full_name FROM clients").all();
-    res.json(clients);
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(200, parseInt(req.query.limit) || 100);
+    const offset = (page - 1) * limit;
+    const { search } = req.query;
+
+    if (search) {
+        const s = `%${search}%`;
+        const countQuery = `
+            SELECT COUNT(*) as count FROM clients c
+            WHERE
+                c.first_name LIKE ? OR c.last_name LIKE ? OR
+                (c.first_name || ' ' || c.last_name) LIKE ? OR
+                c.email LIKE ? OR c.phone LIKE ? OR
+                EXISTS (SELECT 1 FROM vehicles v WHERE v.client_id = c.id AND v.plate LIKE ?)
+        `;
+        const baseQuery = `
+            SELECT c.*, (c.first_name || ' ' || c.last_name) as full_name
+            FROM clients c
+            WHERE
+                c.first_name LIKE ? OR c.last_name LIKE ? OR
+                (c.first_name || ' ' || c.last_name) LIKE ? OR
+                c.email LIKE ? OR c.phone LIKE ? OR
+                EXISTS (SELECT 1 FROM vehicles v WHERE v.client_id = c.id AND v.plate LIKE ?)
+            ORDER BY c.first_name ASC, c.last_name ASC
+            LIMIT ? OFFSET ?
+        `;
+        const searchParams = [s, s, s, s, s, s];
+        const total = req.db.prepare(countQuery).get(...searchParams)?.count || 0;
+        const clients = req.db.prepare(baseQuery).all(...searchParams, limit, offset);
+        return res.json({
+            data: clients,
+            pagination: {
+                page,
+                limit,
+                total,
+                total_pages: Math.ceil(total / limit),
+                has_next: page * limit < total,
+                has_prev: page > 1
+            }
+        });
+    }
+
+    const total = req.db.prepare('SELECT COUNT(*) as count FROM clients').get()?.count || 0;
+    const clients = req.db.prepare(`
+        SELECT *, (first_name || ' ' || last_name) as full_name
+        FROM clients
+        ORDER BY first_name ASC, last_name ASC
+        LIMIT ? OFFSET ?
+    `).all(limit, offset);
+
+    res.json({
+        data: clients,
+        pagination: {
+            page,
+            limit,
+            total,
+            total_pages: Math.ceil(total / limit),
+            has_next: page * limit < total,
+            has_prev: page > 1
+        }
+    });
 });
 
 // @route   POST api/clients
 router.post('/', auth, hasPermission('clients'), (req, res) => {
     const { first_name, last_name, nickname, phone, email, address, notes, vehicle } = req.body;
 
-    // Use a transaction for consistency
-    const insertClient = req.db.prepare('INSERT INTO clients (first_name, last_name, nickname, phone, email, address, notes) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    const insertVehicle = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, version, year, km) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    const { randomUUID } = require('crypto');
+    const insertClient = req.db.prepare('INSERT INTO clients (first_name, last_name, nickname, phone, email, address, notes, uuid, source_tenant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    const insertVehicle = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, version, year, km, uuid, source_tenant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insertKmHistory = req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)');
     const insertRef = req.db.prepare('INSERT OR IGNORE INTO vehicle_reference (brand, model, version) VALUES (?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
-        const clientResult = insertClient.run(data.first_name, data.last_name, data.nickname, data.phone, data.email, data.address, data.notes);
+        const clientResult = insertClient.run(data.first_name, data.last_name, data.nickname, data.phone, data.email, data.address, data.notes, randomUUID(), req.slug);
         const clientId = clientResult.lastInsertRowid;
 
         if (data.vehicle) {
@@ -51,7 +110,9 @@ router.post('/', auth, hasPermission('clients'), (req, res) => {
                 data.vehicle.model,
                 data.vehicle.version || null,
                 data.vehicle.year || null,
-                data.vehicle.km || null
+                data.vehicle.km || null,
+                randomUUID(),
+                req.slug
             );
 
             // Auto-learn reference
@@ -71,6 +132,18 @@ router.post('/', auth, hasPermission('clients'), (req, res) => {
         const clientId = transaction({ first_name, last_name, nickname, phone, email, address, notes, vehicle });
         res.json({ id: clientId, first_name, last_name, email });
         logActivity(req.slug, req.user, 'CREATE_CLIENT', 'client', clientId, { first_name, last_name, email, hasVehicle: !!vehicle }, req);
+
+        // Chain sync
+        try {
+            const { enqueueSyncToChain } = require('./chainSync');
+            const newClient = req.db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId);
+            enqueueSyncToChain(req.slug, 'upsert_client', { ...newClient });
+
+            if (vehicle) {
+                const newVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.client_id = ?').get(clientId);
+                if (newVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...newVehicle });
+            }
+        } catch (e) { }
     } catch (err) {
         if (err.message.includes('plate')) {
             return res.status(400).json({ message: 'La patente ya está registrada' });
@@ -90,6 +163,13 @@ router.put('/:id', auth, hasPermission('clients'), (req, res) => {
         `).run(first_name, last_name, nickname, phone, email, address, notes, req.params.id);
         res.json({ message: 'Cliente actualizado' });
         logActivity(req.slug, req.user, 'UPDATE_CLIENT', 'client', req.params.id, { first_name, last_name, email }, req);
+
+        // Chain sync
+        try {
+            const { enqueueSyncToChain } = require('./chainSync');
+            const updatedClient = req.db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
+            if (updatedClient) enqueueSyncToChain(req.slug, 'upsert_client', { ...updatedClient });
+        } catch (e) { }
     } catch (err) {
         res.status(500).send('Server error');
     }
@@ -134,18 +214,27 @@ router.get('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
 // @route   POST api/clients/:id/vehicles
 router.post('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
     const { plate, brand, model, version, year, km, photos } = req.body;
+    const { randomUUID } = require('crypto');
     try {
-        const result = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, version, year, km, photos) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-            req.params.id, plate, brand, model, version || null, year, km, JSON.stringify(photos || [])
+        const result = req.db.prepare('INSERT INTO vehicles (client_id, plate, brand, model, version, year, km, photos, uuid, source_tenant) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+            req.params.id, plate, brand, model, version || null, year, km, JSON.stringify(photos || []), randomUUID(), req.slug
         );
 
+        const vehicleId = result.lastInsertRowid;
         // Auto-learn reference
         if (brand && model) {
             req.db.prepare('INSERT OR IGNORE INTO vehicle_reference (brand, model, version) VALUES (?, ?, ?)').run(brand, model, version || null);
         }
 
-        res.json({ id: result.lastInsertRowid, plate, brand, model });
-        logActivity(req.slug, req.user, 'ADD_VEHICLE', 'vehicle', result.lastInsertRowid, { plate, brand, model, version, clientId: req.params.id }, req);
+        res.json({ id: vehicleId, plate, brand, model });
+        logActivity(req.slug, req.user, 'ADD_VEHICLE', 'vehicle', vehicleId, { plate, brand, model, version, clientId: req.params.id }, req);
+
+        // Chain sync
+        try {
+            const { enqueueSyncToChain } = require('./chainSync');
+            const newVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.id = ?').get(vehicleId);
+            if (newVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...newVehicle });
+        } catch (e) { }
         // Log initial km
         if (km && parseInt(km) > 0) {
             req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)').run(

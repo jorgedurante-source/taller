@@ -58,11 +58,11 @@ export default function CreateOrderPage() {
         const fetchData = async () => {
             try {
                 const [clientsRes, catalogRes, configRes] = await Promise.all([
-                    api.get('/clients'),
+                    api.get('/clients?limit=1000'),
                     api.get('/services'),
                     api.get('/config')
                 ]);
-                const allClients = clientsRes.data || [];
+                const allClients = clientsRes.data.data || [];
                 setClients(allClients);
                 setCatalog(catalogRes.data || []);
                 setConfig(configRes.data || {});

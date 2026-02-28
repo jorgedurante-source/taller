@@ -292,6 +292,14 @@ function initTenantDb(db, slug) {
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         );
+
+        CREATE TABLE IF NOT EXISTS chain_sync_meta (
+            entity_type TEXT NOT NULL,
+            entity_uuid TEXT NOT NULL,
+            source_tenant TEXT NOT NULL,
+            synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (entity_type, entity_uuid)
+        );
     `);
 
     // Incremental Migrations Helper
@@ -314,6 +322,77 @@ function initTenantDb(db, slug) {
     addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
     addColumn('vehicles', 'version', "TEXT");
     addColumn('service_price_history', 'changed_by_id', "INTEGER");
+
+    addColumn('orders', 'uuid', 'TEXT');
+    addColumn('clients', 'uuid', 'TEXT');
+    addColumn('clients', 'source_tenant', 'TEXT');
+    addColumn('vehicles', 'uuid', 'TEXT');
+    addColumn('vehicles', 'source_tenant', 'TEXT');
+
+    // Backfill UUIDs for existing records that don't have one
+    const { randomUUID } = require('crypto');
+    try {
+        const ordersWithoutUuid = db.prepare("SELECT id FROM orders WHERE uuid IS NULL").all();
+        const updateOrderUuid = db.prepare("UPDATE orders SET uuid = ? WHERE id = ?");
+        for (const o of ordersWithoutUuid) updateOrderUuid.run(randomUUID(), o.id);
+
+        const clientsWithoutUuid = db.prepare("SELECT id FROM clients WHERE uuid IS NULL").all();
+        const updateClientUuid = db.prepare("UPDATE clients SET uuid = ? WHERE id = ?");
+        for (const c of clientsWithoutUuid) updateClientUuid.run(randomUUID(), c.id);
+
+        const vehiclesWithoutUuid = db.prepare("SELECT id FROM vehicles WHERE uuid IS NULL").all();
+        const updateVehicleUuid = db.prepare("UPDATE vehicles SET uuid = ? WHERE id = ?");
+        for (const v of vehiclesWithoutUuid) updateVehicleUuid.run(randomUUID(), v.id);
+    } catch (e) {
+        if (slug !== 'test') console.warn(`[tenant:${slug}] UUID backfill error:`, e.message);
+    }
+
+    // ── Performance Indexes ──────────────────────────────────────────────────────
+    const createIndex = (name, ddl) => {
+        try { db.exec(`CREATE INDEX IF NOT EXISTS ${name} ${ddl}`); }
+        catch (e) { /* already exists */ }
+    };
+
+    // orders — las queries más frecuentes del sistema
+    createIndex('idx_orders_client_id', 'ON orders(client_id)');
+    createIndex('idx_orders_vehicle_id', 'ON orders(vehicle_id)');
+    createIndex('idx_orders_status', 'ON orders(status)');
+    createIndex('idx_orders_created_at', 'ON orders(created_at DESC)');
+    createIndex('idx_orders_appointment', 'ON orders(appointment_date) WHERE appointment_date IS NOT NULL');
+    createIndex('idx_orders_payment_status', 'ON orders(payment_status)');
+    createIndex('idx_orders_delivered_at', 'ON orders(delivered_at) WHERE delivered_at IS NOT NULL');
+    createIndex('idx_orders_status_created', 'ON orders(status, created_at DESC)');
+
+    // order_items — se consultan en cada detalle de orden
+    createIndex('idx_order_items_order_id', 'ON order_items(order_id)');
+    createIndex('idx_order_items_service_id', 'ON order_items(service_id) WHERE service_id IS NOT NULL');
+
+    // order_history — se consulta en cada listado de órdenes (unread_messages)
+    createIndex('idx_order_history_order_id', 'ON order_history(order_id)');
+    createIndex('idx_order_history_unread', 'ON order_history(order_id, is_read) WHERE status = "response_received"');
+
+    // clients — búsqueda y login del portal
+    createIndex('idx_clients_email', 'ON clients(email) WHERE email IS NOT NULL');
+    createIndex('idx_clients_created_at', 'ON clients(created_at DESC)');
+    createIndex('idx_clients_uuid', 'ON clients(uuid) WHERE uuid IS NOT NULL');
+
+    // vehicles — lookup frecuente desde órdenes
+    createIndex('idx_vehicles_client_id', 'ON vehicles(client_id)');
+    createIndex('idx_vehicles_uuid', 'ON vehicles(uuid) WHERE uuid IS NOT NULL');
+
+    // audit_logs — paginación del historial
+    createIndex('idx_audit_logs_created_at', 'ON audit_logs(created_at DESC)');
+    createIndex('idx_audit_logs_entity', 'ON audit_logs(entity_type, entity_id)');
+
+    // system_logs — filtros del superadmin
+    createIndex('idx_system_logs_created_at', 'ON system_logs(created_at DESC)');
+    createIndex('idx_system_logs_level', 'ON system_logs(level, created_at DESC)');
+
+    // vehicle_km_history
+    createIndex('idx_km_history_vehicle_id', 'ON vehicle_km_history(vehicle_id, recorded_at DESC)');
+
+    // service_intervals
+    createIndex('idx_service_intervals_vehicle', 'ON service_intervals(vehicle_id)');
 
     // Roles Seeding
     const roles = [

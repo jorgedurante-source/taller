@@ -21,6 +21,7 @@ app.use('/uploads/:slug', (req, res, next) => {
 
 // ─── Super admin routes (no tenant middleware) ────────────────────────────────
 app.use('/api/super', require('./routes/super'));
+app.use('/api/chain', require('./routes/chain'));
 
 // ─── Tenant middleware ────────────────────────────────────────────────────────
 const tenantMiddleware = require('./middleware/tenant');
@@ -133,4 +134,10 @@ app.listen(port, () => {
     console.log(`MechHub running on port ${port}`);
     console.log(`Superuser login: POST /api/super/login`);
     console.log(`Tenant API: /api/:slug/...`);
+
+    // Start sync worker
+    try {
+        const { startSyncWorker } = require('./routes/chainSync');
+        startSyncWorker();
+    } catch (e) { console.error('Error starting sync worker:', e.message); }
 });

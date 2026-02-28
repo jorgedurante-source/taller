@@ -43,6 +43,8 @@ export default function OrdersPage() {
     const canSeeIncome = hasPermission('income');
     const [viewMode, setViewMode] = useState<'list' | 'kanban'>('list');
     const [collapsedColumns, setCollapsedColumns] = useState<string[]>([]);
+    const [ordersPage, setOrdersPage] = useState(1);
+    const [ordersPagination, setOrdersPagination] = useState<any>(null);
 
     const searchParams = useSearchParams();
     const statusParam = searchParams.get('status');
@@ -77,9 +79,32 @@ export default function OrdersPage() {
 
     useEffect(() => {
         const fetchOrders = async () => {
+            setLoading(true);
             try {
-                const response = await api.get('/orders');
-                setOrders(response.data);
+                // Determine search status vs plain text search
+                let filterStatus = 'active'; // Default
+                if (showAll) filterStatus = 'history';
+
+                // If search input matches exactly one status alias, we fetch JUST that status
+                const matchedStatuses = resolveStatusAliases(search);
+                let finalSearch = search;
+                let activeStatus = filterStatus;
+
+                if (matchedStatuses.length === 1) {
+                    activeStatus = matchedStatuses[0];
+                    finalSearch = ''; // If we filter by status, we clear text search unless we want both?
+                }
+
+                const queryParams = new URLSearchParams();
+                queryParams.set('page', ordersPage.toString());
+                queryParams.set('limit', '50');
+                queryParams.set('status', activeStatus);
+                if (finalSearch) queryParams.set('search', finalSearch);
+                if (onlyUnread) queryParams.set('unread_only', 'true');
+
+                const response = await api.get(`/orders?${queryParams.toString()}`);
+                setOrders(response.data.data);
+                setOrdersPagination(response.data.pagination);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -87,7 +112,11 @@ export default function OrdersPage() {
             }
         };
         fetchOrders();
-    }, []);
+    }, [ordersPage, search, showAll, onlyUnread, slug]);
+
+    useEffect(() => {
+        setOrdersPage(1);
+    }, [search, showAll, onlyUnread]);
 
     const STATUS_SEARCH_ALIASES: Record<string, string[]> = {
         appointment: ['turno', 'turno asignado', 'appointment'],
@@ -114,32 +143,8 @@ export default function OrdersPage() {
         return matched;
     };
 
-    const filteredOrders = orders.filter(o => {
-        const query = search.toLowerCase().trim();
+    const filteredOrders = orders; // Now filtered by backend
 
-        // Resolve query to possible English status keys
-        const matchedStatuses = query ? resolveStatusAliases(query) : [];
-
-        const matchesSearch = !query || (
-            (o.client_name || '').toLowerCase().includes(query) ||
-            (o.plate || '').toLowerCase().includes(query) ||
-            (o.model || '').toLowerCase().includes(query) ||
-            (o.status || '').toLowerCase().includes(query) ||
-            matchedStatuses.includes(o.status)
-        );
-
-        if (onlyUnread) {
-            return matchesSearch && o.unread_messages > 0;
-        }
-
-        if (showAll) {
-            // History mode: delivered and cancelled orders
-            return matchesSearch && (o.status === 'delivered' || o.status === 'cancelled');
-        }
-
-        // Default: all active orders (everything except delivered and cancelled)
-        return matchesSearch && o.status !== 'delivered' && o.status !== 'cancelled';
-    });
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -424,6 +429,31 @@ export default function OrdersPage() {
                             </div>
                         );
                     })}
+                </div>
+            )}
+
+            {ordersPagination && ordersPagination.total_pages > 1 && (
+                <div className="flex items-center justify-between pt-8 border-t border-slate-50">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        {ordersPagination.total} {t('orders')} · {t('page')} {ordersPagination.page} {t('of')} {ordersPagination.total_pages}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setOrdersPage(p => Math.max(1, p - 1))}
+                            disabled={!ordersPagination.has_prev}
+                            className="px-4 py-2 rounded-xl bg-white border border-slate-100 font-black text-xs text-slate-600 disabled:opacity-30 hover:border-indigo-300 transition-all shadow-sm flex items-center gap-2 uppercase tracking-tight"
+                        >
+                            <ChevronLeft size={16} /> {t('back')}
+                        </button>
+                        <div className="h-4 w-px bg-slate-100 mx-2"></div>
+                        <button
+                            onClick={() => setOrdersPage(p => Math.min(ordersPagination.total_pages, p + 1))}
+                            disabled={!ordersPagination.has_next}
+                            className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-900 font-black text-xs text-white disabled:opacity-30 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center gap-2 uppercase tracking-tight"
+                        >
+                            {t('next')} <ChevronRight size={16} />
+                        </button>
+                    </div>
                 </div>
             )}
         </div >

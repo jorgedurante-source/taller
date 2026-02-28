@@ -64,13 +64,13 @@ export default function AppointmentsPage() {
     const fetchOrders = async () => {
         try {
             const [ordersRes, configRes, clientsRes] = await Promise.all([
-                api.get('/orders'),
+                api.get('/orders?limit=1000'), // Calendar needs all relevant orders
                 api.get('/config'),
-                api.get('/clients')
+                api.get('/clients?limit=1000') // Also need all clients for assignment
             ]);
-            setOrders(ordersRes.data || []);
+            setOrders(ordersRes.data.data || []);
             setConfig(configRes.data || {});
-            setClients(clientsRes.data || []);
+            setClients(clientsRes.data.data || []);
         } catch (err) {
             console.error(err);
         } finally {

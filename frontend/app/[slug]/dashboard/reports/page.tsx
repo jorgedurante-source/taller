@@ -53,7 +53,8 @@ export default function ReportsPage() {
     const [loadingYOY, setLoadingYOY] = useState(false);
     const [priceHistoryData, setPriceHistoryData] = useState<any>(null);
     const [loadingPriceHistory, setLoadingPriceHistory] = useState(false);
-    const [priceHistoryFilter, setPriceHistoryFilter] = useState<number | ''>('');
+    const [priceHistoryFilter, setPriceHistoryFilter] = useState<string>('');
+    const [selectedClient, setSelectedClient] = useState<any>(null);
 
     // Export State
     const [showExportModal, setShowExportModal] = useState(false);
@@ -164,15 +165,14 @@ export default function ReportsPage() {
 
     // Filtered price history by selected service
     const filteredPriceHistory = priceHistoryData?.history?.filter((h: any) =>
-        !priceHistoryFilter || h.service_id === priceHistoryFilter
+        !priceHistoryFilter || h.service_name === priceHistoryFilter
     ) || [];
 
     // Chart data: price over time for selected service (or all if none selected)
     const priceChartData = filteredPriceHistory
         .slice()
         .reverse()
-        .map((h: any, idx: number) => ({
-            id: h.id || idx,
+        .map((h: any) => ({
             date: new Date(h.changed_at).toLocaleDateString('es-AR', { day: '2-digit', month: 'short', year: '2-digit' }),
             precio: h.new_price,
             servicio: h.service_name,
@@ -223,8 +223,7 @@ export default function ReportsPage() {
                     { id: 'finances', label: 'Finanzas y Precios', icon: <DollarSign size={16} /> },
                     { id: 'customers', label: 'Clientes', icon: <Users size={16} /> },
                     { id: 'vehicles', label: 'Vehículos', icon: <Car size={16} /> },
-                    { id: 'deuda', label: 'Deuda / Productividad', icon: <AlertCircle size={16} /> },
-                    { id: 'price-history', label: t('price_history'), icon: <Tag size={16} /> }
+                    { id: 'deuda', label: 'Deuda / Productividad', icon: <AlertCircle size={16} /> }
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -409,21 +408,11 @@ export default function ReportsPage() {
                             </div>
                         </ReportCard>
 
-                    </>
-                )}
-
-                {activeTab === 'price-history' && (
-                    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 mt-8">
                         <ReportCard
                             title={t('price_history')}
                             icon={<TrendingUp className="text-violet-500" size={20} />}
                         >
-                            {loadingPriceHistory ? (
-                                <div className="flex flex-col items-center justify-center py-20 gap-4">
-                                    <RefreshCw className="animate-spin text-violet-500" size={32} />
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest animate-pulse">{t('loading')}...</p>
-                                </div>
-                            ) : priceHistoryData?.summary?.length > 0 ? (
+                            {priceHistoryData?.summary?.length > 0 ? (
                                 <div className="space-y-6 mt-4">
 
                                     {/* Filter by service */}
@@ -432,11 +421,11 @@ export default function ReportsPage() {
                                         <select
                                             className="bg-slate-50 border-none rounded-2xl px-4 py-2 font-bold text-slate-700 text-xs focus:ring-4 focus:ring-indigo-100 transition-all"
                                             value={priceHistoryFilter}
-                                            onChange={e => setPriceHistoryFilter(e.target.value ? Number(e.target.value) : '')}
+                                            onChange={e => setPriceHistoryFilter(e.target.value)}
                                         >
                                             <option value="">Todos los servicios</option>
                                             {priceHistoryData.summary.map((svc: any) => (
-                                                <option key={svc.id} value={svc.id}>{svc.name}</option>
+                                                <option key={svc.id} value={svc.name}>{svc.name}</option>
                                             ))}
                                         </select>
                                         {priceHistoryFilter && (
@@ -453,23 +442,24 @@ export default function ReportsPage() {
                                     {priceChartData.length >= 2 && (
                                         <div>
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                                                Evolución de precio{priceHistoryFilter ? ` — ${priceHistoryData.summary.find((s: any) => s.id === priceHistoryFilter)?.name}` : ''}
+                                                Evolución de precio{priceHistoryFilter ? ` — ${priceHistoryFilter}` : ''}
                                             </p>
-                                            <div className="h-[300px] w-full">
+                                            <div className="h-[200px] w-full">
                                                 <ResponsiveContainer width="100%" height="100%">
-                                                    <LineChart data={priceChartData} margin={{ top: 5, right: 30, bottom: 5, left: 20 }}>
+                                                    <LineChart data={priceChartData} margin={{ top: 5, right: 10, bottom: 5, left: 0 }}>
                                                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                                         <XAxis
                                                             dataKey="date"
                                                             axisLine={false}
                                                             tickLine={false}
-                                                            tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                                            tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }}
                                                         />
                                                         <YAxis
                                                             axisLine={false}
                                                             tickLine={false}
-                                                            tick={{ fontSize: 10, fontWeight: 'bold', fill: '#94a3b8' }}
+                                                            tick={{ fontSize: 9, fontWeight: 'bold', fill: '#94a3b8' }}
                                                             tickFormatter={(v) => `$${Number(v).toLocaleString('es-AR')}`}
+                                                            width={70}
                                                         />
                                                         <Tooltip
                                                             contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontSize: '12px' }}
@@ -479,9 +469,9 @@ export default function ReportsPage() {
                                                             type="monotone"
                                                             dataKey="precio"
                                                             stroke="#8b5cf6"
-                                                            strokeWidth={3}
-                                                            dot={{ fill: '#8b5cf6', r: 5, strokeWidth: 2, stroke: '#fff' }}
-                                                            activeDot={{ r: 7 }}
+                                                            strokeWidth={2.5}
+                                                            dot={{ fill: '#8b5cf6', r: 4 }}
+                                                            activeDot={{ r: 6 }}
                                                         />
                                                     </LineChart>
                                                 </ResponsiveContainer>
@@ -503,7 +493,7 @@ export default function ReportsPage() {
                                             </thead>
                                             <tbody>
                                                 {(priceHistoryFilter
-                                                    ? priceHistoryData.summary.filter((s: any) => s.id === priceHistoryFilter)
+                                                    ? priceHistoryData.summary.filter((s: any) => s.name === priceHistoryFilter)
                                                     : priceHistoryData.summary
                                                 ).map((svc: any) => {
                                                     const pctChange = svc.initial_price && svc.initial_price > 0
@@ -512,8 +502,8 @@ export default function ReportsPage() {
                                                     return (
                                                         <tr
                                                             key={svc.id}
-                                                            className={`border-b border-slate-50 transition-colors cursor-pointer ${priceHistoryFilter === svc.id ? 'bg-violet-50/50' : 'hover:bg-slate-50/50'}`}
-                                                            onClick={() => setPriceHistoryFilter(priceHistoryFilter === svc.id ? '' : svc.id)}
+                                                            className={`border-b border-slate-50 transition-colors cursor-pointer ${priceHistoryFilter === svc.name ? 'bg-violet-50/50' : 'hover:bg-slate-50/50'}`}
+                                                            onClick={() => setPriceHistoryFilter(priceHistoryFilter === svc.name ? '' : svc.name)}
                                                         >
                                                             <td className="py-4 px-4 font-black text-slate-800 uppercase italic text-xs">{svc.name}</td>
                                                             <td className="py-4 px-4 text-right font-bold text-slate-400 text-xs tabular-nums">
@@ -546,7 +536,7 @@ export default function ReportsPage() {
                                     {filteredPriceHistory.length > 0 && (
                                         <div>
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
-                                                Log de cambios{priceHistoryFilter ? ` — ${priceHistoryData.summary.find((s: any) => s.id === priceHistoryFilter)?.name}` : ''}
+                                                Log de cambios{priceHistoryFilter ? ` — ${priceHistoryFilter}` : ''}
                                             </p>
                                             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                                                 {filteredPriceHistory.slice(0, 30).map((entry: any) => (
@@ -583,7 +573,8 @@ export default function ReportsPage() {
                                 </div>
                             )}
                         </ReportCard>
-                    </div>
+
+                    </>
                 )}
 
                 {activeTab === 'customers' && (
@@ -909,9 +900,18 @@ export default function ReportsPage() {
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {debtData?.clients?.map((d: any) => (
-                                            <tr key={d.id} className="hover:bg-slate-50/50 transition-colors">
+                                            <tr
+                                                key={d.id}
+                                                className="hover:bg-slate-50/50 transition-colors cursor-pointer group"
+                                                onClick={() => setSelectedClient(d)}
+                                            >
                                                 <td className="px-6 py-4">
-                                                    <p className="font-bold text-slate-900 uppercase italic text-sm">{d.name}</p>
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-black text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                                                            {d.name.split(' ').map((n: any) => n[0]).join('').toUpperCase().slice(0, 2)}
+                                                        </div>
+                                                        <p className="font-bold text-slate-900 uppercase italic text-sm group-hover:text-indigo-600 transition-colors">{d.name}</p>
+                                                    </div>
                                                 </td>
                                                 <td className="px-6 py-4 text-center">
                                                     <span className="bg-white border border-slate-100 px-2.5 py-1 rounded-lg text-[10px] font-black text-slate-500">
@@ -1132,6 +1132,83 @@ export default function ReportsPage() {
                     </div>
                 )
             }
+
+            {/* Debt Detail Modal */}
+            {selectedClient && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[110] flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl p-10 animate-in fade-in zoom-in duration-300 max-h-[90vh] flex flex-col">
+                        <div className="flex justify-between items-start mb-8 shrink-0">
+                            <div>
+                                <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter">Detalle de Deuda</h2>
+                                <p className="text-[11px] text-indigo-600 font-black uppercase tracking-widest mt-2">
+                                    {selectedClient.name}
+                                </p>
+                            </div>
+                            <button onClick={() => setSelectedClient(null)} className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-red-500 transition-all">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto pr-2 custom-scrollbar space-y-4">
+                            {debtData?.ordersDetail?.filter((o: any) => o.client_id === selectedClient.id).map((order: any) => (
+                                <div key={order.order_id} className="bg-slate-50 rounded-3xl p-6 border border-slate-100 hover:border-indigo-100 transition-all">
+                                    <div className="flex justify-between items-center mb-4">
+                                        <div className="flex items-center gap-4">
+                                            <div className="bg-white px-4 py-2 rounded-2xl border border-slate-200 font-black text-slate-900 italic">
+                                                ORD #{order.order_id}
+                                            </div>
+                                            <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest ${order.order_status === 'delivered' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'
+                                                }`}>
+                                                {order.order_status}
+                                            </span>
+                                        </div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                            Creada: {new Date(order.created_at).toLocaleDateString()}
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-6">
+                                        <div className="bg-white/50 p-4 rounded-2xl border border-slate-100">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Orden</p>
+                                            <p className="text-lg font-black text-slate-900 tabular-nums">$ {order.total_amount.toLocaleString()}</p>
+                                        </div>
+                                        <div className="bg-white/50 p-4 rounded-2xl border border-slate-100">
+                                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Pagado</p>
+                                            <p className="text-lg font-black text-emerald-600 tabular-nums font-mono">$ {order.paid_amount.toLocaleString()}</p>
+                                        </div>
+                                        <div className="bg-white/50 p-4 rounded-2xl border border-red-100 bg-red-50/20">
+                                            <p className="text-[9px] font-black text-red-400 uppercase tracking-widest mb-1">Pendiente</p>
+                                            <p className="text-lg font-black text-red-600 tabular-nums font-mono italic">$ {order.outstanding.toLocaleString()}</p>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-6 flex justify-end">
+                                        <a
+                                            href={`/${slug}/dashboard/orders?id=${order.order_id}`}
+                                            className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] italic hover:text-indigo-800 transition-colors flex items-center gap-2"
+                                        >
+                                            Ir a la orden <ClipboardList size={14} />
+                                        </a>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="mt-8 pt-8 border-t border-slate-100 flex justify-between items-center shrink-0">
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Pendiente Cliente</p>
+                                <p className="text-3xl font-black text-red-600 italic tracking-tighter mt-1">$ {selectedClient.outstanding.toLocaleString()}</p>
+                            </div>
+                            <button
+                                onClick={() => setSelectedClient(null)}
+                                className="px-10 py-4 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase text-[10px] tracking-widest hover:bg-slate-800 transition-all active:scale-95"
+                            >
+                                {t('close')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

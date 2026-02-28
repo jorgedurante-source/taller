@@ -4,7 +4,7 @@ import { useSlug } from '@/lib/slug';
 import React, { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import Link from 'next/link';
-import { Plus, Search, User, Phone, Mail, X, Car, Hash, Calendar, ArrowRight, MapPin, Notebook } from 'lucide-react';
+import { Plus, Search, User, Phone, Mail, X, Car, Hash, Calendar, ArrowRight, MapPin, Notebook, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNotification } from '@/lib/notification';
 import { useAuth } from '@/lib/auth';
 import { useTranslation } from '@/lib/i18n';
@@ -16,6 +16,8 @@ export default function ClientsPage() {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [search, setSearch] = useState('');
+    const [clientsPage, setClientsPage] = useState(1);
+    const [clientsPagination, setClientsPagination] = useState<any>(null);
     const { notify } = useNotification();
     const { hasPermission } = useAuth();
     const { t } = useTranslation();
@@ -51,8 +53,14 @@ export default function ClientsPage() {
     const fetchClients = async () => {
         setLoading(true);
         try {
-            const response = await api.get('/clients');
-            setClients(response.data);
+            const queryParams = new URLSearchParams();
+            queryParams.set('page', clientsPage.toString());
+            queryParams.set('limit', '100');
+            if (search) queryParams.set('search', search);
+
+            const response = await api.get(`/clients?${queryParams.toString()}`);
+            setClients(response.data.data);
+            setClientsPagination(response.data.pagination);
         } catch (err) {
             console.error(err);
         } finally {
@@ -62,7 +70,11 @@ export default function ClientsPage() {
 
     useEffect(() => {
         fetchClients();
-    }, []);
+    }, [clientsPage, search]);
+
+    useEffect(() => {
+        setClientsPage(1);
+    }, [search]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -86,16 +98,8 @@ export default function ClientsPage() {
         }
     };
 
-    const filteredClients = clients.filter(c => {
-        const query = search.toLowerCase();
-        return (
-            (c.first_name || '').toLowerCase().includes(query) ||
-            (c.last_name || '').toLowerCase().includes(query) ||
-            (c.nickname && c.nickname.toLowerCase().includes(query)) ||
-            (c.phone || '').includes(query) ||
-            (c.email || '').toLowerCase().includes(query)
-        );
-    });
+    const filteredClients = clients; // Now filtered by backend
+
 
     return (
         <div className="space-y-6">
@@ -290,6 +294,31 @@ export default function ClientsPage() {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Pagination */}
+            {clientsPagination && clientsPagination.total_pages > 1 && (
+                <div className="flex items-center justify-between pt-8 border-t border-slate-50">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        {clientsPagination.total} {t('clients')} · {t('page')} {clientsPagination.page} {t('of')} {clientsPagination.total_pages}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setClientsPage(p => Math.max(1, p - 1))}
+                            disabled={!clientsPagination.has_prev}
+                            className="px-4 py-2 rounded-xl bg-white border border-slate-100 font-black text-xs text-slate-600 disabled:opacity-30 hover:border-indigo-300 transition-all shadow-sm flex items-center gap-2 uppercase tracking-tight"
+                        >
+                            <ChevronLeft size={16} /> {t('back')}
+                        </button>
+                        <div className="h-4 w-px bg-slate-100 mx-2"></div>
+                        <button
+                            onClick={() => setClientsPage(p => Math.min(clientsPagination.total_pages, p + 1))}
+                            disabled={!clientsPagination.has_next}
+                            className="px-4 py-2 rounded-xl bg-slate-900 border border-slate-900 font-black text-xs text-white disabled:opacity-30 hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center gap-2 uppercase tracking-tight"
+                        >
+                            {t('next')} <ChevronRight size={16} />
+                        </button>
                     </div>
                 </div>
             )}

@@ -68,6 +68,50 @@ db.exec(`
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS tenant_chains (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        slug TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        visibility_level TEXT DEFAULT 'summary',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS chain_members (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chain_id INTEGER NOT NULL,
+        tenant_slug TEXT NOT NULL,
+        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (chain_id) REFERENCES tenant_chains(id) ON DELETE CASCADE,
+        UNIQUE(chain_id, tenant_slug)
+    );
+
+    CREATE TABLE IF NOT EXISTS chain_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chain_id INTEGER NOT NULL,
+        email TEXT NOT NULL,
+        password TEXT NOT NULL,
+        name TEXT NOT NULL,
+        can_see_financials INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (chain_id) REFERENCES tenant_chains(id) ON DELETE CASCADE,
+        UNIQUE(chain_id, email)
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chain_id INTEGER NOT NULL,
+        source_slug TEXT NOT NULL,
+        target_slug TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        status TEXT DEFAULT 'pending',
+        attempts INTEGER DEFAULT 0,
+        error_message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        processed_at DATETIME,
+        FOREIGN KEY (chain_id) REFERENCES tenant_chains(id) ON DELETE CASCADE
+    );
 `);
 
 // 2. Incremental Migrations
@@ -87,6 +131,7 @@ addColumn('workshops', 'environment', "TEXT DEFAULT 'prod'");
 addColumn('workshops', 'enabled_modules', "TEXT DEFAULT '[\"dashboard\", \"clients\", \"vehicles\", \"orders\", \"income\", \"settings\", \"users\", \"roles\", \"reminders\", \"appointments\", \"suppliers\", \"audit\"]'");
 addColumn('super_users', 'last_activity', 'DATETIME');
 addColumn('super_users', 'language', "TEXT DEFAULT 'es'");
+addColumn('workshops', 'chain_id', 'INTEGER');
 
 // Initial global settings for timeouts
 function ensureSetting(key, defaultValue) {

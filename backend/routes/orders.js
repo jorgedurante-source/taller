@@ -29,32 +29,93 @@ const upload = multer({ storage });
 
 // @route   GET api/orders
 router.get('/', auth, hasPermission('orders'), (req, res) => {
-    const orders = req.db.prepare(`
-        SELECT o.*, 
-            (c.first_name || ' ' || c.last_name) as client_name, 
-            v.plate, v.model,
-            COALESCE((SELECT SUM(subtotal) FROM order_items WHERE order_id = o.id), 0) as order_total,
-            (SELECT COUNT(*) FROM order_history WHERE order_id = o.id AND status = 'response_received' AND (is_read = 0 OR is_read IS NULL)) as unread_messages
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 50);
+    const offset = (page - 1) * limit;
+    const { status, search, payment_status } = req.query;
+
+    let where = [];
+    let params = [];
+
+    if (status === 'active') {
+        where.push('o.status NOT IN ("delivered", "cancelled")');
+    } else if (status === 'history') {
+        where.push('o.status IN ("delivered", "cancelled")');
+    } else if (status && status !== 'all') {
+        where.push('o.status = ?');
+        params.push(status);
+    }
+
+    if (payment_status && payment_status !== 'all') {
+        where.push('o.payment_status = ?');
+        params.push(payment_status);
+    }
+
+    if (req.query.unread_only === 'true') {
+        where.push("(SELECT COUNT(*) FROM order_history WHERE order_id = o.id AND status = 'response_received' AND (is_read = 0 OR is_read IS NULL)) > 0");
+    }
+
+    if (search) {
+        where.push(`(
+            (c.first_name || ' ' || c.last_name) LIKE ? OR
+            v.plate LIKE ? OR
+            CAST(o.id AS TEXT) LIKE ?
+        )`);
+        params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    }
+
+    const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
+
+    const total = req.db.prepare(`
+        SELECT COUNT(*) as count
         FROM orders o
         JOIN clients c ON o.client_id = c.id
         JOIN vehicles v ON o.vehicle_id = v.id
+        ${whereClause}
+    `).get(...params)?.count || 0;
+
+    const orders = req.db.prepare(`
+        SELECT o.*, 
+            (c.first_name || ' ' || c.last_name) as client_name, 
+            v.plate, v.model, v.brand,
+            COALESCE((SELECT SUM(subtotal) FROM order_items WHERE order_id = o.id), 0) as order_total,
+            (SELECT COUNT(*) FROM order_history 
+             WHERE order_id = o.id AND status = 'response_received' 
+             AND (is_read = 0 OR is_read IS NULL)) as unread_messages
+        FROM orders o
+        JOIN clients c ON o.client_id = c.id
+        JOIN vehicles v ON o.vehicle_id = v.id
+        ${whereClause}
         ORDER BY o.created_at DESC
-    `).all();
-    res.json(orders);
+        LIMIT ? OFFSET ?
+    `).all(...params, limit, offset);
+
+    res.json({
+        data: orders,
+        pagination: {
+            page,
+            limit,
+            total,
+            total_pages: Math.ceil(total / limit),
+            has_next: page * limit < total,
+            has_prev: page > 1,
+        }
+    });
 });
 
 // @route   POST api/orders
 router.post('/', auth, hasPermission('orders'), async (req, res) => {
     const { client_id, vehicle_id, description, items } = req.body;
 
-    const crypto = require('crypto');
+    const { randomUUID } = require('crypto');
+    const orderUuid = randomUUID();
     const share_token = crypto.randomBytes(6).toString('hex');
-    const insertOrder = req.db.prepare('INSERT INTO orders (client_id, vehicle_id, description, created_by_id, share_token) VALUES (?, ?, ?, ?, ?)');
+    const insertOrder = req.db.prepare('INSERT INTO orders (client_id, vehicle_id, description, created_by_id, share_token, uuid) VALUES (?, ?, ?, ?, ?, ?)');
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
     const transaction = req.db.transaction((data) => {
         const actingUserId = req.user.id === 0 ? null : req.user.id;
-        const orderResult = insertOrder.run(data.client_id, data.vehicle_id, data.description || '', actingUserId, share_token);
+        const orderResult = insertOrder.run(data.client_id, data.vehicle_id, data.description || '', actingUserId, share_token, orderUuid);
         const orderId = orderResult.lastInsertRowid;
 
         if (data.items && data.items.length > 0) {
