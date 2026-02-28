@@ -371,15 +371,21 @@ export default function ClientDashboardPage() {
                                                         {!v.predicted_next_km ? t('pending') : (v.last_km > v.predicted_next_km ? t('critical') : t('optimum'))}
                                                     </span>
                                                 </div>
-                                                {v.predicted_next_km && (
-                                                    <div className="h-1.5 w-full bg-slate-50 rounded-full mt-2 overflow-hidden">
-                                                        <div
-                                                            className={`h-full ${v.last_km > v.predicted_next_km ? 'bg-red-500' : 'bg-emerald-500'}`}
-                                                            style={{ width: `${Math.min(100, (v.last_km / v.predicted_next_km) * 100)}%` }}
-                                                        ></div>
+                                                {v.predicted_next_km ? (
+                                                    <div className="space-y-1">
+                                                        <div className="h-1.5 w-full bg-slate-50 rounded-full mt-2 overflow-hidden">
+                                                            <div
+                                                                className={`h-full ${v.last_km > v.predicted_next_km ? 'bg-red-500' : 'bg-emerald-500'}`}
+                                                                style={{ width: `${Math.min(100, (v.last_km / v.predicted_next_km) * 100)}%` }}
+                                                            ></div>
+                                                        </div>
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-tight mt-1 truncate">
+                                                            {v.next_service_desc || t('next_suggested_service')}: <span className="text-slate-600 font-bold">{v.predicted_next_km.toLocaleString()} km</span>
+                                                        </p>
                                                     </div>
+                                                ) : (
+                                                    <p className="text-[9px] font-bold text-slate-400 mt-1 italic">{t('history_required_prediction')}</p>
                                                 )}
-                                                {!v.predicted_next_km && <p className="text-[9px] font-bold text-slate-400 mt-1 italic">{t('history_required_prediction')}</p>}
                                             </div>
                                         </div>
                                     ))}
@@ -505,7 +511,7 @@ export default function ClientDashboardPage() {
                                                     ></div>
                                                 </div>
                                                 <p className="text-[9px] font-bold text-slate-400 uppercase">
-                                                    {t('next_suggested_service')}: <span className="text-slate-600">{v.predicted_next_km.toLocaleString()} km</span>
+                                                    {v.next_service_desc || t('next_suggested_service')}: <span className="text-slate-600">{v.predicted_next_km.toLocaleString()} km</span>
                                                 </p>
                                             </div>
                                         ) : (

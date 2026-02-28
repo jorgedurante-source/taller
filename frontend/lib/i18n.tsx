@@ -61,6 +61,7 @@ export const translations: Translations = {
     hs: { en: 'hs', es: 'hs' },
     day_of_appointment: { en: 'Appointment Day', es: 'Día de tu Turno' },
     progress: { en: 'Progress', es: 'Avance' },
+    at: { en: 'at', es: 'a los' },
 
     // Orders Status
     pending: { en: 'Pending', es: 'Pendiente' },

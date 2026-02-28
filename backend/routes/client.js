@@ -26,16 +26,20 @@ router.get('/me', auth, (req, res) => {
         }
 
         const vehicles = req.db.prepare(`
+            WITH ImminentServices AS (
+                SELECT *, ROW_NUMBER() OVER (PARTITION BY vehicle_id ORDER BY predicted_next_km ASC) as rn
+                FROM service_intervals
+                WHERE predicted_next_km IS NOT NULL
+            )
             SELECT v.*, 
-                MIN(si.predicted_next_km) as predicted_next_km, 
-                MIN(si.predicted_next_date) as predicted_next_date, 
-                MAX(si.confidence) as confidence, 
-                AVG(si.avg_km_interval) as avg_km_interval,
-                (SELECT km FROM vehicle_km_history WHERE vehicle_id = v.id ORDER BY recorded_at DESC LIMIT 1) as last_km
+                ims.service_description as next_service_desc,
+                ims.predicted_next_km, 
+                ims.predicted_next_date, 
+                ims.confidence,
+                (SELECT km FROM vehicle_km_history kh WHERE kh.vehicle_id = v.id ORDER BY recorded_at DESC LIMIT 1) as last_km
             FROM vehicles v
-            LEFT JOIN service_intervals si ON v.id = si.vehicle_id
+            LEFT JOIN ImminentServices ims ON v.id = ims.vehicle_id AND ims.rn = 1
             WHERE v.client_id = ?
-            GROUP BY v.id
         `).all(client.id);
 
         const orders = req.db.prepare(`
