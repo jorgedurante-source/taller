@@ -713,7 +713,7 @@ export default function SuperAdminDashboard() {
             const res = await superApi.post('/workshops/migrate');
             notify('success', `Migración completada: ${res.data.success} talleres actualizados.`);
             if (res.data.failed > 0) {
-                notify('warn', `${res.data.failed} talleres fallaron al migrar.`);
+                notify('warning', `${res.data.failed} talleres fallaron al migrar.`);
             }
             fetchData();
         } catch (err) {
