@@ -137,6 +137,7 @@ export default function SuperAdminDashboard() {
     const [showReportsModal, setShowReportsModal] = useState(false);
     const [globalReports, setGlobalReports] = useState<any>(null);
     const [loadingGlobalReports, setLoadingGlobalReports] = useState(false);
+    const [comparisonSort, setComparisonSort] = useState<{ key: string; dir: 'asc' | 'desc' }>({ key: 'orders_this_month', dir: 'desc' });
     const { config } = useConfig();
     const { notify } = useNotification();
     const router = useRouter();
@@ -2392,6 +2393,158 @@ export default function SuperAdminDashboard() {
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* ── Comparador de Talleres ── */}
+                                {globalReports.comparison?.length > 0 && (
+                                    <div className="mt-8 bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
+                                        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <BarChart3 className="text-indigo-500" size={20} />
+                                                <div>
+                                                    <h3 className="font-black text-slate-900 uppercase italic tracking-tight">Comparador de Talleres</h3>
+                                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Métricas de los últimos 30-90 días · Clic en columna para ordenar</p>
+                                                </div>
+                                            </div>
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                                                {globalReports.comparison.length} talleres
+                                            </span>
+                                        </div>
+
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead>
+                                                    <tr className="border-b border-slate-100 bg-slate-50/50">
+                                                        {[
+                                                            { key: 'name', label: 'Taller' },
+                                                            { key: 'orders_this_month', label: 'Órdenes / Mes' },
+                                                            { key: 'active_orders', label: 'Activas' },
+                                                            { key: 'avg_ticket', label: 'Ticket Promedio' },
+                                                            { key: 'avg_repair_days', label: 'Días Promedio' },
+                                                            { key: 'total_clients', label: 'Clientes' },
+                                                            { key: 'return_rate', label: '% Retención' },
+                                                        ].map(col => (
+                                                            <th
+                                                                key={col.key}
+                                                                className="px-6 py-4 text-left cursor-pointer group select-none"
+                                                                onClick={() => setComparisonSort(prev =>
+                                                                    prev.key === col.key
+                                                                        ? { key: col.key, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
+                                                                        : { key: col.key, dir: 'desc' }
+                                                                )}
+                                                            >
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className={`text-[10px] font-black uppercase tracking-widest transition-colors ${comparisonSort.key === col.key ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-700'}`}>
+                                                                        {col.label}
+                                                                    </span>
+                                                                    <span className={`text-[8px] transition-opacity ${comparisonSort.key === col.key ? 'text-indigo-400 opacity-100' : 'opacity-0 group-hover:opacity-50'}`}>
+                                                                        {comparisonSort.dir === 'desc' ? '↓' : '↑'}
+                                                                    </span>
+                                                                </div>
+                                                            </th>
+                                                        ))}
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {[...globalReports.comparison]
+                                                        .sort((a: any, b: any) => {
+                                                            const key = comparisonSort.key as keyof typeof a;
+                                                            const aVal = a[key] ?? 0;
+                                                            const bVal = b[key] ?? 0;
+                                                            const mult = comparisonSort.dir === 'desc' ? -1 : 1;
+                                                            return typeof aVal === 'string'
+                                                                ? mult * aVal.localeCompare(String(bVal))
+                                                                : mult * (Number(aVal) - Number(bVal));
+                                                        })
+                                                        .map((w: any, idx) => {
+                                                            const isTop = idx === 0 && comparisonSort.key !== 'name';
+                                                            return (
+                                                                <tr
+                                                                    key={w.slug}
+                                                                    className={`border-b border-slate-50 transition-colors ${isTop ? 'bg-indigo-50/30' : 'hover:bg-slate-50/50'}`}
+                                                                >
+                                                                    {/* Taller */}
+                                                                    <td className="px-6 py-4">
+                                                                        <div className="flex items-center gap-3">
+                                                                            {isTop && (
+                                                                                <span className="text-[9px] font-black text-indigo-500 bg-indigo-100 px-2 py-0.5 rounded-full uppercase">Top</span>
+                                                                            )}
+                                                                            <div>
+                                                                                <p className="font-black text-slate-900 uppercase italic text-xs">{w.name}</p>
+                                                                                <p className="text-[9px] font-bold text-slate-400">/{w.slug}</p>
+                                                                            </div>
+                                                                            <span className={`ml-auto text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${w.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-500'}`}>
+                                                                                {w.status === 'active' ? 'Activo' : 'Inactivo'}
+                                                                            </span>
+                                                                        </div>
+                                                                    </td>
+                                                                    {/* Órdenes este mes */}
+                                                                    <td className="px-6 py-4">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="font-black text-slate-900 text-sm tabular-nums">{w.orders_this_month}</span>
+                                                                            {comparisonSort.key === 'orders_this_month' && w.orders_this_month > 0 && (
+                                                                                <div className="h-1.5 w-16 bg-slate-100 rounded-full overflow-hidden">
+                                                                                    <div
+                                                                                        className="h-full bg-indigo-500 rounded-full"
+                                                                                        style={{ width: `${Math.min(100, (w.orders_this_month / Math.max(...globalReports.comparison.map((x: any) => x.orders_this_month))) * 100)}%` }}
+                                                                                    />
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                    {/* Activas */}
+                                                                    <td className="px-6 py-4">
+                                                                        <span className={`font-black tabular-nums text-sm ${w.active_orders > 10 ? 'text-amber-600' : 'text-slate-900'}`}>
+                                                                            {w.active_orders}
+                                                                        </span>
+                                                                    </td>
+                                                                    {/* Ticket Promedio */}
+                                                                    <td className="px-6 py-4">
+                                                                        <span className="font-black text-slate-900 text-sm tabular-nums">
+                                                                            {w.avg_ticket > 0 ? `$${Number(w.avg_ticket).toLocaleString('es-AR')}` : '—'}
+                                                                        </span>
+                                                                    </td>
+                                                                    {/* Días promedio */}
+                                                                    <td className="px-6 py-4">
+                                                                        <span className={`font-black text-sm tabular-nums ${w.avg_repair_days > 7 ? 'text-rose-600' : w.avg_repair_days > 3 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                                                            {w.avg_repair_days > 0 ? `${w.avg_repair_days}d` : '—'}
+                                                                        </span>
+                                                                    </td>
+                                                                    {/* Total clientes */}
+                                                                    <td className="px-6 py-4">
+                                                                        <span className="font-black text-slate-900 text-sm tabular-nums">{w.total_clients}</span>
+                                                                    </td>
+                                                                    {/* Tasa de retención */}
+                                                                    <td className="px-6 py-4">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className={`font-black text-sm tabular-nums ${w.return_rate >= 50 ? 'text-emerald-600' : w.return_rate >= 25 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                                                                {w.return_rate > 0 ? `${w.return_rate}%` : '—'}
+                                                                            </span>
+                                                                            {w.return_rate > 0 && (
+                                                                                <div className="h-1.5 w-12 bg-slate-100 rounded-full overflow-hidden">
+                                                                                    <div
+                                                                                        className={`h-full rounded-full ${w.return_rate >= 50 ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                                                                                        style={{ width: `${Math.min(100, w.return_rate)}%` }}
+                                                                                    />
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* Legend */}
+                                        <div className="px-6 py-4 border-t border-slate-50 flex flex-wrap gap-6 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                            <span><span className="text-emerald-500">Verde</span> días promedio → rápido (&lt;3d)</span>
+                                            <span><span className="text-amber-500">Amarillo</span> → normal (3-7d)</span>
+                                            <span><span className="text-rose-500">Rojo</span> → lento (&gt;7d)</span>
+                                            <span className="ml-auto">Retención: % clientes con más de 1 orden</span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

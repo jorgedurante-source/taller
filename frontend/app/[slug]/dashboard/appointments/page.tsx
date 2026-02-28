@@ -40,6 +40,7 @@ export default function AppointmentsPage() {
     const [movingOrder, setMovingOrder] = useState<any>(null);
     const [moveDate, setMoveDate] = useState<string>('');
     const [moveTime, setMoveTime] = useState<string>('09:00');
+    const [dayView, setDayView] = useState<Date | null>(null);
 
     // Search state
     const [clientSearch, setClientSearch] = useState('');
@@ -235,20 +236,32 @@ export default function AppointmentsPage() {
                 .sort((a, b) => a.appointment_date.localeCompare(b.appointment_date));
 
             const isToday = new Date().toISOString().split('T')[0] === dateStr;
-
             grid.push(
                 <div
                     key={d}
-                    className={`min-h-[120px] p-3 rounded-2xl border border-slate-200 transition-all cursor-pointer hover:border-indigo-400 hover:shadow-lg hover:shadow-indigo-500/10 ${isToday ? 'bg-indigo-50 border-indigo-200' : 'bg-white'}`}
-                    onClick={() => { setSelectedDate(cellDate); setAppointmentTime(''); }}
+                    className={`min-h-[120px] p-3 rounded-2xl border border-slate-200 transition-all cursor-pointer group hover:border-indigo-400 hover:shadow-lg hover:shadow-indigo-500/10 ${isToday ? 'bg-indigo-50 border-indigo-200' : 'bg-white'}`}
+                    onClick={() => setDayView(cellDate)}
                 >
                     <div className="flex justify-between items-start mb-2">
                         <span className={`text-sm font-black ${isToday ? 'text-indigo-600' : 'text-slate-400'}`}>{d}</span>
-                        {dayAppointments.length > 0 && (
-                            <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full">
-                                {dayAppointments.length}
-                            </span>
-                        )}
+                        <div className="flex items-center gap-1">
+                            {dayAppointments.length > 0 && (
+                                <span className="text-[10px] bg-slate-100 text-slate-600 font-bold px-2 py-0.5 rounded-full">
+                                    {dayAppointments.length}
+                                </span>
+                            )}
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation(); // avoid dayView
+                                    setSelectedDate(cellDate);
+                                    setAppointmentTime('');
+                                }}
+                                className="opacity-0 group-hover:opacity-100 p-1 bg-indigo-600 text-white rounded-lg transition-all hover:scale-110"
+                                title="Asignar turno"
+                            >
+                                <Plus size={12} />
+                            </button>
+                        </div>
                     </div>
 
                     <div className="space-y-1">
@@ -268,54 +281,243 @@ export default function AppointmentsPage() {
                     </div>
                 </div>
             );
+
         }
         return grid;
     };
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 pb-20">
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                    <h2 className="text-4xl font-black text-slate-900 tracking-tight uppercase italic flex items-center gap-3">
-                        <Calendar className="text-indigo-600" size={32} /> Calendario de Turnos
-                    </h2>
-                    <p className="text-slate-500 font-bold mt-1 tracking-wider uppercase text-xs">Asignación y seguimiento</p>
-                </div>
-                <Link href={`/${slug}/dashboard/orders/create`}>
-                    <button className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-900/20">
-                        <Plus size={16} /> Nueva Orden
-                    </button>
-                </Link>
-            </header>
+        <div className="max-w-6xl mx-auto space-y-8 pb-20">            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+                <h2 className="text-4xl font-black text-slate-900 tracking-tight uppercase italic flex items-center gap-3">
+                    <Calendar className="text-indigo-600" size={32} /> Calendario de Turnos
+                </h2>
+                <p className="text-slate-500 font-bold mt-1 tracking-wider uppercase text-xs">Asignación y seguimiento</p>
+            </div>
+            <div className="flex items-center bg-white border border-slate-100 rounded-2xl p-1 shadow-sm">
+                <button
+                    onClick={() => setDayView(null)}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${!dayView ? 'bg-slate-900 text-white shadow' : 'text-slate-400 hover:text-slate-900'}`}
+                >
+                    <CalendarDays size={14} /> Mes
+                </button>
+                <button
+                    onClick={() => setDayView(new Date())}
+                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${dayView ? 'bg-slate-900 text-white shadow' : 'text-slate-400 hover:text-slate-900'}`}
+                >
+                    <Clock size={14} /> Hoy
+                </button>
+            </div>
+            <Link href={`/${slug}/dashboard/orders/create`}>
+                <button className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all hover:scale-105 active:scale-95 shadow-xl shadow-slate-900/20">
+                    <Plus size={16} /> Nueva Orden
+                </button>
+            </Link>
+        </header>
 
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden">
-                {/* Header Month Navigation */}
-                <div className="flex justify-between items-center mb-8">
-                    <h3 className="text-2xl font-black text-slate-800 tracking-tighter capitalize ml-2">
-                        {currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
-                    </h3>
-                    <div className="flex gap-2">
-                        <button onClick={prevMonth} className="p-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors">
-                            <ChevronLeft size={20} />
-                        </button>
-                        <button onClick={nextMonth} className="p-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors">
-                            <ChevronRight size={20} />
-                        </button>
+
+            {!dayView ? (
+                /* ── Vista Mensual (idéntica a la original) ── */
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden">
+                    <div className="flex justify-between items-center mb-8">
+                        <h3 className="text-2xl font-black text-slate-800 tracking-tighter capitalize ml-2">
+                            {currentDate.toLocaleString('es-ES', { month: 'long', year: 'numeric' })}
+                        </h3>
+                        <div className="flex gap-2">
+                            <button onClick={prevMonth} className="p-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors">
+                                <ChevronLeft size={20} />
+                            </button>
+                            <button onClick={nextMonth} className="p-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors">
+                                <ChevronRight size={20} />
+                            </button>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-7 gap-4 mb-4">
+                        {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(day => (
+                            <div key={day} className="text-center text-[10px] font-black tracking-widest uppercase text-slate-400">{day}</div>
+                        ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-4">
+                        {renderCalendarGrid()}
                     </div>
                 </div>
-
-                <div className="grid grid-cols-7 gap-4 mb-4">
-                    {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map(day => (
-                        <div key={day} className="text-center text-[10px] font-black tracking-widest uppercase text-slate-400">
-                            {day}
+            ) : (
+                /* ── Vista de Día ── */
+                <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                    {/* Header del día */}
+                    <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button
+                                onClick={() => setDayView(new Date(dayView.getTime() - 86400000))}
+                                className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors"
+                            >
+                                <ChevronLeft size={20} />
+                            </button>
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight capitalize">
+                                    {dayView.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                </h3>
+                                {(() => {
+                                    const ds = `${dayView.getFullYear()}-${String(dayView.getMonth() + 1).padStart(2, '0')}-${String(dayView.getDate()).padStart(2, '0')}`;
+                                    const count = appointments.filter(a => a.appointment_date.startsWith(ds)).length;
+                                    return count > 0
+                                        ? <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest mt-1">{count} turno{count !== 1 ? 's' : ''} agendado{count !== 1 ? 's' : ''}</p>
+                                        : <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Sin turnos agendados</p>;
+                                })()}
+                            </div>
+                            <button
+                                onClick={() => setDayView(new Date(dayView.getTime() + 86400000))}
+                                className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 transition-colors"
+                            >
+                                <ChevronRight size={20} />
+                            </button>
                         </div>
-                    ))}
-                </div>
+                        <button
+                            onClick={() => { setSelectedDate(dayView); setAppointmentTime(''); }}
+                            className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-indigo-500/20"
+                        >
+                            <Plus size={16} /> Asignar Turno
+                        </button>
+                    </div>
 
-                <div className="grid grid-cols-7 gap-4">
-                    {renderCalendarGrid()}
+                    {/* Timeline de horas */}
+                    <div className="overflow-y-auto max-h-[60vh]">
+                        {(() => {
+                            const ds = `${dayView.getFullYear()}-${String(dayView.getMonth() + 1).padStart(2, '0')}-${String(dayView.getDate()).padStart(2, '0')}`;
+                            const dayApps = appointments
+                                .filter(a => a.appointment_date.startsWith(ds))
+                                .sort((a, b) => a.appointment_date.localeCompare(b.appointment_date));
+
+                            const slots = getTimeSlots(dayView);
+
+                            if (slots.length === 0) {
+                                return (
+                                    <div className="py-20 text-center text-slate-400">
+                                        <Clock size={32} className="mx-auto mb-3 opacity-20" />
+                                        <p className="font-black uppercase tracking-widest text-sm">Taller cerrado este día</p>
+                                    </div>
+                                );
+                            }
+
+                            return (
+                                <div className="divide-y divide-slate-50">
+                                    {slots.map(slot => {
+                                        const [h, m] = slot.split(':');
+                                        // slot str not needed for comparison here but it's okay
+                                        const slotApps = dayApps.filter(a => {
+                                            const aTime = a.appointment_date.split('T')[1]?.substring(0, 5);
+                                            return aTime === slot;
+                                        });
+
+                                        const isNowSlot = (() => {
+                                            const now = new Date();
+                                            const nowH = now.getHours();
+                                            const nowM = now.getMinutes();
+                                            const slotH = parseInt(h);
+                                            const slotM = parseInt(m);
+                                            const isToday = now.toISOString().split('T')[0] === ds;
+                                            return isToday && nowH === slotH && Math.abs(nowM - slotM) < 30;
+                                        })();
+
+                                        return (
+                                            <div key={slot} className={`flex gap-4 px-6 py-3 transition-colors ${isNowSlot ? 'bg-indigo-50/50' : 'hover:bg-slate-50/50'}`}>
+                                                {/* Hora */}
+                                                <div className="w-14 shrink-0 pt-0.5">
+                                                    <span className={`text-[11px] font-black tabular-nums ${isNowSlot ? 'text-indigo-600' : 'text-slate-400'}`}>{slot}</span>
+                                                </div>
+
+                                                {/* Línea vertical */}
+                                                <div className="flex flex-col items-center">
+                                                    <div className={`w-2 h-2 rounded-full mt-1 ${isNowSlot ? 'bg-indigo-500 animate-pulse' : slotApps.length > 0 ? 'bg-indigo-600' : 'bg-slate-200'}`} />
+                                                    <div className="w-px flex-grow bg-slate-100 mt-1" />
+                                                </div>
+
+                                                {/* Contenido del slot */}
+                                                <div className="flex-grow pb-2 min-h-[40px]">
+                                                    {slotApps.length === 0 ? (
+                                                        <button
+                                                            onClick={() => {
+                                                                setSelectedDate(dayView);
+                                                                setAppointmentTime(slot);
+                                                            }}
+                                                            className="text-[10px] font-bold text-slate-300 hover:text-indigo-600 transition-colors pt-0.5"
+                                                        >
+                                                            + Agregar turno
+                                                        </button>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {slotApps.map(app => (
+                                                                <div key={app.id} className="flex items-center gap-3 bg-indigo-600 text-white rounded-2xl px-4 py-3">
+                                                                    <div className="flex-grow min-w-0">
+                                                                        <p className="font-black text-sm uppercase italic truncate leading-tight">{app.client_name}</p>
+                                                                        <p className="text-[10px] text-indigo-200 font-bold truncate">{app.plate} · {app.brand} {app.model}</p>
+                                                                    </div>
+                                                                    <div className="flex gap-2 shrink-0">
+                                                                        <Link href={`/${slug}/dashboard/orders/${app.id}`}>
+                                                                            <button className="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all">
+                                                                                Ver
+                                                                            </button>
+                                                                        </Link>
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setMovingOrder(app);
+                                                                                const parts = app.appointment_date.split('T');
+                                                                                setMoveDate(parts[0]);
+                                                                                setMoveTime(parts[1].substring(0, 5));
+                                                                            }}
+                                                                            className="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                                                                        >
+                                                                            Mover
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        })()}
+                    </div>
                 </div>
-            </div>
+            )}
+
+            {/* Próximos turnos — resumen rápido */}
+            {!dayView && (() => {
+                const today = new Date().toISOString().split('T')[0];
+                const upcoming = appointments
+                    .filter(a => a.appointment_date >= today)
+                    .sort((a, b) => a.appointment_date.localeCompare(b.appointment_date))
+                    .slice(0, 5);
+
+                if (upcoming.length === 0) return null;
+
+                return (
+                    <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
+                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Próximos Turnos</h4>
+                        <div className="space-y-3">
+                            {upcoming.map(app => (
+                                <div key={app.id} className="flex items-center gap-4 p-3 rounded-2xl hover:bg-slate-50 transition-colors">
+                                    <div className="bg-indigo-50 text-indigo-700 px-3 py-2 rounded-xl text-xs font-black text-center shrink-0 min-w-[60px]">
+                                        <div>{app.appointment_date.split('T')[1]?.substring(0, 5)}</div>
+                                        <div className="text-[9px] opacity-70">{new Date(app.appointment_date).toLocaleDateString('es-AR', { day: '2-digit', month: 'short' })}</div>
+                                    </div>
+                                    <div className="flex-grow min-w-0">
+                                        <p className="font-black text-slate-900 text-sm uppercase italic truncate">{app.client_name}</p>
+                                        <p className="text-[10px] font-bold text-slate-400 truncate">{app.plate} · {app.model}</p>
+                                    </div>
+                                    <Link href={`/${slug}/dashboard/orders/${app.id}`}>
+                                        <ArrowRight size={18} className="text-slate-300 hover:text-indigo-600 transition-colors" />
+                                    </Link>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Modal de Turno */}
             {selectedDate && (

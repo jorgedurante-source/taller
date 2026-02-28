@@ -562,6 +562,82 @@ router.get('/reports', superAuth, (req, res) => {
             } catch (e) { }
         }
 
+        // 5. Workshop comparison metrics
+        const comparisonMetrics = [];
+        for (const w of workshops) {
+            try {
+                const db = getDb(w.slug);
+
+                const ordersThisMonth = db.prepare(`
+                    SELECT COUNT(*) as count
+                    FROM orders
+                    WHERE strftime('%Y-%m', created_at) = strftime('%Y-%m', 'now')
+                `).get();
+
+                const avgTicket = db.prepare(`
+                    SELECT ROUND(AVG(oi_total.total), 0) as avg
+                    FROM (
+                        SELECT order_id, SUM(subtotal) as total
+                        FROM order_items
+                        GROUP BY order_id
+                    ) oi_total
+                    JOIN orders o ON o.id = oi_total.order_id
+                    WHERE o.status = 'delivered'
+                      AND o.delivered_at >= date('now', '-30 days')
+                `).get();
+
+                const avgRepairDays = db.prepare(`
+                    SELECT ROUND(AVG(JULIANDAY(delivered_at) - JULIANDAY(created_at)), 1) as avg
+                    FROM orders
+                    WHERE delivered_at IS NOT NULL
+                      AND delivered_at >= date('now', '-90 days')
+                `).get();
+
+                const activeOrders = db.prepare(`
+                    SELECT COUNT(*) as count
+                    FROM orders
+                    WHERE status NOT IN ('delivered', 'cancelled')
+                `).get();
+
+                const totalClients = db.prepare(`SELECT COUNT(*) as count FROM clients`).get();
+
+                const returnRate = db.prepare(`
+                    SELECT ROUND(
+                        100.0 * COUNT(DISTINCT CASE WHEN order_count > 1 THEN client_id END) / NULLIF(COUNT(DISTINCT client_id), 0),
+                        1
+                    ) as rate
+                    FROM (
+                        SELECT client_id, COUNT(*) as order_count FROM orders GROUP BY client_id
+                    )
+                `).get();
+
+                comparisonMetrics.push({
+                    slug: w.slug,
+                    name: w.name || w.slug,
+                    status: w.status,
+                    orders_this_month: ordersThisMonth?.count || 0,
+                    avg_ticket: avgTicket?.avg || 0,
+                    avg_repair_days: avgRepairDays?.avg || 0,
+                    active_orders: activeOrders?.count || 0,
+                    total_clients: totalClients?.count || 0,
+                    return_rate: returnRate?.rate || 0,
+                });
+            } catch (e) {
+                // Taller sin datos o DB aún no inicializada
+                comparisonMetrics.push({
+                    slug: w.slug,
+                    name: w.name || w.slug,
+                    status: w.status,
+                    orders_this_month: 0,
+                    avg_ticket: 0,
+                    avg_repair_days: 0,
+                    active_orders: 0,
+                    total_clients: 0,
+                    return_rate: 0,
+                });
+            }
+        }
+
         // Sort Top 5
         diskUsage.sort((a, b) => b.size - a.size);
         const top5Disk = diskUsage.slice(0, 5);
@@ -576,7 +652,8 @@ router.get('/reports', superAuth, (req, res) => {
                 { name: 'active', value: activosCount },
                 { name: 'inactive', value: inactivosCount }
             ],
-            storage: top5Disk
+            storage: top5Disk,
+            comparison: comparisonMetrics
         });
 
     } catch (err) {
