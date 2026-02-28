@@ -135,3 +135,30 @@ clientApi.interceptors.response.use(
 );
 
 export default api;
+
+/**
+ * Chain (multi-tenant group) API — hits /api/chain/...
+ */
+export const chainApi = axios.create({
+    baseURL: `${BASE}/chain`,
+});
+
+chainApi.interceptors.request.use((config) => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('chain_token') : null;
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+});
+
+chainApi.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (typeof window !== 'undefined' && error.response?.status === 401) {
+            localStorage.removeItem('chain_token');
+            localStorage.removeItem('chain_user');
+            const slug = localStorage.getItem('chain_slug');
+            if (slug) window.location.href = `/chain/${slug}/login`;
+        }
+        return Promise.reject(error);
+    }
+);
+
