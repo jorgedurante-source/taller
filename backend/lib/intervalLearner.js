@@ -16,8 +16,12 @@ function recalculateIntervals(db, vehicleId) {
 
         for (const svc of services) {
             // 2. Get all occurrences of this service with km and date
+            // We use the vehicle_km_history to find the mileage recorded at the time of the order
             const occurrences = db.prepare(`
-                SELECT o.delivered_at, v.km as km_at_delivery
+                SELECT o.delivered_at, 
+                    (SELECT kh.km FROM vehicle_km_history kh 
+                     WHERE kh.vehicle_id = v.id AND kh.recorded_at <= o.delivered_at 
+                     ORDER BY kh.recorded_at DESC LIMIT 1) as km_at_delivery
                 FROM order_items oi
                 JOIN orders o ON oi.order_id = o.id
                 JOIN vehicles v ON o.vehicle_id = v.id
