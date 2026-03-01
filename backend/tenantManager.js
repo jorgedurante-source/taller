@@ -329,22 +329,22 @@ function initTenantDb(db, slug) {
     addColumn('vehicles', 'uuid', 'TEXT');
     addColumn('vehicles', 'source_tenant', 'TEXT');
 
-    // Backfill UUIDs for existing records that don't have one
+    // Backfill UUIDs and source_tenant for existing records that don't have them
     const { randomUUID } = require('crypto');
     try {
         const ordersWithoutUuid = db.prepare("SELECT id FROM orders WHERE uuid IS NULL").all();
         const updateOrderUuid = db.prepare("UPDATE orders SET uuid = ? WHERE id = ?");
         for (const o of ordersWithoutUuid) updateOrderUuid.run(randomUUID(), o.id);
 
-        const clientsWithoutUuid = db.prepare("SELECT id FROM clients WHERE uuid IS NULL").all();
-        const updateClientUuid = db.prepare("UPDATE clients SET uuid = ? WHERE id = ?");
-        for (const c of clientsWithoutUuid) updateClientUuid.run(randomUUID(), c.id);
+        const clientsToFix = db.prepare("SELECT id, uuid, source_tenant FROM clients WHERE uuid IS NULL OR source_tenant IS NULL").all();
+        const updateClientFix = db.prepare("UPDATE clients SET uuid = ?, source_tenant = ? WHERE id = ?");
+        for (const c of clientsToFix) updateClientFix.run(c.uuid || randomUUID(), c.source_tenant || slug, c.id);
 
-        const vehiclesWithoutUuid = db.prepare("SELECT id FROM vehicles WHERE uuid IS NULL").all();
-        const updateVehicleUuid = db.prepare("UPDATE vehicles SET uuid = ? WHERE id = ?");
-        for (const v of vehiclesWithoutUuid) updateVehicleUuid.run(randomUUID(), v.id);
+        const vehiclesToFix = db.prepare("SELECT id, uuid, source_tenant FROM vehicles WHERE uuid IS NULL OR source_tenant IS NULL").all();
+        const updateVehicleFix = db.prepare("UPDATE vehicles SET uuid = ?, source_tenant = ? WHERE id = ?");
+        for (const v of vehiclesToFix) updateVehicleFix.run(v.uuid || randomUUID(), v.source_tenant || slug, v.id);
     } catch (e) {
-        if (slug !== 'test') console.warn(`[tenant:${slug}] UUID backfill error:`, e.message);
+        if (slug !== 'test') console.warn(`[tenant:${slug}] identity backfill error:`, e.message);
     }
 
     // ── Performance Indexes ──────────────────────────────────────────────────────

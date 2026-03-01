@@ -250,6 +250,13 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                 req.db.prepare('UPDATE vehicles SET km = ? WHERE id = ?').run(parseInt(current_km), order_data.vehicle_id);
                 req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)')
                     .run(order_data.vehicle_id, parseInt(current_km), `Actualizado al entregar orden #${req.params.id}`);
+
+                // Chain sync vehicle
+                try {
+                    const { enqueueSyncToChain } = require('./chainSync');
+                    const updatedVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.id = ?').get(order_data.vehicle_id);
+                    if (updatedVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...updatedVehicle });
+                } catch (e) { }
             }
         }
 

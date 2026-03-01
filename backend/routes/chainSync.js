@@ -42,15 +42,23 @@ function processSyncQueue() {
             const db = getDb(job.target_slug);
 
             if (job.operation === 'upsert_client') {
-                const existing = db.prepare('SELECT id FROM clients WHERE uuid = ?').get(payload.uuid);
+                const existing = db.prepare('SELECT id, uuid, source_tenant FROM clients WHERE uuid = ?').get(payload.uuid)
+                    || (payload.email ? db.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != ""').get(payload.email) : null);
+
                 if (existing) {
-                    // Only update if source_tenant owns this client
-                    db.prepare(`
-                        UPDATE clients SET first_name=?, last_name=?, email=?, phone=?,
-                        address=?, notes=?, nickname=? WHERE uuid=? AND source_tenant=?
-                    `).run(payload.first_name, payload.last_name, payload.email, payload.phone,
-                        payload.address, payload.notes, payload.nickname,
-                        payload.uuid, payload.source_tenant);
+                    // Update if:
+                    // 1. Source tenant owns it
+                    // 2. OR the record has no source_tenant (adoption)
+                    // 3. OR it was found by email but has no UUID
+                    if (existing.source_tenant === payload.source_tenant || !existing.source_tenant || !existing.uuid) {
+                        db.prepare(`
+                            UPDATE clients SET first_name=?, last_name=?, email=?, phone=?,
+                            address=?, notes=?, nickname=?, uuid=?, source_tenant=?
+                            WHERE id=?
+                        `).run(payload.first_name, payload.last_name, payload.email, payload.phone,
+                            payload.address, payload.notes, payload.nickname,
+                            payload.uuid, payload.source_tenant, existing.id);
+                    }
                 } else {
                     db.prepare(`
                         INSERT INTO clients (uuid, first_name, last_name, email, phone,
@@ -68,20 +76,24 @@ function processSyncQueue() {
                     // Client not synced yet — requeue
                     throw new Error('Client not yet synced to target');
                 }
-                const existing = db.prepare('SELECT id FROM vehicles WHERE uuid = ?').get(payload.uuid);
+                const existing = db.prepare('SELECT id, uuid, source_tenant FROM vehicles WHERE uuid = ?').get(payload.uuid)
+                    || db.prepare('SELECT id, uuid, source_tenant FROM vehicles WHERE plate = ?').get(payload.plate);
+
                 if (existing) {
-                    db.prepare(`
-                        UPDATE vehicles SET plate=?, brand=?, model=?, version=?,
-                        year=?, source_tenant=? WHERE uuid=?
-                    `).run(payload.plate, payload.brand, payload.model, payload.version,
-                        payload.year, payload.source_tenant, payload.uuid);
+                    if (existing.source_tenant === payload.source_tenant || !existing.source_tenant || !existing.uuid) {
+                        db.prepare(`
+                            UPDATE vehicles SET plate=?, brand=?, model=?, version=?,
+                            year=?, km=?, source_tenant=?, uuid=?, client_id=? WHERE id=?
+                        `).run(payload.plate, payload.brand, payload.model, payload.version,
+                            payload.year, payload.km, payload.source_tenant, payload.uuid, clientInTarget.id, existing.id);
+                    }
                 } else {
                     db.prepare(`
                         INSERT INTO vehicles (uuid, client_id, plate, brand, model,
-                        version, year, source_tenant, created_at)
-                        VALUES (?,?,?,?,?,?,?,?,?)
+                        version, year, km, source_tenant, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
                     `).run(payload.uuid, clientInTarget.id, payload.plate,
-                        payload.brand, payload.model, payload.version, payload.year,
+                        payload.brand, payload.model, payload.version, payload.year, payload.km,
                         payload.source_tenant, payload.created_at);
                 }
             }

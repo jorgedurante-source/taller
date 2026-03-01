@@ -266,6 +266,13 @@ router.put('/vehicles/:vid', auth, hasPermission('vehicles'), (req, res) => {
             req.db.prepare('INSERT OR IGNORE INTO vehicle_reference (brand, model, version) VALUES (?, ?, ?)').run(brand, model, version || null);
         }
 
+        // Chain sync
+        try {
+            const { enqueueSyncToChain } = require('./chainSync');
+            const updatedVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.id = ?').get(req.params.vid);
+            if (updatedVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...updatedVehicle });
+        } catch (e) { }
+
         res.json({ message: 'Vehículo actualizado' });
     } catch (err) {
         console.error(err);
@@ -289,6 +296,13 @@ router.put('/vehicles/:vid/km', auth, hasPermission('vehicles'), (req, res) => {
 
         // Always log km update through this dedicated endpoint
         req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)').run(req.params.vid, newKm, notes || null);
+
+        // Chain sync
+        try {
+            const { enqueueSyncToChain } = require('./chainSync');
+            const updatedVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.id = ?').get(req.params.vid);
+            if (updatedVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...updatedVehicle });
+        } catch (e) { }
 
         res.json({ message: 'Kilometraje actualizado', km: newKm, delta: newKm - oldKm });
     } catch (err) {

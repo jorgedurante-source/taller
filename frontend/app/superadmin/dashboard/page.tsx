@@ -19,6 +19,7 @@ import {
     LogOut,
     PlusCircle,
     CheckCircle2,
+    CheckCircle, // Added CheckCircle
     Trash2,
     ShieldCheck,
     RefreshCw,
@@ -120,6 +121,10 @@ export default function SuperAdminDashboard() {
     const [newAnnouncement, setNewAnnouncement] = useState({ title: '', content: '', type: 'info' });
     const [tickets, setTickets] = useState<any[]>([]);
     const [showTicketsModal, setShowTicketsModal] = useState(false);
+    const [showOrderDetailModal, setShowOrderDetailModal] = useState<any>(null); // Simplified
+    const [chainSyncStatus, setChainSyncStatus] = useState<Record<number, any>>({});
+    const [showSyncErrorsModal, setShowSyncErrorsModal] = useState<number | null>(null);
+    const [pollingSync, setPollingSync] = useState(false);
     const [selectedTicket, setSelectedTicket] = useState<any>(null);
     const [replyText, setReplyText] = useState('');
     const [sendingReply, setSendingReply] = useState(false);
@@ -145,6 +150,7 @@ export default function SuperAdminDashboard() {
     const [newChainUser, setNewChainUser] = useState({ name: '', email: '', password: '', can_see_financials: false });
     const [chainUserTarget, setChainUserTarget] = useState<number | null>(null);
     const [savingChain, setSavingChain] = useState(false);
+    const [selectedChainFilter, setSelectedChainFilter] = useState('all');
     const { config } = useConfig();
     const { notify } = useNotification();
     const router = useRouter();
@@ -280,6 +286,31 @@ export default function SuperAdminDashboard() {
         }
     };
 
+    const fetchChainSyncStatus = async (chainId: number) => {
+        try {
+            const res = await superApi.get(`/chains/${chainId}/sync-status`);
+            setChainSyncStatus(prev => ({ ...prev, [chainId]: res.data }));
+        } catch (e) {
+            console.error('Error fetching sync status', e);
+        }
+    };
+
+    useEffect(() => {
+        // Fetch all chains sync status initially
+        chains.forEach(c => fetchChainSyncStatus(c.id));
+
+        const interval = setInterval(() => {
+            // Poll all chains that have pending jobs OR are expanded
+            chains.forEach(c => {
+                const status = chainSyncStatus[c.id];
+                if (expandedChains.has(c.id) || (status && status.pending > 0)) {
+                    fetchChainSyncStatus(c.id);
+                }
+            });
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [chains, expandedChains, chainSyncStatus]);
+
     const fetchData = async () => {
         try {
             const [wResponse, sResponse, hResponse, aResponse, annResponse, chainsRes] = await Promise.all([
@@ -361,7 +392,7 @@ export default function SuperAdminDashboard() {
         }
     };
 
-    const handleAddToChai = async (chainId: number, slug: string) => {
+    const handleAddToChain = async (chainId: number, slug: string) => {
         if (!slug) return;
         try {
             await superApi.post(`/chains/${chainId}/members`, { tenant_slug: slug });
@@ -371,6 +402,15 @@ export default function SuperAdminDashboard() {
             notify('success', 'Taller agregado a la cadena');
         } catch (err) {
             notify('error', 'Error al agregar taller');
+        }
+    };
+
+    const handleResyncChain = async (chainId: number) => {
+        try {
+            const res = await superApi.post(`/chains/${chainId}/resync`);
+            notify('success', `Resincronización iniciada para ${res.data.members} talleres.`);
+        } catch (err) {
+            notify('error', 'Error al iniciar resincronización');
         }
     };
 
@@ -552,10 +592,17 @@ export default function SuperAdminDashboard() {
         }
     };
 
-    const filteredWorkshops = workshops.filter(w =>
-        w.name.toLowerCase().includes(search.toLowerCase()) ||
-        w.slug.toLowerCase().includes(search.toLowerCase())
-    );
+    const filteredWorkshops = workshops.filter(w => {
+        const matchesSearch = w.name.toLowerCase().includes(search.toLowerCase()) ||
+            w.slug.toLowerCase().includes(search.toLowerCase());
+
+        const matchesChain = selectedChainFilter === 'all' || (() => {
+            const chain = chains.find(c => c.id === parseInt(selectedChainFilter));
+            return chain?.members?.some((m: any) => m.tenant_slug === w.slug);
+        })();
+
+        return matchesSearch && matchesChain;
+    });
 
     const fetchWorkshopLogs = async (slug: string) => {
         setLoadingLogs(true);
@@ -1066,263 +1113,296 @@ export default function SuperAdminDashboard() {
                 </div>
 
                 {/* ── Sección de Cadenas ───────────────────────────────────────── */}
-                {chains.length > 0 && (
-                    <div className="space-y-4 mb-12">
-                        {/* Header de sección */}
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 w-full">
-                                <div className="h-px w-8 bg-violet-300" />
-                                <h3 className="text-[10px] font-black text-violet-600 uppercase tracking-[0.3em] whitespace-nowrap">
-                                    Cadenas Multi-Sucursal
-                                </h3>
-                                <div className="h-px flex-grow bg-violet-100" />
-                                <span className="text-[9px] font-black bg-violet-100 text-violet-600 px-3 py-1 rounded-full whitespace-nowrap">
-                                    {chains.length} cadena{chains.length !== 1 ? 's' : ''}
-                                </span>
+                {
+                    chains.length > 0 && (
+                        <div className="space-y-4 mb-12">
+                            {/* Header de sección */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 w-full">
+                                    <div className="h-px w-8 bg-violet-300" />
+                                    <h3 className="text-[10px] font-black text-violet-600 uppercase tracking-[0.3em] whitespace-nowrap">
+                                        Cadenas Multi-Sucursal
+                                    </h3>
+                                    <div className="h-px flex-grow bg-violet-100" />
+                                    <span className="text-[9px] font-black bg-violet-100 text-violet-600 px-3 py-1 rounded-full whitespace-nowrap">
+                                        {chains.length} cadena{chains.length !== 1 ? 's' : ''}
+                                    </span>
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Cards de cadenas */}
-                        <div className="space-y-3">
-                            {chains.map(chain => {
-                                const isExpanded = expandedChains.has(chain.id);
-                                const memberSlugs = chain.members?.map((m: any) => m.tenant_slug) || [];
-                                const availableWorkshops = workshops.filter(w => !memberSlugs.includes(w.slug));
+                            {/* Cards de cadenas */}
+                            <div className="space-y-3">
+                                {chains.map(chain => {
+                                    const isExpanded = expandedChains.has(chain.id);
+                                    const memberSlugs = chain.members?.map((m: any) => m.tenant_slug) || [];
+                                    const availableWorkshops = workshops.filter(w => !memberSlugs.includes(w.slug));
 
-                                return (
-                                    <div key={chain.id} className={`bg-white rounded-[2rem] border transition-all duration-300 overflow-hidden ${isExpanded ? 'border-violet-200 shadow-xl shadow-violet-500/5' : 'border-slate-100 shadow-sm hover:border-violet-100'}`}>
+                                    return (
+                                        <div key={chain.id} className={`bg-white rounded-[2rem] border transition-all duration-300 overflow-hidden ${isExpanded ? 'border-violet-200 shadow-xl shadow-violet-500/5' : 'border-slate-100 shadow-sm hover:border-violet-100'}`}>
 
-                                        {/* Header de la cadena — clickeable para expandir */}
-                                        <div
-                                            className="p-6 flex items-center justify-between cursor-pointer group"
-                                            onClick={() => toggleChain(chain.id)}
-                                        >
-                                            <div className="flex items-center gap-5">
-                                                {/* Ícono cadena */}
-                                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${isExpanded ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-600 group-hover:bg-violet-100'}`}>
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                                        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-                                                        <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-                                                    </svg>
-                                                </div>
-                                                <div>
-                                                    <div className="flex items-center gap-3">
-                                                        <h4 className="text-lg font-black text-slate-900 uppercase italic tracking-tight">{chain.name}</h4>
-                                                        <span className="text-[9px] font-black bg-violet-100 text-violet-600 px-2 py-1 rounded-lg uppercase tracking-widest">
-                                                            /{chain.slug}
-                                                        </span>
-                                                        <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-widest">
-                                                            {chain.visibility_level === 'summary' ? 'Solo resumen' : chain.visibility_level === 'no_prices' ? 'Sin precios' : 'Completo'}
-                                                        </span>
+                                            {/* Header de la cadena — clickeable para expandir */}
+                                            <div
+                                                className="p-6 flex items-center justify-between cursor-pointer group"
+                                                onClick={() => toggleChain(chain.id)}
+                                            >
+                                                <div className="flex items-center gap-5">
+                                                    {/* Ícono cadena */}
+                                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${isExpanded ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-600 group-hover:bg-violet-100'}`}>
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                            <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                                                            <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+                                                        </svg>
                                                     </div>
-                                                    <div className="flex items-center gap-4 mt-1.5 flex-wrap">
-                                                        {chain.members?.map((m: any) => (
-                                                            <span key={m.tenant_slug} className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5">
-                                                                <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
-                                                                {m.workshop_name || m.tenant_slug}
+                                                    <div>
+                                                        <div className="flex items-center gap-3">
+                                                            <h4 className="text-lg font-black text-slate-900 uppercase italic tracking-tight">{chain.name}</h4>
+                                                            <span className="text-[9px] font-black bg-violet-100 text-violet-600 px-2 py-1 rounded-lg uppercase tracking-widest">
+                                                                /{chain.slug}
                                                             </span>
-                                                        ))}
-                                                        {chain.members?.length === 0 && (
-                                                            <span className="text-[10px] font-bold text-slate-300 italic">Sin talleres aún</span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-3">
-                                                <a
-                                                    href={`/chain/${chain.slug}/dashboard`}
-                                                    target="_blank"
-                                                    onClick={e => e.stopPropagation()}
-                                                    className="px-4 py-2 bg-violet-50 text-violet-600 hover:bg-violet-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
-                                                >
-                                                    <ExternalLink size={12} /> Panel
-                                                </a>
-                                                <div className={`p-2 rounded-xl transition-all ${isExpanded ? 'bg-violet-100 text-violet-600' : 'bg-slate-50 text-slate-400'}`}>
-                                                    <ChevronDown size={18} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Panel expandible */}
-                                        {isExpanded && (
-                                            <div className="border-t border-violet-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                                                <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
-
-                                                    {/* ── Talleres miembros ── */}
-                                                    <div className="space-y-4">
-                                                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                                            Talleres en esta cadena
-                                                        </h5>
-
-                                                        <div className="space-y-2">
+                                                            <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-1 rounded-lg uppercase tracking-widest">
+                                                                {chain.visibility_level === 'summary' ? 'Solo resumen' : chain.visibility_level === 'no_prices' ? 'Sin precios' : 'Completo'}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-4 mt-1.5 flex-wrap">
                                                             {chain.members?.map((m: any) => (
-                                                                <div key={m.tenant_slug} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group/member">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="w-8 h-8 bg-violet-100 rounded-xl flex items-center justify-center">
-                                                                            <span className="text-[8px] font-black text-violet-600 uppercase">{m.tenant_slug.charAt(0)}</span>
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="text-sm font-black text-slate-900 uppercase italic leading-tight">{m.workshop_name || m.tenant_slug}</p>
-                                                                            <p className="text-[9px] font-bold text-slate-400">/{m.tenant_slug}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                    <button
-                                                                        onClick={() => handleDecoupleWorkshop(chain.id, m.tenant_slug, m.workshop_name || m.tenant_slug)}
-                                                                        className="opacity-0 group-hover/member:opacity-100 transition-opacity text-[9px] font-black text-rose-500 hover:text-rose-700 uppercase tracking-widest px-3 py-1.5 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all font-bold"
-                                                                    >
-                                                                        Desacoplar
-                                                                    </button>
-                                                                </div>
+                                                                <span key={m.tenant_slug} className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5">
+                                                                    <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+                                                                    {m.workshop_name || m.tenant_slug}
+                                                                </span>
                                                             ))}
-
-                                                            {/* Agregar taller existente */}
-                                                            {availableWorkshops.length > 0 && (
-                                                                <select
-                                                                    defaultValue=""
-                                                                    onChange={e => { handleAddToChai(chain.id, e.target.value); e.target.value = ''; }}
-                                                                    className="w-full bg-violet-50 border-2 border-violet-100 border-dashed rounded-2xl px-4 py-3 text-[10px] font-black text-violet-600 uppercase tracking-widest focus:outline-none focus:border-violet-400 transition-all cursor-pointer"
-                                                                >
-                                                                    <option value="" disabled>+ Agregar taller a esta cadena</option>
-                                                                    {availableWorkshops.map(w => (
-                                                                        <option key={w.slug} value={w.slug}>{w.name} (/{w.slug})</option>
-                                                                    ))}
-                                                                </select>
-                                                            )}
-                                                            {availableWorkshops.length === 0 && (
-                                                                <p className="text-[10px] font-bold text-slate-300 italic text-center py-2">
-                                                                    Todos los talleres ya pertenecen a esta cadena
-                                                                </p>
+                                                            {chain.members?.length === 0 && (
+                                                                <span className="text-[10px] font-bold text-slate-300 italic">Sin talleres aún</span>
                                                             )}
                                                         </div>
+                                                    </div>
+                                                </div>
 
-                                                        {/* Visibilidad */}
-                                                        <div className="pt-4 border-t border-slate-100">
-                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Visibilidad cruzada entre talleres</p>
-                                                            <div className="flex gap-2">
-                                                                {([['summary', 'Solo resumen'], ['no_prices', 'Sin precios'], ['full', 'Completo']] as const).map(([val, label]) => (
-                                                                    <button
-                                                                        key={val}
-                                                                        onClick={async () => {
-                                                                            await superApi.patch(`/chains/${chain.id}`, { visibility_level: val });
-                                                                            const res = await superApi.get('/chains');
-                                                                            setChains(res.data);
-                                                                            notify('success', 'Visibilidad actualizada');
-                                                                        }}
-                                                                        className={`flex-grow py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${chain.visibility_level === val ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-400 border-slate-200 hover:border-violet-300 hover:text-violet-600'}`}
+                                                <div className="flex items-center gap-3">
+                                                    {chainSyncStatus[chain.id]?.pending > 0 && (
+                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[9px] font-black uppercase tracking-widest animate-pulse border border-amber-100">
+                                                            <Activity size={10} /> {chainSyncStatus[chain.id].pending} Pendientes
+                                                        </div>
+                                                    )}
+                                                    {chainSyncStatus[chain.id]?.failed > 0 && (
+                                                        <div
+                                                            onClick={e => {
+                                                                e.stopPropagation();
+                                                                setShowSyncErrorsModal(chain.id);
+                                                            }}
+                                                            className="flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-red-100 cursor-pointer hover:bg-red-100 transition-colors"
+                                                        >
+                                                            <AlertTriangle size={10} /> {chainSyncStatus[chain.id].failed} Error
+                                                        </div>
+                                                    )}
+                                                    {chainSyncStatus[chain.id] && chainSyncStatus[chain.id].pending === 0 && chainSyncStatus[chain.id].failed === 0 && (
+                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-emerald-100">
+                                                            <Check size={10} /> Sincronizado
+                                                        </div>
+                                                    )}
+                                                    <button
+                                                        onClick={e => {
+                                                            e.stopPropagation();
+                                                            handleResyncChain(chain.id);
+                                                        }}
+                                                        className="px-4 py-2 bg-slate-50 text-slate-500 hover:bg-indigo-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
+                                                        title="Sincronizar clientes y vehículos en toda la cadena"
+                                                    >
+                                                        <RefreshCw size={12} className={expandedChains.has(chain.id) && (chainSyncStatus[chain.id]?.pending > 0) ? 'animate-spin' : ''} /> Sync
+                                                    </button>
+                                                    <a
+                                                        href={`/chain/${chain.slug}/dashboard`}
+                                                        target="_blank"
+                                                        onClick={e => e.stopPropagation()}
+                                                        className="px-4 py-2 bg-violet-50 text-violet-600 hover:bg-violet-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
+                                                    >
+                                                        <ExternalLink size={12} /> Panel
+                                                    </a>
+                                                    <div className={`p-2 rounded-xl transition-all ${isExpanded ? 'bg-violet-100 text-violet-600' : 'bg-slate-50 text-slate-400'}`}>
+                                                        <ChevronDown size={18} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Panel expandible */}
+                                            {isExpanded && (
+                                                <div className="border-t border-violet-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                    <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                                                        {/* ── Talleres miembros ── */}
+                                                        <div className="space-y-4">
+                                                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                                Talleres en esta cadena
+                                                            </h5>
+
+                                                            <div className="space-y-2">
+                                                                {chain.members?.map((m: any) => (
+                                                                    <div key={m.tenant_slug} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group/member">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-8 h-8 bg-violet-100 rounded-xl flex items-center justify-center">
+                                                                                <span className="text-[8px] font-black text-violet-600 uppercase">{m.tenant_slug.charAt(0)}</span>
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-sm font-black text-slate-900 uppercase italic leading-tight">{m.workshop_name || m.tenant_slug}</p>
+                                                                                <p className="text-[9px] font-bold text-slate-400">/{m.tenant_slug}</p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={() => handleDecoupleWorkshop(chain.id, m.tenant_slug, m.workshop_name || m.tenant_slug)}
+                                                                            className="opacity-0 group-hover/member:opacity-100 transition-opacity text-[9px] font-black text-rose-500 hover:text-rose-700 uppercase tracking-widest px-3 py-1.5 bg-rose-50 rounded-xl hover:bg-rose-100 transition-all font-bold"
+                                                                        >
+                                                                            Desacoplar
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+
+                                                                {/* Agregar taller existente */}
+                                                                {availableWorkshops.length > 0 && (
+                                                                    <select
+                                                                        defaultValue=""
+                                                                        onChange={e => { handleAddToChain(chain.id, e.target.value); e.target.value = ''; }}
+                                                                        className="w-full bg-violet-50 border-2 border-violet-100 border-dashed rounded-2xl px-4 py-3 text-[10px] font-black text-violet-600 uppercase tracking-widest focus:outline-none focus:border-violet-400 transition-all cursor-pointer"
                                                                     >
-                                                                        {label}
-                                                                    </button>
+                                                                        <option value="" disabled>+ Agregar taller a esta cadena</option>
+                                                                        {availableWorkshops.map(w => (
+                                                                            <option key={w.slug} value={w.slug}>{w.name} (/{w.slug})</option>
+                                                                        ))}
+                                                                    </select>
+                                                                )}
+                                                                {availableWorkshops.length === 0 && (
+                                                                    <p className="text-[10px] font-bold text-slate-300 italic text-center py-2">
+                                                                        Todos los talleres ya pertenecen a esta cadena
+                                                                    </p>
+                                                                )}
+                                                            </div>
+
+                                                            {/* Visibilidad */}
+                                                            <div className="pt-4 border-t border-slate-100">
+                                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Visibilidad cruzada entre talleres</p>
+                                                                <div className="flex gap-2">
+                                                                    {([['summary', 'Solo resumen'], ['no_prices', 'Sin precios'], ['full', 'Completo']] as const).map(([val, label]) => (
+                                                                        <button
+                                                                            key={val}
+                                                                            onClick={async () => {
+                                                                                await superApi.patch(`/chains/${chain.id}`, { visibility_level: val });
+                                                                                const res = await superApi.get('/chains');
+                                                                                setChains(res.data);
+                                                                                notify('success', 'Visibilidad actualizada');
+                                                                            }}
+                                                                            className={`flex-grow py-2 px-3 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all border ${chain.visibility_level === val ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-400 border-slate-200 hover:border-violet-300 hover:text-violet-600'}`}
+                                                                        >
+                                                                            {label}
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* ── Usuarios del panel chain ── */}
+                                                        <div className="space-y-4">
+                                                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                                Usuarios del panel chain
+                                                            </h5>
+
+                                                            <div className="space-y-2">
+                                                                {chain.users?.length === 0 && (
+                                                                    <div className="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                                                                        <p className="text-[10px] font-bold text-slate-300 uppercase">Sin usuarios aún</p>
+                                                                    </div>
+                                                                )}
+                                                                {chain.users?.map((u: any) => (
+                                                                    <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group/user">
+                                                                        <div>
+                                                                            <p className="text-sm font-black text-slate-900 uppercase italic leading-tight">{u.name}</p>
+                                                                            <p className="text-[9px] font-bold text-slate-400">{u.email}</p>
+                                                                            {u.can_see_financials ? (
+                                                                                <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Ve ingresos</span>
+                                                                            ) : (
+                                                                                <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Sin ingresos</span>
+                                                                            )}
+                                                                        </div>
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                if (!confirm(`¿Eliminar usuario ${u.name}?`)) return;
+                                                                                await superApi.delete(`/chains/${chain.id}/users/${u.id}`);
+                                                                                const res = await superApi.get('/chains');
+                                                                                setChains(res.data);
+                                                                                notify('success', 'Usuario eliminado');
+                                                                            }}
+                                                                            className="opacity-0 group-hover/user:opacity-100 transition-opacity p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                                                                        >
+                                                                            <Trash2 size={16} />
+                                                                        </button>
+                                                                    </div>
                                                                 ))}
                                                             </div>
-                                                        </div>
-                                                    </div>
 
-                                                    {/* ── Usuarios del panel chain ── */}
-                                                    <div className="space-y-4">
-                                                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                                            Usuarios del panel chain
-                                                        </h5>
-
-                                                        <div className="space-y-2">
-                                                            {chain.users?.length === 0 && (
-                                                                <div className="text-center py-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                                                                    <p className="text-[10px] font-bold text-slate-300 uppercase">Sin usuarios aún</p>
-                                                                </div>
-                                                            )}
-                                                            {chain.users?.map((u: any) => (
-                                                                <div key={u.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100 group/user">
-                                                                    <div>
-                                                                        <p className="text-sm font-black text-slate-900 uppercase italic leading-tight">{u.name}</p>
-                                                                        <p className="text-[9px] font-bold text-slate-400">{u.email}</p>
-                                                                        {u.can_see_financials ? (
-                                                                            <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Ve ingresos</span>
-                                                                        ) : (
-                                                                            <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">Sin ingresos</span>
-                                                                        )}
-                                                                    </div>
-                                                                    <button
-                                                                        onClick={async () => {
-                                                                            if (!confirm(`¿Eliminar usuario ${u.name}?`)) return;
-                                                                            await superApi.delete(`/chains/${chain.id}/users/${u.id}`);
-                                                                            const res = await superApi.get('/chains');
-                                                                            setChains(res.data);
-                                                                            notify('success', 'Usuario eliminado');
-                                                                        }}
-                                                                        className="opacity-0 group-hover/user:opacity-100 transition-opacity p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                                                                    >
-                                                                        <Trash2 size={16} />
-                                                                    </button>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-
-                                                        {/* Formulario nuevo usuario */}
-                                                        {chainUserTarget === chain.id ? (
-                                                            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200 text-left">
-                                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Nuevo usuario</p>
-                                                                <input
-                                                                    placeholder="Nombre completo"
-                                                                    value={newChainUser.name}
-                                                                    onChange={e => setNewChainUser({ ...newChainUser, name: e.target.value })}
-                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
-                                                                />
-                                                                <input
-                                                                    type="email"
-                                                                    placeholder="Email"
-                                                                    value={newChainUser.email}
-                                                                    onChange={e => setNewChainUser({ ...newChainUser, email: e.target.value })}
-                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
-                                                                />
-                                                                <input
-                                                                    type="password"
-                                                                    placeholder="Contraseña"
-                                                                    value={newChainUser.password}
-                                                                    onChange={e => setNewChainUser({ ...newChainUser, password: e.target.value })}
-                                                                    className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
-                                                                />
-                                                                <label className="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-xl border border-slate-200">
+                                                            {/* Formulario nuevo usuario */}
+                                                            {chainUserTarget === chain.id ? (
+                                                                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200 text-left">
+                                                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Nuevo usuario</p>
                                                                     <input
-                                                                        type="checkbox"
-                                                                        checked={newChainUser.can_see_financials}
-                                                                        onChange={e => setNewChainUser({ ...newChainUser, can_see_financials: e.target.checked })}
-                                                                        className="w-4 h-4 rounded text-violet-600"
+                                                                        placeholder="Nombre completo"
+                                                                        value={newChainUser.name}
+                                                                        onChange={e => setNewChainUser({ ...newChainUser, name: e.target.value })}
+                                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
                                                                     />
-                                                                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Puede ver ingresos financieros</span>
-                                                                </label>
-                                                                <div className="flex gap-2">
-                                                                    <button
-                                                                        onClick={() => { setChainUserTarget(null); setNewChainUser({ name: '', email: '', password: '', can_see_financials: false }); }}
-                                                                        className="flex-grow py-2.5 rounded-xl bg-slate-200 text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-300 transition-all"
-                                                                    >
-                                                                        Cancelar
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={() => handleCreateChainUser(chain.id)}
-                                                                        className="flex-[2] py-2.5 rounded-xl bg-violet-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-violet-700 transition-all shadow-lg shadow-violet-500/20"
-                                                                    >
-                                                                        Crear Usuario
-                                                                    </button>
+                                                                    <input
+                                                                        type="email"
+                                                                        placeholder="Email"
+                                                                        value={newChainUser.email}
+                                                                        onChange={e => setNewChainUser({ ...newChainUser, email: e.target.value })}
+                                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
+                                                                    />
+                                                                    <input
+                                                                        type="password"
+                                                                        placeholder="Contraseña"
+                                                                        value={newChainUser.password}
+                                                                        onChange={e => setNewChainUser({ ...newChainUser, password: e.target.value })}
+                                                                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-violet-400 transition-all font-bold"
+                                                                    />
+                                                                    <label className="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-xl border border-slate-200">
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={newChainUser.can_see_financials}
+                                                                            onChange={e => setNewChainUser({ ...newChainUser, can_see_financials: e.target.checked })}
+                                                                            className="w-4 h-4 rounded text-violet-600"
+                                                                        />
+                                                                        <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Puede ver ingresos financieros</span>
+                                                                    </label>
+                                                                    <div className="flex gap-2">
+                                                                        <button
+                                                                            onClick={() => { setChainUserTarget(null); setNewChainUser({ name: '', email: '', password: '', can_see_financials: false }); }}
+                                                                            className="flex-grow py-2.5 rounded-xl bg-slate-200 text-slate-600 font-black text-[10px] uppercase tracking-widest hover:bg-slate-300 transition-all"
+                                                                        >
+                                                                            Cancelar
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => handleCreateChainUser(chain.id)}
+                                                                            className="flex-[2] py-2.5 rounded-xl bg-violet-600 text-white font-black text-[10px] uppercase tracking-widest hover:bg-violet-700 transition-all shadow-lg shadow-violet-500/20"
+                                                                        >
+                                                                            Crear Usuario
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => setChainUserTarget(chain.id)}
-                                                                className="w-full py-3 bg-violet-50 border-2 border-violet-100 border-dashed rounded-2xl text-[10px] font-black text-violet-600 uppercase tracking-widest hover:bg-violet-100 transition-all flex items-center justify-center gap-2"
-                                                            >
-                                                                <Plus size={14} /> Agregar Usuario
-                                                            </button>
-                                                        )}
+                                                            ) : (
+                                                                <button
+                                                                    onClick={() => setChainUserTarget(chain.id)}
+                                                                    className="w-full py-3 bg-violet-50 border-2 border-violet-100 border-dashed rounded-2xl text-[10px] font-black text-violet-600 uppercase tracking-widest hover:bg-violet-100 transition-all flex items-center justify-center gap-2"
+                                                                >
+                                                                    <Plus size={14} /> Agregar Usuario
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
-                )}
+                    )
+                }
 
                 {/* Workshops List Section */}
                 <div className="space-y-6">
@@ -1332,6 +1412,17 @@ export default function SuperAdminDashboard() {
                             <p className="text-slate-500 font-bold text-sm tracking-wide">Gestiona el estado, branding y seguridad de cada instancia.</p>
                         </div>
                         <div className="flex flex-col md:flex-row items-center gap-4">
+                            <select
+                                value={selectedChainFilter}
+                                onChange={(e) => setSelectedChainFilter(e.target.value)}
+                                className="bg-white border-2 border-slate-100 px-6 py-4 rounded-3xl w-full md:w-64 font-bold text-slate-800 focus:outline-none focus:border-indigo-500 transition-all shadow-sm cursor-pointer appearance-none"
+                            >
+                                <option value="all">Ver todas las cadenas</option>
+                                {chains.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+
                             <button
                                 onClick={() => setShowNewChainModal(true)}
                                 className="flex items-center gap-2 bg-violet-600 hover:bg-violet-700 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg shadow-violet-500/20 w-full md:w-auto"
@@ -1352,149 +1443,158 @@ export default function SuperAdminDashboard() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredWorkshops.map(w => (
-                            <div key={w.id} className="bg-white border border-slate-100 rounded-[3rem] p-8 shadow-sm hover:shadow-2xl hover:shadow-slate-200/50 transition-all group relative overflow-hidden">
-                                <div className="absolute top-0 right-0 p-8 flex gap-2">
-                                    <button
-                                        onClick={() => setShowWorkshopAuditModal(w)}
-                                        className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-emerald-50 hover:text-emerald-600 transition-all border border-slate-100"
-                                        title="Ver Auditoría del Taller"
-                                    >
-                                        <History size={20} />
-                                    </button>
-                                    <button
-                                        onClick={() => setShowLogsModal(w)}
-                                        className={`p-3 rounded-2xl transition-all border flex items-center gap-2 ${(w.error_count || 0) > 0
-                                            ? 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-100'
-                                            : 'bg-slate-50 text-slate-300 hover:bg-slate-100 hover:text-slate-500 border-slate-100'
-                                            }`}
-                                        title="Ver Logs de Sistema"
-                                    >
-                                        <Activity size={20} />
-                                        <span className="text-xs font-black">{w.error_count || 0}</span>
-                                    </button>
-                                    <button
-                                        onClick={() => { setShowManageModal(w); setShowToken(false); }}
-                                        className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"
-                                    >
-                                        <Settings2 size={20} />
-                                    </button>
-                                </div>
-
-                                <div className="flex items-start gap-4 mb-6">
-                                    <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-[1.5rem] flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all overflow-hidden shrink-0">
-                                        {w.logo_path ? (
-                                            <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + w.logo_path} alt={w.name} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <Car size={32} />
-                                        )}
-                                    </div>
-                                    <div className="pt-1 flex-grow">
-                                        <div className="flex justify-between items-start">
-                                            <h4 className="text-2xl font-black text-slate-900 tracking-tighter italic leading-tight line-clamp-1 pr-6">{w.name}</h4>
-                                            <button
-                                                onClick={(e) => { e.stopPropagation(); checkWorkshopEmail(w.slug); }}
-                                                className={`p-2 rounded-xl transition-all ${workshopEmailStatus[w.slug]?.loading
-                                                    ? 'bg-slate-100 text-slate-400 animate-spin'
-                                                    : workshopEmailStatus[w.slug]?.smtp?.status === 'ok' && workshopEmailStatus[w.slug]?.imap?.status === 'ok'
-                                                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
-                                                        : workshopEmailStatus[w.slug]?.smtp?.status === 'error' || workshopEmailStatus[w.slug]?.imap?.status === 'error'
-                                                            ? 'bg-red-50 text-red-600 border border-red-100'
-                                                            : 'bg-slate-50 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-100'
-                                                    }`}
-                                                title="Verificar Conexión de Email"
-                                            >
-                                                <Mail size={16} />
-                                            </button>
+                        {filteredWorkshops.map(w => {
+                            const chain = chains.find(c => c.members?.some((m: any) => m.tenant_slug === w.slug));
+                            return (
+                                <div key={w.id} className="bg-white border border-slate-100 rounded-[3rem] p-8 shadow-sm hover:shadow-2xl hover:shadow-slate-200/50 transition-all group relative overflow-hidden">
+                                    {chain && (
+                                        <div className="absolute top-0 left-0 w-full bg-violet-600 py-1.5 px-8 flex items-center gap-2">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-white"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
+                                            <span className="text-[8px] font-black text-white uppercase tracking-widest">Sucursal de {chain.name}</span>
                                         </div>
-                                        <div className="flex items-center gap-2 mt-2">
-                                            <span className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${w.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'
-                                                }`}>
-                                                {w.status === 'active' ? 'Operativo' : 'Inactivo'}
-                                            </span>
-                                            {(() => {
-                                                const chain = chains.find(c => c.members?.some((m: any) => m.tenant_slug === w.slug));
-                                                if (!chain) return null;
-                                                return (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-violet-100 text-violet-700 border border-violet-200">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
-                                                        {chain.name}
-                                                    </span>
-                                                );
-                                            })()}
-                                            {workshopEmailStatus[w.slug] && !workshopEmailStatus[w.slug].loading && !workshopEmailStatus[w.slug].error && (
-                                                <div className="flex gap-1">
-                                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${workshopEmailStatus[w.slug].smtp.status === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>SMTP</span>
-                                                    <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${workshopEmailStatus[w.slug].imap.status === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>IMAP</span>
-                                                </div>
+                                    )}
+                                    <div className={`absolute ${chain ? 'top-6' : 'top-0'} right-0 p-8 flex gap-2`}>
+                                        <button
+                                            onClick={() => setShowWorkshopAuditModal(w)}
+                                            className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-emerald-50 hover:text-emerald-600 transition-all border border-slate-100"
+                                            title="Ver Auditoría del Taller"
+                                        >
+                                            <History size={20} />
+                                        </button>
+                                        <button
+                                            onClick={() => setShowLogsModal(w)}
+                                            className={`p-3 rounded-2xl transition-all border flex items-center gap-2 ${(w.error_count || 0) > 0
+                                                ? 'bg-red-50 text-red-600 hover:bg-red-600 hover:text-white border-red-100'
+                                                : 'bg-slate-50 text-slate-300 hover:bg-slate-100 hover:text-slate-500 border-slate-100'
+                                                }`}
+                                            title="Ver Logs de Sistema"
+                                        >
+                                            <Activity size={20} />
+                                            <span className="text-xs font-black">{w.error_count || 0}</span>
+                                        </button>
+                                        <button
+                                            onClick={() => { setShowManageModal(w); setShowToken(false); }}
+                                            className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:bg-indigo-50 hover:text-indigo-600 transition-all border border-slate-100"
+                                        >
+                                            <Settings2 size={20} />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex items-start gap-4 mb-6">
+                                        <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-[1.5rem] flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-all overflow-hidden shrink-0">
+                                            {w.logo_path ? (
+                                                <img src={(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api').replace(/\/api\/?$/, '') + w.logo_path} alt={w.name} className="w-full h-full object-cover" />
+                                            ) : (
+                                                <Car size={32} />
                                             )}
                                         </div>
+                                        <div className="pt-1 flex-grow">
+                                            <div className="flex justify-between items-start">
+                                                <h4 className="text-2xl font-black text-slate-900 tracking-tighter italic leading-tight line-clamp-1 pr-6">{w.name}</h4>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); checkWorkshopEmail(w.slug); }}
+                                                    className={`p-2 rounded-xl transition-all ${workshopEmailStatus[w.slug]?.loading
+                                                        ? 'bg-slate-100 text-slate-400 animate-spin'
+                                                        : workshopEmailStatus[w.slug]?.smtp?.status === 'ok' && workshopEmailStatus[w.slug]?.imap?.status === 'ok'
+                                                            ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                                                            : workshopEmailStatus[w.slug]?.smtp?.status === 'error' || workshopEmailStatus[w.slug]?.imap?.status === 'error'
+                                                                ? 'bg-red-50 text-red-600 border border-red-100'
+                                                                : 'bg-slate-50 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-100'
+                                                        }`}
+                                                    title="Verificar Conexión de Email"
+                                                >
+                                                    <Mail size={16} />
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <span className={`inline-block px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border ${w.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'
+                                                    }`}>
+                                                    {w.status === 'active' ? 'Operativo' : 'Inactivo'}
+                                                </span>
+                                                {(() => {
+                                                    const chain = chains.find(c => c.members?.some((m: any) => m.tenant_slug === w.slug));
+                                                    if (!chain) return null;
+                                                    return (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-violet-100 text-violet-700 border border-violet-200">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
+                                                            {chain.name}
+                                                        </span>
+                                                    );
+                                                })()}
+                                                {workshopEmailStatus[w.slug] && !workshopEmailStatus[w.slug].loading && !workshopEmailStatus[w.slug].error && (
+                                                    <div className="flex gap-1">
+                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${workshopEmailStatus[w.slug].smtp.status === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>SMTP</span>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-black border ${workshopEmailStatus[w.slug].imap.status === 'ok' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>IMAP</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
 
-                                <div className="grid grid-cols-2 gap-4 mb-6">
-                                    <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 group-hover:bg-white transition-colors">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Órdenes Activas</p>
-                                        <div className="flex items-center gap-2">
-                                            <Activity size={14} className="text-indigo-400" />
-                                            <p className="text-xl font-black text-slate-900">{w.active_orders}</p>
+                                    <div className="grid grid-cols-2 gap-4 mb-6">
+                                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 group-hover:bg-white transition-colors">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Órdenes Activas</p>
+                                            <div className="flex items-center gap-2">
+                                                <Activity size={14} className="text-indigo-400" />
+                                                <p className="text-xl font-black text-slate-900">{w.active_orders}</p>
+                                            </div>
+                                        </div>
+                                        <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 group-hover:bg-white transition-colors">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Clientes</p>
+                                            <div className="flex items-center gap-2">
+                                                <Users size={14} className="text-purple-400" />
+                                                <p className="text-xl font-black text-slate-900">{w.total_clients}</p>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="bg-slate-50 p-4 rounded-3xl border border-slate-100 group-hover:bg-white transition-colors">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Clientes</p>
-                                        <div className="flex items-center gap-2">
-                                            <Users size={14} className="text-purple-400" />
-                                            <p className="text-xl font-black text-slate-900">{w.total_clients}</p>
-                                        </div>
-                                    </div>
-                                </div>
 
-                                <div className="space-y-2 mb-8 px-1">
-                                    <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Panel Administrativo</p>
-                                        <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-100/50 group/link">
-                                            <code className="text-[10px] text-slate-500 font-bold truncate">/{w.slug}/login</code>
-                                            <button
-                                                onClick={() => window.open(`${window.location.origin}/${w.slug}/login`, '_blank')}
-                                                className="text-indigo-600 hover:text-indigo-700 transition-colors"
-                                            >
-                                                <ExternalLink size={14} />
-                                            </button>
+                                    <div className="space-y-2 mb-8 px-1">
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Panel Administrativo</p>
+                                            <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-100/50 group/link">
+                                                <code className="text-[10px] text-slate-500 font-bold truncate">/{w.slug}/login</code>
+                                                <button
+                                                    onClick={() => window.open(`${window.location.origin}/${w.slug}/login`, '_blank')}
+                                                    className="text-indigo-600 hover:text-indigo-700 transition-colors"
+                                                >
+                                                    <ExternalLink size={14} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Portal de Clientes</p>
+                                            <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-100/50 group/link">
+                                                <code className="text-[10px] text-slate-500 font-bold truncate">/{w.slug}/client</code>
+                                                <button
+                                                    onClick={() => window.open(`${window.location.origin}/${w.slug}/client`, '_blank')}
+                                                    className="text-emerald-600 hover:text-emerald-700 transition-colors"
+                                                >
+                                                    <ExternalLink size={14} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Portal de Clientes</p>
-                                        <div className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-2xl border border-slate-100/50 group/link">
-                                            <code className="text-[10px] text-slate-500 font-bold truncate">/{w.slug}/client</code>
-                                            <button
-                                                onClick={() => window.open(`${window.location.origin}/${w.slug}/client`, '_blank')}
-                                                className="text-emerald-600 hover:text-emerald-700 transition-colors"
-                                            >
-                                                <ExternalLink size={14} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
 
-                                <div className="flex gap-3">
-                                    <button
-                                        onClick={() => handleImpersonate(w.slug)}
-                                        disabled={w.status === 'inactive'}
-                                        className={`flex-grow bg-slate-900 hover:bg-black text-white font-black py-4 rounded-[1.5rem] transition-all text-[11px] uppercase flex items-center justify-center gap-2 italic tracking-tight ${w.status === 'inactive' ? 'opacity-30 cursor-not-allowed' : ''}`}
-                                    >
-                                        <ExternalLink size={16} />
-                                        Acceder al Panel
-                                    </button>
-                                    <button
-                                        onClick={() => setShowModulesModal(w)}
-                                        className="bg-slate-100 hover:bg-slate-200 text-slate-600 p-4 rounded-[1.5rem] transition-all"
-                                        title="Gestionar Módulos"
-                                    >
-                                        <ShieldCheck size={20} />
-                                    </button>
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={() => handleImpersonate(w.slug)}
+                                            disabled={w.status === 'inactive'}
+                                            className={`flex-grow bg-slate-900 hover:bg-black text-white font-black py-4 rounded-[1.5rem] transition-all text-[11px] uppercase flex items-center justify-center gap-2 italic tracking-tight ${w.status === 'inactive' ? 'opacity-30 cursor-not-allowed' : ''}`}
+                                        >
+                                            <ExternalLink size={16} />
+                                            Acceder al Panel
+                                        </button>
+                                        <button
+                                            onClick={() => setShowModulesModal(w)}
+                                            className="bg-slate-100 hover:bg-slate-200 text-slate-600 p-4 rounded-[1.5rem] transition-all"
+                                            title="Gestionar Módulos"
+                                        >
+                                            <ShieldCheck size={20} />
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </main>
@@ -2031,221 +2131,222 @@ export default function SuperAdminDashboard() {
             }
 
             {/* Workshop Logs Modal */}
-            {showLogsModal && (
-                <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[120] flex items-center justify-center p-4 overflow-hidden">
-                    <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[4rem] shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-12 duration-500">
-                        <div className="p-10 border-b border-slate-100 flex justify-between items-center shrink-0">
-                            <div className="flex items-center gap-4">
-                                <div className="p-4 bg-red-50 text-red-600 rounded-[1.5rem]">
-                                    <Activity size={32} />
+            {
+                showLogsModal && (
+                    <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-xl z-[120] flex items-center justify-center p-4 overflow-hidden">
+                        <div className="bg-white w-full max-w-6xl h-[90vh] rounded-[4rem] shadow-2xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-12 duration-500">
+                            <div className="p-10 border-b border-slate-100 flex justify-between items-center shrink-0">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-4 bg-red-50 text-red-600 rounded-[1.5rem]">
+                                        <Activity size={32} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">Logs de Sistema</h2>
+                                        <p className="text-slate-400 font-bold text-xs mt-2 uppercase tracking-widest leading-none">Taller: {showLogsModal.name} ({showLogsModal.slug})</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h2 className="text-3xl font-black text-slate-900 uppercase italic tracking-tighter leading-none">Logs de Sistema</h2>
-                                    <p className="text-slate-400 font-bold text-xs mt-2 uppercase tracking-widest leading-none">Taller: {showLogsModal.name} ({showLogsModal.slug})</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <button
-                                    onClick={() => fetchWorkshopLogs(showLogsModal.slug)}
-                                    className="p-4 bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl transition-all"
-                                    title="Refrescar"
-                                >
-                                    <RefreshCw size={24} className={loadingLogs ? 'animate-spin' : ''} />
-                                </button>
-                                {selectedLogs.length > 0 && (
+                                <div className="flex items-center gap-3">
                                     <button
-                                        onClick={() => handlePurgeWorkshopLogs(showLogsModal.slug, 'all')}
-                                        className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
+                                        onClick={() => fetchWorkshopLogs(showLogsModal.slug)}
+                                        className="p-4 bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-2xl transition-all"
+                                        title="Refrescar"
                                     >
-                                        Purgar Todo
+                                        <RefreshCw size={24} className={loadingLogs ? 'animate-spin' : ''} />
                                     </button>
-                                )}
-                                {selectedLogs.length > 0 && (
-                                    <button
-                                        onClick={() => handleDeleteWorkshopLogs(showLogsModal.slug, selectedLogs)}
-                                        className="bg-slate-900 text-white hover:bg-black px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2"
-                                    >
-                                        <Trash2 size={14} />
-                                        Eliminar Seleccionados ({selectedLogs.length})
-                                    </button>
-                                )}
-                                {selectedLogs.length === 0 && (
-                                    <button
-                                        onClick={() => handlePurgeWorkshopLogs(showLogsModal.slug, 'all')}
-                                        className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
-                                    >
-                                        Purgar Todo
-                                    </button>
-                                )}
-                                <button
-                                    onClick={() => setShowLogsModal(null)}
-                                    className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-slate-900 transition-all"
-                                >
-                                    <X size={24} />
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex-grow overflow-y-auto p-10 space-y-12">
-                            {/* Log Filters */}
-                            <div className="flex flex-col md:flex-row gap-4 items-center bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
-                                <div className="flex-grow relative w-full">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                    <input
-                                        type="text"
-                                        placeholder="Filtrar por mensaje o ruta..."
-                                        value={logSearchFilter}
-                                        onChange={(e) => setLogSearchFilter(e.target.value)}
-                                        className="bg-white border-2 border-slate-100 pl-12 pr-6 py-3 rounded-2xl w-full font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-indigo-500 transition-all text-sm"
-                                    />
-                                </div>
-                                <div className="flex gap-2 shrink-0">
-                                    {['all', 'info', 'warn', 'error'].map(level => (
+                                    {selectedLogs.length > 0 && (
                                         <button
-                                            key={level}
-                                            onClick={() => setLogLevelFilter(level)}
-                                            className={`px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border ${logLevelFilter === level
-                                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200'
-                                                : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
-                                                }`}
+                                            onClick={() => handlePurgeWorkshopLogs(showLogsModal.slug, 'all')}
+                                            className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
                                         >
-                                            {level === 'all' ? 'Todos' : level}
+                                            Purgar Todo
                                         </button>
-                                    ))}
+                                    )}
+                                    {selectedLogs.length > 0 && (
+                                        <button
+                                            onClick={() => handleDeleteWorkshopLogs(showLogsModal.slug, selectedLogs)}
+                                            className="bg-slate-900 text-white hover:bg-black px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2"
+                                        >
+                                            <Trash2 size={14} />
+                                            Eliminar Seleccionados ({selectedLogs.length})
+                                        </button>
+                                    )}
+                                    {selectedLogs.length === 0 && (
+                                        <button
+                                            onClick={() => handlePurgeWorkshopLogs(showLogsModal.slug, 'all')}
+                                            className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all"
+                                        >
+                                            Purgar Todo
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => setShowLogsModal(null)}
+                                        className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-slate-900 transition-all"
+                                    >
+                                        <X size={24} />
+                                    </button>
                                 </div>
                             </div>
 
-                            {/* DB Logs */}
-                            <section className="space-y-6">
-                                <h3 className="text-xl font-black text-slate-800 uppercase italic tracking-widest flex items-center gap-2">
-                                    <Database size={20} className="text-indigo-500" />
-                                    Registros de Base de Datos
-                                </h3>
-                                <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
-                                    {filteredSystemLogs.length === 0 ? (
-                                        <div className="p-20 text-center">
-                                            <p className="text-slate-400 font-bold italic">No hay logs que coincidan con los filtros.</p>
-                                        </div>
-                                    ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left">
-                                                <thead>
-                                                    <tr className="bg-slate-50/50 border-b border-slate-100">
-                                                        <th className="px-6 py-4 w-10">
-                                                            <input
-                                                                type="checkbox"
-                                                                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                                checked={filteredSystemLogs.length > 0 && selectedLogs.length === filteredSystemLogs.length}
-                                                                onChange={(e) => {
-                                                                    if (e.target.checked) {
-                                                                        setSelectedLogs(filteredSystemLogs.map(l => l.id));
-                                                                    } else {
-                                                                        setSelectedLogs([]);
-                                                                    }
-                                                                }}
-                                                            />
-                                                        </th>
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nivel</th>
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Mensaje</th>
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ruta / Método</th>
-                                                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Usuario</th>
-                                                        <th className="px-6 py-4 text-right"></th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-50">
-                                                    {filteredSystemLogs.map((log, i) => (
-                                                        <tr key={i} className={`hover:bg-slate-50/50 transition-colors group ${selectedLogs.includes(log.id) ? 'bg-indigo-50/30' : ''}`}>
-                                                            <td className="px-6 py-4">
+                            <div className="flex-grow overflow-y-auto p-10 space-y-12">
+                                {/* Log Filters */}
+                                <div className="flex flex-col md:flex-row gap-4 items-center bg-slate-50 p-6 rounded-[2.5rem] border border-slate-100">
+                                    <div className="flex-grow relative w-full">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                        <input
+                                            type="text"
+                                            placeholder="Filtrar por mensaje o ruta..."
+                                            value={logSearchFilter}
+                                            onChange={(e) => setLogSearchFilter(e.target.value)}
+                                            className="bg-white border-2 border-slate-100 pl-12 pr-6 py-3 rounded-2xl w-full font-bold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-indigo-500 transition-all text-sm"
+                                        />
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        {['all', 'info', 'warn', 'error'].map(level => (
+                                            <button
+                                                key={level}
+                                                onClick={() => setLogLevelFilter(level)}
+                                                className={`px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border ${logLevelFilter === level
+                                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-200'
+                                                    : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
+                                                    }`}
+                                            >
+                                                {level === 'all' ? 'Todos' : level}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* DB Logs */}
+                                <section className="space-y-6">
+                                    <h3 className="text-xl font-black text-slate-800 uppercase italic tracking-widest flex items-center gap-2">
+                                        <Database size={20} className="text-indigo-500" />
+                                        Registros de Base de Datos
+                                    </h3>
+                                    <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
+                                        {filteredSystemLogs.length === 0 ? (
+                                            <div className="p-20 text-center">
+                                                <p className="text-slate-400 font-bold italic">No hay logs que coincidan con los filtros.</p>
+                                            </div>
+                                        ) : (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-left">
+                                                    <thead>
+                                                        <tr className="bg-slate-50/50 border-b border-slate-100">
+                                                            <th className="px-6 py-4 w-10">
                                                                 <input
                                                                     type="checkbox"
                                                                     className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                                                                    checked={selectedLogs.includes(log.id)}
+                                                                    checked={filteredSystemLogs.length > 0 && selectedLogs.length === filteredSystemLogs.length}
                                                                     onChange={(e) => {
                                                                         if (e.target.checked) {
-                                                                            setSelectedLogs([...selectedLogs, log.id]);
+                                                                            setSelectedLogs(filteredSystemLogs.map(l => l.id));
                                                                         } else {
-                                                                            setSelectedLogs(selectedLogs.filter(id => id !== log.id));
+                                                                            setSelectedLogs([]);
                                                                         }
                                                                     }}
                                                                 />
-                                                            </td>
-                                                            <td className="px-6 py-4 text-[10px] font-black text-slate-500 tabular-nums">
-                                                                {new Date(log.created_at).toLocaleString()}
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase ${log.level === 'error' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
-                                                                    {log.level}
-                                                                </span>
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <p className="text-xs font-bold text-slate-800">{log.message}</p>
-                                                                {log.stack_trace && (
-                                                                    <details className="mt-2">
-                                                                        <summary className="text-[10px] text-slate-400 cursor-pointer hover:text-indigo-500 font-bold uppercase tracking-widest">Stack Trace</summary>
-                                                                        <pre className="mt-2 p-4 bg-slate-900 text-slate-300 text-[10px] rounded-xl overflow-x-auto font-mono max-h-40">
-                                                                            {log.stack_trace}
-                                                                        </pre>
-                                                                    </details>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-6 py-4">
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <span className="text-[9px] font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">{log.method}</span>
-                                                                    <span className="text-[10px] font-bold text-slate-500 truncate max-w-[150px]">{log.path}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-6 py-4 text-xs font-bold text-slate-500">
-                                                                {log.user_name || 'Sistema'}
-                                                            </td>
-                                                            <td className="px-6 py-4 text-right">
-                                                                <button
-                                                                    onClick={() => handleDeleteWorkshopLogs(showLogsModal.slug, [log.id])}
-                                                                    className="p-2 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            </td>
+                                                            </th>
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nivel</th>
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Mensaje</th>
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ruta / Método</th>
+                                                            <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Usuario</th>
+                                                            <th className="px-6 py-4 text-right"></th>
                                                         </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                            </section>
-
-                            {/* File Logs */}
-                            <section className="space-y-6">
-                                <h3 className="text-xl font-black text-slate-800 uppercase italic tracking-widest flex items-center gap-2">
-                                    <AlertCircle size={20} className="text-red-500" />
-                                    Logs de Emergencia (Archivo)
-                                </h3>
-                                <div className="space-y-4">
-                                    {filteredFileLogs.length === 0 ? (
-                                        <div className="bg-white p-10 rounded-[2rem] border border-slate-100 text-center">
-                                            <p className="text-slate-400 font-bold italic">No hay logs de emergencia que coincidan.</p>
-                                        </div>
-                                    ) : (
-                                        filteredFileLogs.map((log, i) => (
-                                            <div key={i} className="bg-slate-900 rounded-3xl p-6 border border-slate-800 group hover:border-red-500/50 transition-all">
-                                                <div className="flex justify-between items-start mb-4">
-                                                    <span className="px-3 py-1 bg-red-500/10 text-red-500 rounded-full text-[9px] font-black uppercase tracking-widest">Critico - Error de Archivo</span>
-                                                    <span className="text-[10px] font-black text-slate-500 tabular-nums">{new Date(log.timestamp).toLocaleString()}</span>
-                                                </div>
-                                                <p className="text-red-400 font-black text-sm mb-4 leading-relaxed">{log.message}</p>
-                                                <pre className="p-4 bg-black/50 rounded-2xl text-[10px] text-slate-500 font-mono overflow-x-auto whitespace-pre-wrap">
-                                                    {log.stack}
-                                                </pre>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-50">
+                                                        {filteredSystemLogs.map((log, i) => (
+                                                            <tr key={i} className={`hover:bg-slate-50/50 transition-colors group ${selectedLogs.includes(log.id) ? 'bg-indigo-50/30' : ''}`}>
+                                                                <td className="px-6 py-4">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                                                                        checked={selectedLogs.includes(log.id)}
+                                                                        onChange={(e) => {
+                                                                            if (e.target.checked) {
+                                                                                setSelectedLogs([...selectedLogs, log.id]);
+                                                                            } else {
+                                                                                setSelectedLogs(selectedLogs.filter(id => id !== log.id));
+                                                                            }
+                                                                        }}
+                                                                    />
+                                                                </td>
+                                                                <td className="px-6 py-4 text-[10px] font-black text-slate-500 tabular-nums">
+                                                                    {new Date(log.created_at).toLocaleString()}
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <span className={`px-2 py-1 rounded-md text-[9px] font-black uppercase ${log.level === 'error' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>
+                                                                        {log.level}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <p className="text-xs font-bold text-slate-800">{log.message}</p>
+                                                                    {log.stack_trace && (
+                                                                        <details className="mt-2">
+                                                                            <summary className="text-[10px] text-slate-400 cursor-pointer hover:text-indigo-500 font-bold uppercase tracking-widest">Stack Trace</summary>
+                                                                            <pre className="mt-2 p-4 bg-slate-900 text-slate-300 text-[10px] rounded-xl overflow-x-auto font-mono max-h-40">
+                                                                                {log.stack_trace}
+                                                                            </pre>
+                                                                        </details>
+                                                                    )}
+                                                                </td>
+                                                                <td className="px-6 py-4">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <span className="text-[9px] font-black bg-slate-100 px-1.5 py-0.5 rounded text-slate-600">{log.method}</span>
+                                                                        <span className="text-[10px] font-bold text-slate-500 truncate max-w-[150px]">{log.path}</span>
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-6 py-4 text-xs font-bold text-slate-500">
+                                                                    {log.user_name || 'Sistema'}
+                                                                </td>
+                                                                <td className="px-6 py-4 text-right">
+                                                                    <button
+                                                                        onClick={() => handleDeleteWorkshopLogs(showLogsModal.slug, [log.id])}
+                                                                        className="p-2 text-slate-300 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                                    >
+                                                                        <Trash2 size={16} />
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
                                             </div>
-                                        ))
-                                    )}
-                                </div>
-                            </section>
+                                        )}
+                                    </div>
+                                </section>
+
+                                {/* File Logs */}
+                                <section className="space-y-6">
+                                    <h3 className="text-xl font-black text-slate-800 uppercase italic tracking-widest flex items-center gap-2">
+                                        <AlertCircle size={20} className="text-red-500" />
+                                        Logs de Emergencia (Archivo)
+                                    </h3>
+                                    <div className="space-y-4">
+                                        {filteredFileLogs.length === 0 ? (
+                                            <div className="bg-white p-10 rounded-[2rem] border border-slate-100 text-center">
+                                                <p className="text-slate-400 font-bold italic">No hay logs de emergencia que coincidan.</p>
+                                            </div>
+                                        ) : (
+                                            filteredFileLogs.map((log, i) => (
+                                                <div key={i} className="bg-slate-900 rounded-3xl p-6 border border-slate-800 group hover:border-red-500/50 transition-all">
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <span className="px-3 py-1 bg-red-500/10 text-red-500 rounded-full text-[9px] font-black uppercase tracking-widest">Critico - Error de Archivo</span>
+                                                        <span className="text-[10px] font-black text-slate-500 tabular-nums">{new Date(log.timestamp).toLocaleString()}</span>
+                                                    </div>
+                                                    <p className="text-red-400 font-black text-sm mb-4 leading-relaxed">{log.message}</p>
+                                                    <pre className="p-4 bg-black/50 rounded-2xl text-[10px] text-slate-500 font-mono overflow-x-auto whitespace-pre-wrap">
+                                                        {log.stack}
+                                                    </pre>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </section>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )
+                )
             }
 
             {
@@ -2910,111 +3011,172 @@ export default function SuperAdminDashboard() {
             }
 
             {/* Modal Nueva Cadena */}
-            {showNewChainModal && (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
-                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300">
-                        <div className="flex items-center justify-between mb-8">
-                            <div>
-                                <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">Nueva Cadena</h2>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Grupo multi-sucursal</p>
+            {
+                showNewChainModal && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300">
+                            <div className="flex items-center justify-between mb-8">
+                                <div>
+                                    <h2 className="text-2xl font-black text-slate-900 uppercase italic tracking-tight">Nueva Cadena</h2>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Grupo multi-sucursal</p>
+                                </div>
+                                <button onClick={() => setShowNewChainModal(false)} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-900 transition-colors">
+                                    <X size={20} />
+                                </button>
                             </div>
-                            <button onClick={() => setShowNewChainModal(false)} className="p-2 bg-slate-50 rounded-xl text-slate-400 hover:text-slate-900 transition-colors">
+
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Nombre de la cadena</label>
+                                    <input
+                                        placeholder="Ej: Talleres García"
+                                        value={newChain.name}
+                                        onChange={e => setNewChain({
+                                            ...newChain,
+                                            name: e.target.value,
+                                            slug: newChain.slug || e.target.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+                                        })}
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-all"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Slug (identificador único)</label>
+                                    <div className="flex items-center gap-2 bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 focus-within:border-violet-500 transition-all">
+                                        <span className="text-slate-400 font-black text-sm">/chain/</span>
+                                        <input
+                                            placeholder="talleres-garcia"
+                                            value={newChain.slug}
+                                            onChange={e => setNewChain({ ...newChain, slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') })}
+                                            className="flex-grow bg-transparent font-bold text-slate-800 focus:outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Visibilidad cruzada entre talleres</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {([['summary', 'Solo resumen', 'Fecha, desc y total'], ['no_prices', 'Sin precios', 'Servicios, sin montos'], ['full', 'Completo', 'Todo visible']] as const).map(([val, label, desc]) => (
+                                            <button
+                                                key={val}
+                                                onClick={() => setNewChain({ ...newChain, visibility_level: val })}
+                                                className={`p-3 rounded-2xl border-2 text-left transition-all ${newChain.visibility_level === val ? 'border-violet-500 bg-violet-50' : 'border-slate-100 bg-slate-50 hover:border-violet-200'}`}
+                                            >
+                                                <p className={`text-[10px] font-black uppercase tracking-widest ${newChain.visibility_level === val ? 'text-violet-700' : 'text-slate-600'}`}>{label}</p>
+                                                <p className="text-[8px] font-bold text-slate-400 mt-0.5">{desc}</p>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Talleres miembros iniciales</label>
+                                    <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-2xl border-2 border-slate-100 min-h-[60px]">
+                                        {workshops.map(w => {
+                                            const selected = newChain.tenant_slugs.includes(w.slug);
+                                            return (
+                                                <button
+                                                    key={w.slug}
+                                                    type="button"
+                                                    onClick={() => setNewChain(prev => ({
+                                                        ...prev,
+                                                        tenant_slugs: selected
+                                                            ? prev.tenant_slugs.filter(s => s !== w.slug)
+                                                            : [...prev.tenant_slugs, w.slug]
+                                                    }))}
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${selected ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-500 border-slate-200 hover:border-violet-300'}`}
+                                                >
+                                                    {selected && <Check size={10} />}
+                                                    {w.name}
+                                                </button>
+                                            );
+                                        })}
+                                        {workshops.length === 0 && (
+                                            <p className="text-[10px] text-slate-300 italic font-bold">No hay talleres creados aún</p>
+                                        )}
+                                    </div>
+                                    <p className="text-[9px] text-slate-400 font-bold mt-1 ml-1">Podés agregar o quitar talleres después</p>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 mt-8">
+                                <button
+                                    onClick={() => { setShowNewChainModal(false); setNewChain({ name: '', slug: '', visibility_level: 'summary', tenant_slugs: [] }); }}
+                                    className="flex-grow py-4 rounded-2xl bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all font-bold"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleCreateChain}
+                                    disabled={savingChain || !newChain.name || !newChain.slug}
+                                    className="flex-[2] py-4 rounded-2xl bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-violet-500/20 font-bold"
+                                >
+                                    {savingChain ? 'Creando...' : 'Crear Cadena'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            {/* Modal de Errores de Sincronización */}
+            {showSyncErrorsModal && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">Errores de Sincronización</h3>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Últimos fallos detectados en la red</p>
+                            </div>
+                            <button onClick={() => setShowSyncErrorsModal(null)} className="p-3 hover:bg-white rounded-2xl text-slate-400 hover:text-slate-900 transition-all shadow-sm">
                                 <X size={20} />
                             </button>
                         </div>
-
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Nombre de la cadena</label>
-                                <input
-                                    placeholder="Ej: Talleres García"
-                                    value={newChain.name}
-                                    onChange={e => setNewChain({
-                                        ...newChain,
-                                        name: e.target.value,
-                                        slug: newChain.slug || e.target.value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
-                                    })}
-                                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 font-bold text-slate-800 focus:outline-none focus:border-violet-500 transition-all"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Slug (identificador único)</label>
-                                <div className="flex items-center gap-2 bg-slate-50 border-2 border-slate-100 rounded-2xl px-4 py-3 focus-within:border-violet-500 transition-all">
-                                    <span className="text-slate-400 font-black text-sm">/chain/</span>
-                                    <input
-                                        placeholder="talleres-garcia"
-                                        value={newChain.slug}
-                                        onChange={e => setNewChain({ ...newChain, slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') })}
-                                        className="flex-grow bg-transparent font-bold text-slate-800 focus:outline-none"
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Visibilidad cruzada entre talleres</label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {([['summary', 'Solo resumen', 'Fecha, desc y total'], ['no_prices', 'Sin precios', 'Servicios, sin montos'], ['full', 'Completo', 'Todo visible']] as const).map(([val, label, desc]) => (
-                                        <button
-                                            key={val}
-                                            onClick={() => setNewChain({ ...newChain, visibility_level: val })}
-                                            className={`p-3 rounded-2xl border-2 text-left transition-all ${newChain.visibility_level === val ? 'border-violet-500 bg-violet-50' : 'border-slate-100 bg-slate-50 hover:border-violet-200'}`}
-                                        >
-                                            <p className={`text-[10px] font-black uppercase tracking-widest ${newChain.visibility_level === val ? 'text-violet-700' : 'text-slate-600'}`}>{label}</p>
-                                            <p className="text-[8px] font-bold text-slate-400 mt-0.5">{desc}</p>
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Talleres miembros iniciales</label>
-                                <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-2xl border-2 border-slate-100 min-h-[60px]">
-                                    {workshops.map(w => {
-                                        const selected = newChain.tenant_slugs.includes(w.slug);
-                                        return (
-                                            <button
-                                                key={w.slug}
-                                                type="button"
-                                                onClick={() => setNewChain(prev => ({
-                                                    ...prev,
-                                                    tenant_slugs: selected
-                                                        ? prev.tenant_slugs.filter(s => s !== w.slug)
-                                                        : [...prev.tenant_slugs, w.slug]
-                                                }))}
-                                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border ${selected ? 'bg-violet-600 text-white border-violet-600' : 'bg-white text-slate-500 border-slate-200 hover:border-violet-300'}`}
-                                            >
-                                                {selected && <Check size={10} />}
-                                                {w.name}
-                                            </button>
-                                        );
-                                    })}
-                                    {workshops.length === 0 && (
-                                        <p className="text-[10px] text-slate-300 italic font-bold">No hay talleres creados aún</p>
-                                    )}
-                                </div>
-                                <p className="text-[9px] text-slate-400 font-bold mt-1 ml-1">Podés agregar o quitar talleres después</p>
+                        <div className="p-8 max-h-[60vh] overflow-y-auto">
+                            <div className="space-y-4">
+                                {chainSyncStatus[showSyncErrorsModal]?.recent_errors?.length > 0 ? (
+                                    chainSyncStatus[showSyncErrorsModal].recent_errors.map((err: any) => (
+                                        <div key={err.id} className="p-4 bg-red-50/50 border border-red-100 rounded-2xl">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <span className="text-[10px] font-black text-red-600 uppercase tracking-widest bg-white px-2 py-1 rounded-lg shadow-sm font-mono">
+                                                    {err.operation}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-slate-400 uppercase">
+                                                    {new Date(err.created_at).toLocaleString()}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[9px] font-black text-slate-400 uppercase">Desde:</span>
+                                                    <span className="text-[10px] font-bold text-slate-700">{err.source_slug}</span>
+                                                </div>
+                                                <div className="w-4 h-[1px] bg-slate-200" />
+                                                <div className="flex items-center gap-1">
+                                                    <span className="text-[9px] font-black text-slate-400 uppercase">Hacia:</span>
+                                                    <span className="text-[10px] font-bold text-slate-700">{err.target_slug}</span>
+                                                </div>
+                                            </div>
+                                            <p className="text-sm font-bold text-red-800 italic">"{err.error_message}"</p>
+                                        </div>
+                                    ))
+                                ) : (
+                                    <div className="p-12 text-center">
+                                        <CheckCircle size={48} className="text-emerald-500 mx-auto mb-4 opacity-20" />
+                                        <p className="text-slate-400 font-bold italic">No hay errores recientes registrados.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
-
-                        <div className="flex gap-3 mt-8">
+                        <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end">
                             <button
-                                onClick={() => { setShowNewChainModal(false); setNewChain({ name: '', slug: '', visibility_level: 'summary', tenant_slugs: [] }); }}
-                                className="flex-grow py-4 rounded-2xl bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest hover:bg-slate-100 transition-all font-bold"
+                                onClick={() => setShowSyncErrorsModal(null)}
+                                className="px-8 py-3 bg-white text-slate-900 border border-slate-200 rounded-2xl text-xs font-black uppercase tracking-[0.2em] hover:bg-slate-900 hover:text-white transition-all shadow-sm"
                             >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={handleCreateChain}
-                                disabled={savingChain || !newChain.name || !newChain.slug}
-                                className="flex-[2] py-4 rounded-2xl bg-violet-600 hover:bg-violet-700 disabled:opacity-40 text-white font-black text-[10px] uppercase tracking-widest transition-all shadow-xl shadow-violet-500/20 font-bold"
-                            >
-                                {savingChain ? 'Creando...' : 'Crear Cadena'}
+                                Entendido
                             </button>
                         </div>
                     </div>
                 </div>
             )}
-        </div >
+        </div>
     );
 }

@@ -1407,6 +1407,159 @@ router.put('/tickets/:id/status', superAuth, (req, res) => {
     }
 });
 
+// ── Merge clients/vehicles al acoplar un taller a una cadena ─────────────────
+function mergeTenantsOnCouple(chainId, newSlug) {
+    const { getDb } = require('../tenantManager');
+    const { randomUUID } = require('crypto');
+
+    // Obtener todos los slugs del grupo (incluyendo el nuevo)
+    const allMembers = superDb.prepare(
+        'SELECT tenant_slug FROM chain_members WHERE chain_id = ?'
+    ).all(chainId).map(r => r.tenant_slug);
+
+    if (allMembers.length === 0) return;
+
+    // ── Paso 0: Asegurar que todos los clientes/vehículos tengan UUID y source_tenant ──
+    // IMPORTANTE: Hacemos esto antes de propagar para que el filtro "WHERE uuid IS NOT NULL" no los ignore
+    for (const slug of allMembers) {
+        try {
+            const db = getDb(slug);
+            // Fix clients
+            const incompleteClients = db.prepare('SELECT id, uuid, source_tenant FROM clients WHERE uuid IS NULL OR source_tenant IS NULL').all();
+            for (const c of incompleteClients) {
+                db.prepare('UPDATE clients SET uuid = ?, source_tenant = ? WHERE id = ?')
+                    .run(c.uuid || randomUUID(), c.source_tenant || slug, c.id);
+            }
+            // Fix vehicles
+            const incompleteVehicles = db.prepare('SELECT id, uuid, source_tenant FROM vehicles WHERE uuid IS NULL OR source_tenant IS NULL').all();
+            for (const v of incompleteVehicles) {
+                db.prepare('UPDATE vehicles SET uuid = ?, source_tenant = ? WHERE id = ?')
+                    .run(v.uuid || randomUUID(), v.source_tenant || slug, v.id);
+            }
+        } catch (e) {
+            console.warn(`[merge] backfill error in ${slug}:`, e.message);
+        }
+    }
+
+    const newDb = getDb(newSlug);
+
+    // Para cada taller existente en la cadena (que no sea el nuevo)
+    const existingMembers = allMembers.filter(s => s !== newSlug);
+
+    for (const existingSlug of existingMembers) {
+        const existingDb = getDb(existingSlug);
+
+        // ── Paso 1: Propagar clientes del taller existente → nuevo taller ──
+        const existingClients = existingDb.prepare(
+            'SELECT * FROM clients WHERE uuid IS NOT NULL'
+        ).all();
+
+        for (const client of existingClients) {
+            // Buscar si ya existe en el nuevo taller por uuid o email
+            const inNew = newDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE uuid = ?').get(client.uuid)
+                || (client.email ? newDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != ""').get(client.email) : null);
+
+            if (!inNew) {
+                try {
+                    newDb.prepare(`
+                        INSERT INTO clients (uuid, first_name, last_name, nickname, phone, email,
+                        address, notes, source_tenant, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                    `).run(client.uuid, client.first_name, client.last_name, client.nickname,
+                        client.phone, client.email, client.address, client.notes,
+                        client.source_tenant, client.created_at);
+                } catch (e) { /* duplicate, skip */ }
+            } else if (!inNew.uuid || !inNew.source_tenant) {
+                // Tenía el cliente pero le faltaba identidad — actualizar
+                newDb.prepare('UPDATE clients SET uuid = ?, source_tenant = ? WHERE id = ?')
+                    .run(client.uuid, client.source_tenant || existingSlug, inNew.id);
+            }
+        }
+
+        // ── Paso 2: Propagar vehículos del taller existente → nuevo taller ──
+        const existingVehicles = existingDb.prepare(`
+            SELECT v.*, c.uuid as client_uuid
+            FROM vehicles v
+            JOIN clients c ON v.client_id = c.id
+            WHERE v.uuid IS NOT NULL
+        `).all();
+
+        for (const vehicle of existingVehicles) {
+            // Un vehiculo nuevo solo se puede insertar si ya existe su cliente en el nuevo taller
+            const clientInNew = newDb.prepare('SELECT id FROM clients WHERE uuid = ?').get(vehicle.client_uuid);
+            if (!clientInNew) continue;
+
+            const inNew = newDb.prepare('SELECT id, uuid, source_tenant FROM vehicles WHERE uuid = ?').get(vehicle.uuid)
+                || newDb.prepare('SELECT id, uuid, source_tenant FROM vehicles WHERE plate = ?').get(vehicle.plate);
+
+            if (!inNew) {
+                try {
+                    newDb.prepare(`
+                        INSERT INTO vehicles (uuid, client_id, plate, brand, model, version, year, km, source_tenant, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                    `).run(vehicle.uuid, clientInNew.id, vehicle.plate, vehicle.brand,
+                        vehicle.model, vehicle.version, vehicle.year, vehicle.km, vehicle.source_tenant, vehicle.created_at);
+                } catch (e) { }
+            } else if (!inNew.uuid || !inNew.source_tenant) {
+                newDb.prepare('UPDATE vehicles SET uuid = ?, source_tenant = ?, client_id = ?, km = ? WHERE id = ?')
+                    .run(vehicle.uuid, vehicle.source_tenant || existingSlug, clientInNew.id, vehicle.km, inNew.id);
+            }
+        }
+
+        // ── Paso 3: Propagar clientes del nuevo taller → talleres existentes ──
+        const newClients = newDb.prepare('SELECT * FROM clients WHERE uuid IS NOT NULL').all();
+
+        for (const client of newClients) {
+            const inExisting = existingDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE uuid = ?').get(client.uuid)
+                || (client.email ? existingDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != ""').get(client.email) : null);
+
+            if (!inExisting) {
+                try {
+                    existingDb.prepare(`
+                        INSERT INTO clients (uuid, first_name, last_name, nickname, phone, email,
+                        address, notes, source_tenant, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                    `).run(client.uuid, client.first_name, client.last_name, client.nickname,
+                        client.phone, client.email, client.address, client.notes,
+                        client.source_tenant, client.created_at);
+                } catch (e) { }
+            } else if (!inExisting.uuid || !inExisting.source_tenant) {
+                existingDb.prepare('UPDATE clients SET uuid = ?, source_tenant = ? WHERE id = ?')
+                    .run(client.uuid, client.source_tenant || newSlug, inExisting.id);
+            }
+        }
+
+        // ── Paso 4: Propagar vehículos del nuevo taller → talleres existentes ──
+        const newVehicles = newDb.prepare(`
+            SELECT v.*, c.uuid as client_uuid
+            FROM vehicles v
+            JOIN clients c ON v.client_id = c.id
+            WHERE v.uuid IS NOT NULL
+        `).all();
+
+        for (const vehicle of newVehicles) {
+            const clientInExisting = existingDb.prepare('SELECT id FROM clients WHERE uuid = ?').get(vehicle.client_uuid);
+            if (!clientInExisting) continue;
+
+            const inExisting = existingDb.prepare('SELECT id, uuid, source_tenant FROM vehicles WHERE uuid = ?').get(vehicle.uuid)
+                || existingDb.prepare('SELECT id, uuid, source_tenant FROM vehicles WHERE plate = ?').get(vehicle.plate);
+
+            if (!inExisting) {
+                try {
+                    existingDb.prepare(`
+                        INSERT INTO vehicles (uuid, client_id, plate, brand, model, version, year, km, source_tenant, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                    `).run(vehicle.uuid, clientInExisting.id, vehicle.plate, vehicle.brand,
+                        vehicle.model, vehicle.version, vehicle.year, vehicle.km, vehicle.source_tenant, vehicle.created_at);
+                } catch (e) { }
+            } else if (!inExisting.uuid || !inExisting.source_tenant) {
+                existingDb.prepare('UPDATE vehicles SET uuid = ?, source_tenant = ?, client_id = ?, km = ? WHERE id = ?')
+                    .run(vehicle.uuid, vehicle.source_tenant || newSlug, clientInExisting.id, vehicle.km, inExisting.id);
+            }
+        }
+    }
+}
+
 // ── GET /api/super/chains ─────────────────────────────────────────────────────
 router.get('/chains', superAuth, (req, res) => {
     const chains = superDb.prepare(`
@@ -1463,9 +1616,50 @@ router.patch('/chains/:id', superAuth, (req, res) => {
 // ── POST /api/super/chains/:id/members ───────────────────────────────────────
 router.post('/chains/:id/members', superAuth, (req, res) => {
     const { tenant_slug } = req.body;
-    superDb.prepare('INSERT OR IGNORE INTO chain_members (chain_id, tenant_slug) VALUES (?,?)').run(req.params.id, tenant_slug);
-    superDb.prepare('UPDATE workshops SET chain_id = ? WHERE slug = ?').run(req.params.id, tenant_slug);
-    res.json({ message: 'Member added' });
+    if (!tenant_slug) return res.status(400).json({ message: 'tenant_slug required' });
+
+    try {
+        superDb.prepare('INSERT OR IGNORE INTO chain_members (chain_id, tenant_slug) VALUES (?,?)')
+            .run(req.params.id, tenant_slug);
+        superDb.prepare('UPDATE workshops SET chain_id = ? WHERE slug = ?')
+            .run(req.params.id, tenant_slug);
+
+        // Merge clientes/vehículos existentes en segundo plano
+        setImmediate(() => {
+            try {
+                mergeTenantsOnCouple(parseInt(req.params.id), tenant_slug);
+                console.log(`[chain] Merge completed for ${tenant_slug} into chain ${req.params.id}`);
+            } catch (e) {
+                console.error(`[chain] Merge error for ${tenant_slug}:`, e.message);
+            }
+        });
+
+        res.json({ message: 'Member added, sync in progress' });
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+
+// ── POST /api/super/chains/:id/resync ────────────────────────────────────────
+router.post('/chains/:id/resync', superAuth, (req, res) => {
+    const chain = superDb.prepare('SELECT * FROM tenant_chains WHERE id = ?').get(req.params.id);
+    if (!chain) return res.status(404).json({ message: 'Chain not found' });
+
+    const members = superDb.prepare('SELECT tenant_slug FROM chain_members WHERE chain_id = ?')
+        .all(req.params.id);
+
+    res.json({ message: 'Resync started', members: members.length });
+
+    setImmediate(() => {
+        for (const { tenant_slug } of members) {
+            try {
+                mergeTenantsOnCouple(parseInt(req.params.id), tenant_slug);
+            } catch (e) {
+                console.error(`[resync] Error for ${tenant_slug}:`, e.message);
+            }
+        }
+        console.log(`[chain] Full resync completed for chain ${req.params.id}`);
+    });
 });
 
 // ── DELETE /api/super/chains/:id/members/:slug ────────────────────────────────
@@ -1547,10 +1741,25 @@ router.delete('/chains/:id/users/:userId', superAuth, (req, res) => {
 
 // ── GET /api/super/chains/:id/sync-status ────────────────────────────────────
 router.get('/chains/:id/sync-status', superAuth, (req, res) => {
-    const pending = superDb.prepare("SELECT COUNT(*) as c FROM sync_queue WHERE chain_id=? AND status='pending'").get(req.params.id);
-    const failed = superDb.prepare("SELECT COUNT(*) as c FROM sync_queue WHERE chain_id=? AND status='failed'").get(req.params.id);
-    const recent = superDb.prepare("SELECT * FROM sync_queue WHERE chain_id=? ORDER BY created_at DESC LIMIT 20").all(req.params.id);
-    res.json({ pending: pending.c, failed: failed.c, recent });
+    try {
+        const pending = superDb.prepare("SELECT COUNT(*) as c FROM sync_queue WHERE chain_id=? AND status='pending'").get(req.params.id);
+        const failed = superDb.prepare("SELECT COUNT(*) as c FROM sync_queue WHERE chain_id=? AND status='failed'").get(req.params.id);
+        const done = superDb.prepare("SELECT COUNT(*) as c FROM sync_queue WHERE chain_id=? AND status='done' AND processed_at > date('now', '-1 day')").get(req.params.id);
+        const recentErrors = superDb.prepare(`
+            SELECT * FROM sync_queue
+            WHERE chain_id=? AND status='failed'
+            ORDER BY created_at DESC LIMIT 10
+        `).all(req.params.id);
+
+        res.json({
+            pending: pending.c,
+            failed: failed.c,
+            done_today: done.c,
+            recent_errors: recentErrors
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 });
 
 module.exports = router;

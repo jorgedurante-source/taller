@@ -53,6 +53,11 @@ export default function ClientDashboardPage() {
     const [showOrderDetailModal, setShowOrderDetailModal] = useState(false);
     const [loadingOrderDetail, setLoadingOrderDetail] = useState(false);
 
+    // Sync across chain members
+    const [chainHistory, setChainHistory] = useState<any>(null);
+    const [loadingChainHistory, setLoadingChainHistory] = useState(false);
+    const [chainHistoryTab, setChainHistoryTab] = useState('all'); // 'all' or specific slug
+
     const fetchPortalData = async () => {
         try {
             const configRes = await api.get('/config');
@@ -68,6 +73,17 @@ export default function ClientDashboardPage() {
             console.error('Error fetching portal data', err);
         } finally {
             setLoading(false);
+        }
+
+        // Fetch chain history
+        try {
+            setLoadingChainHistory(true);
+            const res = await clientApi.get('/client/chain-history');
+            setChainHistory(res.data);
+        } catch (e) {
+            console.error('Error fetching chain history', e);
+        } finally {
+            setLoadingChainHistory(false);
         }
     };
 
@@ -395,58 +411,128 @@ export default function ClientDashboardPage() {
 
                         {/* Historial */}
                         <section className="space-y-8">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-indigo-600 p-2 rounded-lg text-white">
-                                    <History size={20} />
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-indigo-600 p-2 rounded-lg text-white">
+                                        <History size={20} />
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">
+                                        {chainHistory?.in_chain ? `Historial en Red ${chainHistory.chain_name}` : t('visit_history')}
+                                    </h3>
                                 </div>
-                                <h3 className="text-xl font-black text-slate-900 uppercase italic tracking-tight">{t('visit_history')}</h3>
+
+                                {chainHistory?.in_chain && (
+                                    <div className="flex gap-2 p-1 bg-slate-100 rounded-2xl overflow-x-auto scrollbar-hide">
+                                        <button
+                                            onClick={() => setChainHistoryTab('all')}
+                                            className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${chainHistoryTab === 'all'
+                                                    ? 'bg-white text-indigo-600 shadow-sm'
+                                                    : 'text-slate-400 hover:text-slate-600'
+                                                }`}
+                                        >
+                                            Todos ({chainHistory.tenants.reduce((acc: number, t: any) => acc + t.order_count, 0)})
+                                        </button>
+                                        {chainHistory.tenants.map((t: any) => (
+                                            <button
+                                                key={`tab-${t.tenant_slug}`}
+                                                onClick={() => setChainHistoryTab(t.tenant_slug)}
+                                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-all ${chainHistoryTab === t.tenant_slug
+                                                        ? 'bg-white text-indigo-600 shadow-sm'
+                                                        : 'text-slate-400 hover:text-slate-600'
+                                                    }`}
+                                            >
+                                                {t.workshop_name} ({t.order_count})
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
 
                             <div className="bg-[var(--bg-card)] rounded-[32px] border border-[var(--border)] shadow-sm overflow-hidden">
-                                {pastOrders?.length > 0 ? (
-                                    <table className="w-full text-left">
-                                        <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
-                                            <tr>
-                                                <th className="px-8 py-6">Vehículo</th>
-                                                <th className="px-8 py-6">Servicio</th>
-                                                <th className="px-8 py-6">Fecha</th>
-                                                <th className="px-8 py-6 text-right">Resultado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {pastOrders.map((order: any) => (
-                                                <tr
-                                                    key={order.id}
-                                                    className="hover:bg-slate-50/50 transition-colors group cursor-pointer"
-                                                    onClick={() => handleViewOrder(order.id)}
-                                                >
-                                                    <td className="px-8 py-6">
-                                                        <div className="font-bold text-[var(--text-primary)] uppercase truncate">{order.model}</div>
-                                                        <div className="text-[10px] font-black italic tracking-widest font-mono" style={{ color: 'var(--accent)' }}>{order.plate}</div>
-                                                    </td>
-                                                    <td className="px-8 py-6 font-bold text-slate-600 text-sm">{order.description}</td>
-                                                    <td className="px-8 py-6 text-sm font-bold text-slate-500 uppercase">{new Date(order.updated_at).toLocaleDateString()}</td>
-                                                    <td className="px-8 py-6 text-right flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
-                                                        {(order.has_budget > 0 || ['Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'].includes(order.status)) && (
-                                                            <button
-                                                                onClick={() => handleDownloadPDF(order)}
-                                                                className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-900 hover:text-white transition-all shadow-sm"
-                                                                title="Descargar Presupuesto/Orden"
-                                                            >
-                                                                <Download size={16} />
-                                                            </button>
-                                                        )}
-                                                        <span className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest ${['Cancelado', 'cancelled', 'canceled'].includes(order.status?.toLowerCase()) ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                                            {t(order.status).toUpperCase()}
-                                                        </span>
-                                                    </td>
+                                {(() => {
+                                    let displayOrders = [];
+                                    if (!chainHistory?.in_chain) {
+                                        displayOrders = pastOrders?.map((o: any) => ({ ...o, workshop_name: config?.workshop_name, is_current: true })) || [];
+                                    } else {
+                                        if (chainHistoryTab === 'all') {
+                                            displayOrders = chainHistory.tenants.flatMap((t: any) =>
+                                                t.orders.map((o: any) => ({
+                                                    ...o,
+                                                    workshop_name: t.workshop_name,
+                                                    is_current: t.is_current,
+                                                    tenant_slug: t.tenant_slug
+                                                }))
+                                            );
+                                            // Sort by date desc
+                                            displayOrders.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+                                        } else {
+                                            const tenant = chainHistory.tenants.find((t: any) => t.tenant_slug === chainHistoryTab);
+                                            displayOrders = tenant?.orders.map((o: any) => ({
+                                                ...o,
+                                                workshop_name: tenant.workshop_name,
+                                                is_current: tenant.is_current,
+                                                tenant_slug: tenant.tenant_slug
+                                            })) || [];
+                                        }
+                                    }
+
+                                    if (displayOrders.length === 0) {
+                                        return <div className="p-16 text-center text-slate-400 font-bold italic">{t('no_registered_visits')}</div>;
+                                    }
+
+                                    return (
+                                        <table className="w-full text-left">
+                                            <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
+                                                <tr>
+                                                    <th className="px-8 py-6">Sucursal / Vehículo</th>
+                                                    <th className="px-8 py-6">Servicio</th>
+                                                    <th className="px-8 py-6">Fecha</th>
+                                                    <th className="px-8 py-6 text-right">Resultado</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                ) : (
-                                    <div className="p-16 text-center text-slate-400 font-bold italic">{t('no_registered_visits')}</div>
-                                )}
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100">
+                                                {displayOrders.map((order: any, idx: number) => (
+                                                    <tr
+                                                        key={`${order.tenant_slug || 'local'}-${order.id}-${idx}`}
+                                                        className={`transition-colors group ${order.is_current ? 'hover:bg-slate-50/50 cursor-pointer' : 'opacity-80 grayscale-[0.3]'}`}
+                                                        onClick={() => order.is_current && handleViewOrder(order.id)}
+                                                    >
+                                                        <td className="px-8 py-6">
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-tighter ${order.is_current ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-200 text-slate-500'}`}>
+                                                                    {order.workshop_name}
+                                                                </span>
+                                                            </div>
+                                                            <div className="font-bold text-[var(--text-primary)] uppercase truncate">{order.model}</div>
+                                                            <div className="text-[10px] font-black italic tracking-widest font-mono" style={{ color: 'var(--accent)' }}>{order.plate}</div>
+                                                        </td>
+                                                        <td className="px-8 py-6 font-bold text-slate-600 text-sm">
+                                                            {order.description}
+                                                            {!order.is_current && chainHistory?.visibility_level === 'summary' && (
+                                                                <span className="block text-[9px] text-slate-400 mt-1 uppercase tracking-tight font-black italic">Solo lectura (Visibilidad Resumida)</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-8 py-6 text-sm font-bold text-slate-500 uppercase">{new Date(order.created_at).toLocaleDateString()}</td>
+                                                        <td className="px-8 py-6 text-right flex items-center justify-end gap-3" onClick={(e) => e.stopPropagation()}>
+                                                            {order.is_current && (order.has_budget > 0 || ['Presupuestado', 'Aprobado', 'En reparación', 'Listo para entrega', 'Entregado'].includes(order.status)) && (
+                                                                <button
+                                                                    onClick={() => handleDownloadPDF(order)}
+                                                                    className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-900 hover:text-white transition-all shadow-sm"
+                                                                    title="Descargar Presupuesto/Orden"
+                                                                >
+                                                                    <Download size={16} />
+                                                                </button>
+                                                            )}
+                                                            <span className={`px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest ${['Cancelado', 'cancelled', 'canceled'].includes(order.status?.toLowerCase()) ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                                {t(order.status).toUpperCase()}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    );
+                                })()}
                             </div>
                         </section>
                     </div>

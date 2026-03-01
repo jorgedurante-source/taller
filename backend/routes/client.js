@@ -209,4 +209,96 @@ router.get('/history-pdf/:vehicle_id', auth, async (req, res) => {
     }
 });
 
+// ── GET /api/:slug/client/chain-history ──────────────────────────────────────
+// Historial del cliente en todos los talleres de la cadena
+router.get('/chain-history', auth, (req, res) => {
+    try {
+        const superDb = require('../superDb');
+        const { getDb } = require('../tenantManager');
+
+        // Encontrar si este taller pertenece a una cadena
+        const membership = superDb.prepare(`
+            SELECT cm.chain_id, tc.name as chain_name, tc.visibility_level
+            FROM chain_members cm
+            JOIN tenant_chains tc ON tc.id = cm.chain_id
+            WHERE cm.tenant_slug = ?
+        `).get(req.slug);
+
+        if (!membership) {
+            return res.json({ in_chain: false, chain_name: null, tenants: [] });
+        }
+
+        // Obtener todos los talleres de la cadena
+        const members = superDb.prepare(`
+            SELECT cm.tenant_slug, w.name as workshop_name
+            FROM chain_members cm
+            LEFT JOIN workshops w ON w.slug = cm.tenant_slug
+            WHERE cm.chain_id = ?
+        `).all(membership.chain_id);
+
+        // Buscar el cliente por email en cada taller
+        const clientEmail = req.user.username;
+        const result = [];
+
+        for (const member of members) {
+            try {
+                const db = getDb(member.tenant_slug);
+                const client = db.prepare(
+                    'SELECT id FROM clients WHERE email = ?'
+                ).get(clientEmail);
+
+                if (!client) continue;
+
+                const orders = db.prepare(`
+                    SELECT o.id, o.uuid, o.status, o.description,
+                           o.created_at, o.delivered_at, o.updated_at,
+                           v.plate, v.brand, v.model, v.year,
+                           (SELECT notes FROM order_history
+                            WHERE order_id = o.id
+                            ORDER BY created_at DESC LIMIT 1) as last_note
+                    FROM orders o
+                    JOIN vehicles v ON o.vehicle_id = v.id
+                    WHERE o.client_id = ?
+                    ORDER BY o.created_at DESC
+                `).all(client.id);
+
+                // Aplicar nivel de visibilidad si es un taller diferente al actual
+                let processedOrders = orders;
+                if (member.tenant_slug !== req.slug && membership.visibility_level === 'summary') {
+                    // Solo resumen: quitar descripción detallada
+                    processedOrders = orders.map(o => ({
+                        ...o,
+                        description: o.description ? o.description.substring(0, 60) + (o.description.length > 60 ? '...' : '') : null
+                    }));
+                }
+
+                result.push({
+                    tenant_slug: member.tenant_slug,
+                    workshop_name: member.workshop_name || member.tenant_slug,
+                    is_current: member.tenant_slug === req.slug,
+                    order_count: orders.length,
+                    orders: processedOrders
+                });
+            } catch (e) {
+                // Taller inaccesible, continuar
+                continue;
+            }
+        }
+
+        // Ordenar: taller actual primero
+        result.sort((a, b) => (b.is_current ? 1 : 0) - (a.is_current ? 1 : 0));
+
+        res.json({
+            in_chain: true,
+            chain_name: membership.chain_name,
+            visibility_level: membership.visibility_level,
+            tenants: result
+        });
+
+    } catch (err) {
+        console.error('[chain-history]', err);
+        res.status(500).json({ message: 'Error fetching chain history' });
+    }
+});
+
 module.exports = router;
