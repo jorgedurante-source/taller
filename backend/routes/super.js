@@ -1468,7 +1468,9 @@ function mergeTenantsOnCouple(chainId, newSlug) {
                     `).run(client.uuid, client.first_name, client.last_name, client.nickname,
                         client.phone, client.email, client.address, client.notes,
                         client.source_tenant, client.created_at);
-                } catch (e) { /* duplicate, skip */ }
+                } catch (e) {
+                    console.warn('[merge] error:', e.message);
+                }
             } else if (!inNew.uuid || !inNew.source_tenant) {
                 // Tenía el cliente pero le faltaba identidad — actualizar
                 newDb.prepare('UPDATE clients SET uuid = ?, source_tenant = ? WHERE id = ?')
@@ -1499,7 +1501,9 @@ function mergeTenantsOnCouple(chainId, newSlug) {
                         VALUES (?,?,?,?,?,?,?,?,?,?)
                     `).run(vehicle.uuid, clientInNew.id, vehicle.plate, vehicle.brand,
                         vehicle.model, vehicle.version, vehicle.year, vehicle.km, vehicle.source_tenant, vehicle.created_at);
-                } catch (e) { }
+                } catch (e) {
+                    console.warn('[merge] error:', e.message);
+                }
             } else if (!inNew.uuid || !inNew.source_tenant) {
                 newDb.prepare('UPDATE vehicles SET uuid = ?, source_tenant = ?, client_id = ?, km = ? WHERE id = ?')
                     .run(vehicle.uuid, vehicle.source_tenant || existingSlug, clientInNew.id, vehicle.km, inNew.id);
@@ -1522,7 +1526,9 @@ function mergeTenantsOnCouple(chainId, newSlug) {
                     `).run(client.uuid, client.first_name, client.last_name, client.nickname,
                         client.phone, client.email, client.address, client.notes,
                         client.source_tenant, client.created_at);
-                } catch (e) { }
+                } catch (e) {
+                    console.warn('[merge] error:', e.message);
+                }
             } else if (!inExisting.uuid || !inExisting.source_tenant) {
                 existingDb.prepare('UPDATE clients SET uuid = ?, source_tenant = ? WHERE id = ?')
                     .run(client.uuid, client.source_tenant || newSlug, inExisting.id);
@@ -1551,7 +1557,9 @@ function mergeTenantsOnCouple(chainId, newSlug) {
                         VALUES (?,?,?,?,?,?,?,?,?,?)
                     `).run(vehicle.uuid, clientInExisting.id, vehicle.plate, vehicle.brand,
                         vehicle.model, vehicle.version, vehicle.year, vehicle.km, vehicle.source_tenant, vehicle.created_at);
-                } catch (e) { }
+                } catch (e) {
+                    console.warn('[merge] error:', e.message);
+                }
             } else if (!inExisting.uuid || !inExisting.source_tenant) {
                 existingDb.prepare('UPDATE vehicles SET uuid = ?, source_tenant = ?, client_id = ?, km = ? WHERE id = ?')
                     .run(vehicle.uuid, vehicle.source_tenant || newSlug, clientInExisting.id, vehicle.km, inExisting.id);
@@ -1660,6 +1668,131 @@ router.post('/chains/:id/resync', superAuth, (req, res) => {
         }
         console.log(`[chain] Full resync completed for chain ${req.params.id}`);
     });
+});
+
+// ── POST /api/super/chains/:id/resync-debug ──────────────────────────────────
+router.post('/chains/:id/resync-debug', superAuth, (req, res) => {
+    const { getDb } = require('../tenantManager');
+    const { randomUUID } = require('crypto');
+    const chainId = parseInt(req.params.id);
+    const chain = superDb.prepare('SELECT * FROM tenant_chains WHERE id = ?').get(chainId);
+    if (!chain) return res.status(404).json({ message: 'Chain not found' });
+
+    const members = superDb.prepare('SELECT tenant_slug FROM chain_members WHERE chain_id = ?').all(chainId);
+    const slugs = members.map(m => m.tenant_slug);
+
+    const report = {
+        chain: chain.name,
+        members: slugs,
+        total_inserted: 0,
+        total_skipped: 0,
+        total_errors: 0,
+        pairs: []
+    };
+
+    for (const sourceSlug of slugs) {
+        for (const targetSlug of slugs) {
+            if (sourceSlug === targetSlug) continue;
+
+            const pairReport = {
+                from: sourceSlug,
+                to: targetSlug,
+                clients_total_in_source: 0,
+                clients_inserted: 0,
+                clients_skipped: 0,
+                clients_errors: [],
+                vehicles_total_in_source: 0,
+                vehicles_inserted: 0,
+                vehicles_skipped: 0,
+                vehicles_errors: []
+            };
+
+            try {
+                const sourceDb = getDb(sourceSlug);
+                const targetDb = getDb(targetSlug);
+
+                // Backfill source data if identity is missing
+                const incompleteClients = sourceDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE uuid IS NULL OR source_tenant IS NULL').all();
+                for (const c of incompleteClients) {
+                    sourceDb.prepare('UPDATE clients SET uuid = ?, source_tenant = ? WHERE id = ?')
+                        .run(c.uuid || randomUUID(), c.source_tenant || sourceSlug, c.id);
+                }
+                const incompleteVehicles = sourceDb.prepare('SELECT id, uuid, source_tenant FROM vehicles WHERE uuid IS NULL OR source_tenant IS NULL').all();
+                for (const v of incompleteVehicles) {
+                    sourceDb.prepare('UPDATE vehicles SET uuid = ?, source_tenant = ? WHERE id = ?')
+                        .run(v.uuid || randomUUID(), v.source_tenant || sourceSlug, v.id);
+                }
+
+                // Sync Clients
+                const sourceClients = sourceDb.prepare('SELECT * FROM clients WHERE uuid IS NOT NULL').all();
+                pairReport.clients_total_in_source = sourceClients.length;
+
+                for (const client of sourceClients) {
+                    const inTarget = targetDb.prepare('SELECT id FROM clients WHERE uuid = ?').get(client.uuid)
+                        || (client.email ? targetDb.prepare('SELECT id FROM clients WHERE email = ? AND email != ""').get(client.email) : null);
+
+                    if (!inTarget) {
+                        try {
+                            targetDb.prepare(`
+                                INSERT INTO clients (uuid, first_name, last_name, nickname, phone, email, address, notes, source_tenant, created_at)
+                                VALUES (?,?,?,?,?,?,?,?,?,?)
+                            `).run(client.uuid, client.first_name, client.last_name, client.nickname, client.phone, client.email, client.address, client.notes, client.source_tenant, client.created_at);
+                            pairReport.clients_inserted++;
+                            report.total_inserted++;
+                        } catch (e) {
+                            pairReport.clients_errors.push(`${client.first_name} ${client.last_name}: ${e.message}`);
+                        }
+                    } else {
+                        pairReport.clients_skipped++;
+                        report.total_skipped++;
+                    }
+                }
+
+                // Sync Vehicles
+                const sourceVehicles = sourceDb.prepare(`
+                    SELECT v.*, c.uuid as client_uuid
+                    FROM vehicles v
+                    JOIN clients c ON v.client_id = c.id
+                    WHERE v.uuid IS NOT NULL
+                `).all();
+                pairReport.vehicles_total_in_source = sourceVehicles.length;
+
+                for (const vehicle of sourceVehicles) {
+                    const clientInTarget = targetDb.prepare('SELECT id FROM clients WHERE uuid = ?').get(vehicle.client_uuid);
+                    if (!clientInTarget) {
+                        pairReport.vehicles_errors.push(`Plate ${vehicle.plate}: Client ${vehicle.client_uuid} not found in target`);
+                        continue;
+                    }
+
+                    const inTarget = targetDb.prepare('SELECT id FROM vehicles WHERE uuid = ?').get(vehicle.uuid)
+                        || targetDb.prepare('SELECT id FROM vehicles WHERE plate = ?').get(vehicle.plate);
+
+                    if (!inTarget) {
+                        try {
+                            targetDb.prepare(`
+                                INSERT INTO vehicles (uuid, client_id, plate, brand, model, version, year, km, source_tenant, created_at)
+                                VALUES (?,?,?,?,?,?,?,?,?,?)
+                            `).run(vehicle.uuid, clientInTarget.id, vehicle.plate, vehicle.brand, vehicle.model, vehicle.version, vehicle.year, vehicle.km, vehicle.source_tenant, vehicle.created_at);
+                            pairReport.vehicles_inserted++;
+                            report.total_inserted++;
+                        } catch (e) {
+                            pairReport.vehicles_errors.push(`Plate ${vehicle.plate}: ${e.message}`);
+                        }
+                    } else {
+                        pairReport.vehicles_skipped++;
+                        report.total_skipped++;
+                    }
+                }
+            } catch (fatal) {
+                pairReport.clients_errors.push(`FATAL PAIR ERROR: ${fatal.message}`);
+            }
+
+            report.total_errors += pairReport.clients_errors.length + pairReport.vehicles_errors.length;
+            report.pairs.push(pairReport);
+        }
+    }
+
+    res.json(report);
 });
 
 // ── DELETE /api/super/chains/:id/members/:slug ────────────────────────────────
