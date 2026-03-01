@@ -9,6 +9,7 @@ import { useNotification } from '@/lib/notification';
 import {
     LayoutGrid,
     Plus,
+    ArrowRight,
     Search,
     Settings,
     ExternalLink,
