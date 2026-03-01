@@ -139,6 +139,8 @@ export default function SuperAdminDashboard() {
     const [loadingBackups, setLoadingBackups] = useState(false);
     const [restoreOptions, setRestoreOptions] = useState({ db: true, uploads: true });
     const backupInputRef = useRef<HTMLInputElement>(null);
+    const [showResyncDebugModal, setShowResyncDebugModal] = useState<any>(null);
+    const [loadingResyncDebug, setLoadingResyncDebug] = useState(false);
     const [showReportsModal, setShowReportsModal] = useState(false);
     const [globalReports, setGlobalReports] = useState<any>(null);
     const [loadingGlobalReports, setLoadingGlobalReports] = useState(false);
@@ -411,6 +413,19 @@ export default function SuperAdminDashboard() {
             notify('success', `Resincronización iniciada para ${res.data.members} talleres.`);
         } catch (err) {
             notify('error', 'Error al iniciar resincronización');
+        }
+    };
+
+    const handleResyncDebugChain = async (chainId: number) => {
+        setLoadingResyncDebug(true);
+        try {
+            const res = await superApi.post(`/chains/${chainId}/resync-debug`);
+            setShowResyncDebugModal(res.data);
+            notify('success', 'Diagnóstico completado');
+        } catch (err: any) {
+            notify('error', err.response?.data?.message || 'Error en diagnóstico');
+        } finally {
+            setLoadingResyncDebug(false);
         }
     };
 
@@ -1208,6 +1223,18 @@ export default function SuperAdminDashboard() {
                                                         title="Sincronizar clientes y vehículos en toda la cadena"
                                                     >
                                                         <RefreshCw size={12} className={expandedChains.has(chain.id) && (chainSyncStatus[chain.id]?.pending > 0) ? 'animate-spin' : ''} /> Sync
+                                                    </button>
+
+                                                    <button
+                                                        onClick={e => {
+                                                            e.stopPropagation();
+                                                            handleResyncDebugChain(chain.id);
+                                                        }}
+                                                        disabled={loadingResyncDebug}
+                                                        className="px-4 py-2 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 disabled:opacity-50"
+                                                        title="Diagnóstico profundo y sincronización manual"
+                                                    >
+                                                        {loadingResyncDebug ? <RefreshCw size={12} className="animate-spin" /> : <ShieldCheck size={12} />} Dx
                                                     </button>
                                                     <a
                                                         href={`/chain/${chain.slug}/dashboard`}
@@ -2343,6 +2370,115 @@ export default function SuperAdminDashboard() {
                                         )}
                                     </div>
                                 </section>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {
+                showResyncDebugModal && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl z-[200] flex items-center justify-center p-4">
+                        <div className="bg-white w-full max-w-5xl h-[85vh] rounded-[3rem] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300">
+                            <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-amber-500 text-white">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-white/20 p-3 rounded-2xl">
+                                        <ShieldCheck size={28} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-black uppercase italic tracking-tighter">Diagnóstico de Cadena: {showResyncDebugModal.chain}</h2>
+                                        <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mt-1">Sincronización manual forzada y reporte de integridad</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowResyncDebugModal(null)} className="p-3 bg-white/10 hover:bg-white/20 rounded-2xl transition-all">
+                                    <X size={24} />
+                                </button>
+                            </div>
+
+                            <div className="p-8 bg-slate-50 border-b border-slate-100 grid grid-cols-4 gap-4">
+                                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Insertados</p>
+                                    <p className="text-2xl font-black text-emerald-600 italic">{showResyncDebugModal.total_inserted}</p>
+                                </div>
+                                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Saltados</p>
+                                    <p className="text-2xl font-black text-slate-600 italic">{showResyncDebugModal.total_skipped}</p>
+                                </div>
+                                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Errores</p>
+                                    <p className={`text-2xl font-black italic ${showResyncDebugModal.total_errors > 0 ? 'text-red-600' : 'text-slate-300'}`}>{showResyncDebugModal.total_errors}</p>
+                                </div>
+                                <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Talleres</p>
+                                    <p className="text-2xl font-black text-indigo-600 italic">{showResyncDebugModal.members.length}</p>
+                                </div>
+                            </div>
+
+                            <div className="flex-grow overflow-y-auto p-8 space-y-6 bg-slate-50/30">
+                                {showResyncDebugModal.pairs.map((pair: any, idx: number) => (
+                                    <div key={idx} className="bg-white rounded-[2.5rem] border border-slate-100 p-6 shadow-sm overflow-hidden">
+                                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                                            <div className="flex items-center gap-4 text-sm font-black italic text-slate-800 uppercase tracking-tighter">
+                                                <span className="bg-indigo-600 text-white px-3 py-1 rounded-lg not-italic text-[10px] tracking-normal">{pair.from}</span>
+                                                <ArrowRight size={16} className="text-slate-300" />
+                                                <span className="bg-emerald-600 text-white px-3 py-1 rounded-lg not-italic text-[10px] tracking-normal">{pair.to}</span>
+                                            </div>
+                                            {(pair.clients_errors.length > 0 || pair.vehicles_errors.length > 0) && (
+                                                <span className="bg-red-50 text-red-600 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-100">
+                                                    <AlertTriangle size={10} /> Fallos detectados
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-6">
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center px-1">
+                                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 italic">
+                                                        <Users size={12} className="text-indigo-400" /> Clientes
+                                                    </h4>
+                                                    <span className="text-[10px] font-black text-slate-800 italic">{pair.clients_inserted} / {pair.clients_total_in_source}</span>
+                                                </div>
+                                                {pair.clients_errors.length > 0 && (
+                                                    <div className="bg-red-50 rounded-2xl p-4 space-y-2 border border-red-100">
+                                                        {pair.clients_errors.map((err: string, eIdx: number) => (
+                                                            <div key={eIdx} className="text-[9px] font-bold text-red-700 leading-tight flex gap-2">
+                                                                <span className="opacity-30">•</span> {err}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {pair.clients_errors.length === 0 && pair.clients_inserted === 0 && (
+                                                    <div className="bg-slate-50 rounded-2xl p-4 text-center">
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">Todo al día</p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                <div className="flex justify-between items-center px-1">
+                                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 italic">
+                                                        <Car size={12} className="text-emerald-400" /> Vehículos
+                                                    </h4>
+                                                    <span className="text-[10px] font-black text-slate-800 italic">{pair.vehicles_inserted} / {pair.vehicles_total_in_source}</span>
+                                                </div>
+                                                {pair.vehicles_errors.length > 0 && (
+                                                    <div className="bg-red-50 rounded-2xl p-4 space-y-2 border border-red-100">
+                                                        {pair.vehicles_errors.map((err: string, eIdx: number) => (
+                                                            <div key={eIdx} className="text-[9px] font-bold text-red-700 leading-tight flex gap-2">
+                                                                <span className="opacity-30">•</span> {err}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {pair.vehicles_errors.length === 0 && pair.vehicles_inserted === 0 && (
+                                                    <div className="bg-slate-50 rounded-2xl p-4 text-center">
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest italic">Todo al día</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
