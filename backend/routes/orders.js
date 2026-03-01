@@ -256,7 +256,9 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                     const { enqueueSyncToChain } = require('./chainSync');
                     const updatedVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.id = ?').get(order_data.vehicle_id);
                     if (updatedVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...updatedVehicle });
-                } catch (e) { }
+                } catch (e) {
+                    console.warn('[chainSync] enqueue failed for vehicle KM update:', e.message);
+                }
             }
         }
 

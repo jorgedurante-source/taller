@@ -10,7 +10,11 @@ function enqueueSyncToChain(sourceSlug, operation, payload) {
         const member = superDb.prepare(`
             SELECT cm.chain_id FROM chain_members cm WHERE cm.tenant_slug = ?
         `).get(sourceSlug);
-        if (!member) return;
+
+        if (!member) {
+            console.debug(`[chainSync] ${sourceSlug} not in any chain, skipping sync`);
+            return;
+        }
 
         const peers = superDb.prepare(`
             SELECT tenant_slug FROM chain_members
@@ -23,6 +27,12 @@ function enqueueSyncToChain(sourceSlug, operation, payload) {
                 VALUES (?, ?, ?, ?, ?)
             `).run(member.chain_id, sourceSlug, peer.tenant_slug, operation, JSON.stringify(payload));
         }
+
+        // Fast sync: trigger queue processing immediately
+        setImmediate(() => {
+            try { processSyncQueue(); } catch (e) { }
+        });
+
     } catch (e) {
         console.warn('[chainSync] enqueue error:', e.message);
     }
@@ -33,7 +43,8 @@ function processSyncQueue() {
     const pending = superDb.prepare(`
         SELECT * FROM sync_queue
         WHERE status = 'pending' AND attempts < 3
-        ORDER BY created_at ASC LIMIT 50
+        ORDER BY CASE WHEN operation = 'upsert_client' THEN 0 ELSE 1 END ASC, created_at ASC 
+        LIMIT 50
     `).all();
 
     for (const job of pending) {
@@ -112,12 +123,38 @@ function processSyncQueue() {
     }
 }
 
+// ── Retry handler for stuck jobs ─────────────────────────────────────────────
+function retrySyncJobs() {
+    try {
+        // Find failed jobs whose error was exactly about missing clients
+        const res = superDb.prepare(`
+            UPDATE sync_queue 
+            SET status = 'pending', attempts = 0
+            WHERE status = 'failed' 
+              AND error_message = 'Client not yet synced to target'
+        `).run();
+        if (res.changes > 0) {
+            console.log(`[chainSync] Recovered ${res.changes} stuck sync jobs`);
+            processSyncQueue();
+        }
+    } catch (e) {
+        console.warn('[chainSync] retry error:', e.message);
+    }
+}
+
 // ── Start worker ──────────────────────────────────────────────────────────────
 function startSyncWorker() {
+    // Run queue processing every 30s
     setInterval(() => {
         try { processSyncQueue(); } catch (e) { console.error('[syncWorker]', e.message); }
     }, 30000);
-    console.log('[chainSync] Sync worker started (30s interval)');
+
+    // Run recovery job every 5 minutes to reset stuck 'failed' jobs
+    setInterval(() => {
+        retrySyncJobs();
+    }, 5 * 60000);
+
+    console.log('[chainSync] Sync worker started (30s interval, 5m recovery)');
 }
 
 module.exports = { router, enqueueSyncToChain, startSyncWorker, processSyncQueue };

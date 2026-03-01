@@ -143,7 +143,9 @@ router.post('/', auth, hasPermission('clients'), (req, res) => {
                 const newVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.client_id = ?').get(clientId);
                 if (newVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...newVehicle });
             }
-        } catch (e) { }
+        } catch (e) {
+            console.warn('[chainSync] enqueue failed for new client:', e.message);
+        }
     } catch (err) {
         if (err.message.includes('plate')) {
             return res.status(400).json({ message: 'La patente ya está registrada' });
@@ -169,7 +171,9 @@ router.put('/:id', auth, hasPermission('clients'), (req, res) => {
             const { enqueueSyncToChain } = require('./chainSync');
             const updatedClient = req.db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
             if (updatedClient) enqueueSyncToChain(req.slug, 'upsert_client', { ...updatedClient });
-        } catch (e) { }
+        } catch (e) {
+            console.warn('[chainSync] enqueue failed for updated client:', e.message);
+        }
     } catch (err) {
         res.status(500).send('Server error');
     }
@@ -234,7 +238,9 @@ router.post('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
             const { enqueueSyncToChain } = require('./chainSync');
             const newVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.id = ?').get(vehicleId);
             if (newVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...newVehicle });
-        } catch (e) { }
+        } catch (e) {
+            console.warn('[chainSync] enqueue failed for new vehicle:', e.message);
+        }
         // Log initial km
         if (km && parseInt(km) > 0) {
             req.db.prepare('INSERT INTO vehicle_km_history (vehicle_id, km, notes) VALUES (?, ?, ?)').run(
@@ -271,7 +277,9 @@ router.put('/vehicles/:vid', auth, hasPermission('vehicles'), (req, res) => {
             const { enqueueSyncToChain } = require('./chainSync');
             const updatedVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.id = ?').get(req.params.vid);
             if (updatedVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...updatedVehicle });
-        } catch (e) { }
+        } catch (e) {
+            console.warn('[chainSync] enqueue failed for updated vehicle:', e.message);
+        }
 
         res.json({ message: 'Vehículo actualizado' });
     } catch (err) {
@@ -302,7 +310,9 @@ router.put('/vehicles/:vid/km', auth, hasPermission('vehicles'), (req, res) => {
             const { enqueueSyncToChain } = require('./chainSync');
             const updatedVehicle = req.db.prepare('SELECT v.*, c.uuid as client_uuid FROM vehicles v JOIN clients c ON v.client_id = c.id WHERE v.id = ?').get(req.params.vid);
             if (updatedVehicle) enqueueSyncToChain(req.slug, 'upsert_vehicle', { ...updatedVehicle });
-        } catch (e) { }
+        } catch (e) {
+            console.warn('[chainSync] enqueue failed for vehicle KM update:', e.message);
+        }
 
         res.json({ message: 'Kilometraje actualizado', km: newKm, delta: newKm - oldKm });
     } catch (err) {
