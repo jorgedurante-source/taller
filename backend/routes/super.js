@@ -1457,7 +1457,7 @@ function mergeTenantsOnCouple(chainId, newSlug) {
         for (const client of existingClients) {
             // Buscar si ya existe en el nuevo taller por uuid o email
             const inNew = newDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE uuid = ?').get(client.uuid)
-                || (client.email ? newDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != ""').get(client.email) : null);
+                || (client.email ? newDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != \'\'').get(client.email) : null);
 
             if (!inNew) {
                 try {
@@ -1515,7 +1515,7 @@ function mergeTenantsOnCouple(chainId, newSlug) {
 
         for (const client of newClients) {
             const inExisting = existingDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE uuid = ?').get(client.uuid)
-                || (client.email ? existingDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != ""').get(client.email) : null);
+                || (client.email ? existingDb.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != \'\'').get(client.email) : null);
 
             if (!inExisting) {
                 try {
@@ -1729,7 +1729,7 @@ router.post('/chains/:id/resync-debug', superAuth, (req, res) => {
 
                 for (const client of sourceClients) {
                     const inTarget = targetDb.prepare('SELECT id FROM clients WHERE uuid = ?').get(client.uuid)
-                        || (client.email ? targetDb.prepare('SELECT id FROM clients WHERE email = ? AND email != ""').get(client.email) : null);
+                        || (client.email ? targetDb.prepare('SELECT id FROM clients WHERE email = ? AND email != \'\'').get(client.email) : null);
 
                     if (!inTarget) {
                         try {

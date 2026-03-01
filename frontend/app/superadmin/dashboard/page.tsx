@@ -1195,8 +1195,8 @@ export default function SuperAdminDashboard() {
 
                                                 <div className="flex items-center gap-3">
                                                     {chainSyncStatus[chain.id]?.pending > 0 && (
-                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-600 rounded-full text-[9px] font-black uppercase tracking-widest animate-pulse border border-amber-100">
-                                                            <Activity size={10} /> {chainSyncStatus[chain.id].pending} Pendientes
+                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-rose-50 text-rose-600 rounded-full text-[9px] font-black uppercase tracking-widest animate-pulse border border-rose-100">
+                                                            <Activity size={10} /> {chainSyncStatus[chain.id].pending} Desincronizado
                                                         </div>
                                                     )}
                                                     {chainSyncStatus[chain.id]?.failed > 0 && (
@@ -1211,31 +1211,20 @@ export default function SuperAdminDashboard() {
                                                         </div>
                                                     )}
                                                     {chainSyncStatus[chain.id] && chainSyncStatus[chain.id].pending === 0 && chainSyncStatus[chain.id].failed === 0 && (
-                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black uppercase tracking-widest border border-emerald-100">
-                                                            <Check size={10} /> Sincronizado
+                                                        <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-50 text-slate-500 rounded-full text-[9px] font-black uppercase tracking-widest border border-slate-200">
+                                                            <Check size={10} /> Cola al día
                                                         </div>
                                                     )}
-                                                    <button
-                                                        onClick={e => {
-                                                            e.stopPropagation();
-                                                            handleResyncChain(chain.id);
-                                                        }}
-                                                        className="px-4 py-2 bg-slate-50 text-slate-500 hover:bg-indigo-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5"
-                                                        title="Sincronizar clientes y vehículos en toda la cadena"
-                                                    >
-                                                        <RefreshCw size={12} className={expandedChains.has(chain.id) && (chainSyncStatus[chain.id]?.pending > 0) ? 'animate-spin' : ''} /> Sync
-                                                    </button>
-
                                                     <button
                                                         onClick={e => {
                                                             e.stopPropagation();
                                                             handleResyncDebugChain(chain.id);
                                                         }}
                                                         disabled={loadingResyncDebug}
-                                                        className="px-4 py-2 bg-amber-50 text-amber-600 hover:bg-amber-600 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 disabled:opacity-50"
-                                                        title="Diagnóstico profundo y sincronización manual"
+                                                        className="px-4 py-2 bg-violet-600 text-white hover:bg-violet-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 disabled:opacity-50 shadow-md shadow-violet-500/20"
+                                                        title="Sincronización manual forzada y diagnóstico de integridad"
                                                     >
-                                                        {loadingResyncDebug ? <RefreshCw size={12} className="animate-spin" /> : <ShieldCheck size={12} />} Dx
+                                                        {loadingResyncDebug ? <RefreshCw size={12} className="animate-spin" /> : <ShieldCheck size={12} />} Synch
                                                     </button>
                                                     <a
                                                         href={`/chain/${chain.slug}/dashboard`}

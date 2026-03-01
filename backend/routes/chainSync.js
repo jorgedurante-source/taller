@@ -54,7 +54,7 @@ function processSyncQueue() {
 
             if (job.operation === 'upsert_client') {
                 const existing = db.prepare('SELECT id, uuid, source_tenant FROM clients WHERE uuid = ?').get(payload.uuid)
-                    || (payload.email ? db.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != ""').get(payload.email) : null);
+                    || (payload.email ? db.prepare('SELECT id, uuid, source_tenant FROM clients WHERE email = ? AND email != \'\'').get(payload.email) : null);
 
                 if (existing) {
                     // Update if:
