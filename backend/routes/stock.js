@@ -124,7 +124,7 @@ router.get('/chain', auth, hasPermission('stock'), (req, res) => {
         const workshop = superDb.prepare('SELECT chain_id FROM workshops WHERE slug = ?').get(req.slug);
         if (!workshop?.chain_id) return res.status(403).json({ message: 'Workshop not in a chain' });
 
-        const members = superDb.prepare('SELECT slug, name FROM workshops WHERE chain_id = ? AND slug != ? AND status = "active"').all(workshop.chain_id, req.slug);
+        const members = superDb.prepare('SELECT slug, name FROM workshops WHERE chain_id = ? AND slug != ? AND status = \'active\'').all(workshop.chain_id, req.slug);
 
         let results = [];
         members.forEach(member => {
