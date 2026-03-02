@@ -11,7 +11,12 @@ import {
     FileText,
     MessageSquare,
     History as HistoryIcon,
-    X
+    X,
+    TrendingUp,
+    CheckCircle,
+    XCircle,
+    ArrowRight,
+    Search
 } from 'lucide-react';
 import { useTranslation } from '@/lib/i18n';
 
@@ -21,35 +26,64 @@ export default function PublicOrderPage() {
     const [order, setOrder] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [approvalNotes, setApprovalNotes] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    const fetchOrder = async () => {
+        try {
+            setLoading(true);
+            let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+            const apiBase = baseUrl.endsWith('/api') ? baseUrl.slice(0, -4) : baseUrl;
+            const url = `${apiBase}/api/${params.slug}/public/order/${params.token}`;
+
+            const res = await fetch(url);
+            if (!res.ok) {
+                const errorMsg = await res.json().catch(() => ({ message: 'Error' }));
+                throw new Error(errorMsg.message || t('order_not_found_portal'));
+            }
+
+            const data = await res.json();
+            setOrder(data);
+
+            if (data.client_portal_language && data.client_portal_language !== language) {
+                setLanguage(data.client_portal_language);
+            }
+        } catch (err: any) {
+            setError(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchOrder = async () => {
-            try {
-                let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-                const apiBase = baseUrl.endsWith('/api') ? baseUrl.slice(0, -4) : baseUrl;
-                const url = `${apiBase}/api/${params.slug}/public/order/${params.token}`;
-
-                const res = await fetch(url);
-                if (!res.ok) {
-                    const errorMsg = await res.json().catch(() => ({ message: 'Error' }));
-                    throw new Error(errorMsg.message || t('order_not_found_portal'));
-                }
-
-                const data = await res.json();
-                setOrder(data);
-
-                // Only change language if it's different to avoid loops/unnecessary updates
-                if (data.client_portal_language && data.client_portal_language !== language) {
-                    setLanguage(data.client_portal_language);
-                }
-            } catch (err: any) {
-                setError(err.message);
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchOrder();
-    }, [params.slug, params.token, language, setLanguage]);
+    }, [params.slug, params.token]);
+
+    const handleBudgetAction = async (action: 'approve' | 'reject') => {
+        if (!window.confirm(action === 'approve' ? '¿Confirmar aprobación de presupuesto?' : '¿Confirmar rechazo de presupuesto?')) return;
+        setSubmitting(true);
+        try {
+            let baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+            const apiBase = baseUrl.endsWith('/api') ? baseUrl.slice(0, -4) : baseUrl;
+            const url = `${apiBase}/api/${params.slug}/public/order/${params.token}/${action}`;
+
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notes: approvalNotes })
+            });
+
+            if (!res.ok) throw new Error('Error al procesar la solicitud');
+
+            await fetchOrder();
+            setApprovalNotes('');
+            alert(action === 'approve' ? 'Presupuesto aprobado correctamente' : 'Presupuesto rechazado');
+        } catch (err: any) {
+            alert(err.message);
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
     if (loading) return (
         <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -142,6 +176,28 @@ export default function PublicOrderPage() {
                             </div>
                         </div>
 
+                        {/* Feature 2: Transferred Order Banner */}
+                        {order.status === 'transferred' && order.transferred_to_slug && order.transferred_to_share_token && (
+                            <div className="mb-10 bg-amber-50 border border-amber-200 rounded-[32px] p-8 animate-in zoom-in-95 duration-500">
+                                <div className="flex items-center gap-6">
+                                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-amber-100 flex items-center justify-center text-amber-500 shrink-0">
+                                        <ArrowRight size={32} />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Orden Transferida</p>
+                                        <h3 className="text-xl font-black text-amber-900 uppercase italic">Esta orden fue transcurrida a otro taller</h3>
+                                        <p className="text-sm text-amber-700 font-bold mt-1">Podés seguir el progreso actualizado en la nueva ubicación.</p>
+                                    </div>
+                                    <a
+                                        href={`/${order.transferred_to_slug}/o/${order.transferred_to_share_token}`}
+                                        className="bg-amber-500 text-white px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-amber-600 transition-all flex items-center gap-2"
+                                    >
+                                        Ver estado actualizado <ArrowRight size={14} />
+                                    </a>
+                                </div>
+                            </div>
+                        )}
+
                         <div className="space-y-8">
                             {order.appointment_date && (order.status === 'appointment' || order.status?.toLowerCase().includes('turno')) && (
                                 <div className="bg-indigo-50 border border-indigo-100 rounded-[32px] p-6 flex items-center gap-6 animate-in zoom-in-95 duration-500">
@@ -211,6 +267,90 @@ export default function PublicOrderPage() {
                         </div>
                     </div>
                 </div>
+
+                {/* Feature 1: Budget Approval Section */}
+                {order.status === 'quoted' && !order.budget_approval_status && order.budget && (
+                    <div className="bg-white rounded-[40px] p-8 md:p-12 shadow-xl border-l-8 border-l-blue-600 border border-slate-100 animate-in slide-in-from-bottom-5 duration-700">
+                        <div className="flex items-center gap-4 mb-8">
+                            <div className="w-14 h-14 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center">
+                                <Search size={28} />
+                            </div>
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Presupuesto para Aprobación</h3>
+                                <p className="text-slate-400 font-bold text-xs uppercase">Revisá los detalles y confirmá para comenzar el trabajo</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 mb-8">
+                            {order.budget.items?.map((item: any, idx: number) => (
+                                <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <span className="text-sm font-black text-slate-700 uppercase italic">{item.description}</span>
+                                    <span className="font-black text-slate-900 tracking-tighter italic text-lg">${Number(item.subtotal).toLocaleString('es-AR')}</span>
+                                </div>
+                            ))}
+                            <div className="flex items-center justify-between p-6 bg-slate-900 text-white rounded-3xl mt-6">
+                                <span className="font-black uppercase tracking-widest text-xs">Total del Presupuesto</span>
+                                <span className="text-3xl font-black tracking-tighter italic">${Number(order.budget.total).toLocaleString('es-AR')}</span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            <textarea
+                                className="w-full bg-slate-50 border border-slate-100 rounded-[32px] p-6 text-slate-700 font-bold placeholder:text-slate-300 focus:ring-4 focus:ring-blue-100 focus:border-blue-400 outline-none transition-all min-h-[120px]"
+                                placeholder="Comentarios opcionales..."
+                                value={approvalNotes}
+                                onChange={e => setApprovalNotes(e.target.value)}
+                            />
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <button
+                                    onClick={() => handleBudgetAction('approve')}
+                                    disabled={submitting}
+                                    className="bg-emerald-500 hover:bg-emerald-600 text-white py-6 rounded-[32px] font-black uppercase text-sm tracking-widest shadow-xl shadow-emerald-200 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                                >
+                                    <CheckCircle size={24} /> Aprobar presupuesto
+                                </button>
+                                <button
+                                    onClick={() => handleBudgetAction('reject')}
+                                    disabled={submitting}
+                                    className="bg-red-500 hover:bg-red-600 text-white py-6 rounded-[32px] font-black uppercase text-sm tracking-widest shadow-xl shadow-red-200 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                                >
+                                    <XCircle size={24} /> Rechazar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Approval Status Badges */}
+                {order.budget_approval_status === 'approved' && (
+                    <div className="bg-emerald-50 border border-emerald-100 rounded-[40px] p-8 flex items-center gap-6 animate-in zoom-in-95 duration-500">
+                        <div className="w-16 h-16 bg-white rounded-3xl shadow-sm border border-emerald-100 flex items-center justify-center text-emerald-500 shrink-0">
+                            <CheckCircle size={32} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1">Acción del Cliente</p>
+                            <h3 className="text-2xl font-black text-emerald-900 uppercase italic">Presupuesto aprobado por el cliente</h3>
+                            {order.budget_approval_notes && (
+                                <p className="text-emerald-700 font-bold text-sm mt-1 italic">"{order.budget_approval_notes}"</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {order.budget_approval_status === 'rejected' && (
+                    <div className="bg-red-50 border border-red-100 rounded-[40px] p-8 flex items-center gap-6 animate-in zoom-in-95 duration-500">
+                        <div className="w-16 h-16 bg-white rounded-3xl shadow-sm border border-red-100 flex items-center justify-center text-red-500 shrink-0">
+                            <XCircle size={32} />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Acción del Cliente</p>
+                            <h3 className="text-2xl font-black text-red-900 uppercase italic">Presupuesto rechazado</h3>
+                            {order.budget_approval_notes && (
+                                <p className="text-red-700 font-bold text-sm mt-1 italic">"{order.budget_approval_notes}"</p>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="bg-white rounded-[40px] p-8 shadow-lg border border-slate-100">

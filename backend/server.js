@@ -45,6 +45,8 @@ tenantRouter.use('/client', require('./routes/client'));
 tenantRouter.use('/users', require('./routes/users'));
 tenantRouter.use('/roles', require('./routes/roles'));
 tenantRouter.use('/suppliers', require('./routes/suppliers'));
+tenantRouter.use('/stock', require('./routes/stock'));
+tenantRouter.use('/chain-internal', require('./routes/chainInternal'));
 tenantRouter.use('/public/order', require('./routes/public_order'));
 tenantRouter.use('/logs', require('./routes/logs'));
 tenantRouter.use('/', require('./routes/api'));

@@ -293,6 +293,37 @@ function initTenantDb(db, slug) {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
         );
 
+        CREATE TABLE IF NOT EXISTS stock_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sku TEXT,
+            name TEXT NOT NULL,
+            category TEXT,
+            quantity REAL DEFAULT 0,
+            min_quantity REAL DEFAULT 0,
+            cost_price REAL DEFAULT 0,
+            sale_price REAL DEFAULT 0,
+            supplier_id INTEGER,
+            location TEXT,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE SET NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS stock_movements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            item_id INTEGER NOT NULL,
+            type TEXT NOT NULL,  -- 'in' | 'out' | 'adjustment' | 'transfer_out' | 'transfer_in'
+            quantity REAL NOT NULL,
+            order_id INTEGER,
+            notes TEXT,
+            user_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (item_id) REFERENCES stock_items(id) ON DELETE CASCADE,
+            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        );
+
         CREATE TABLE IF NOT EXISTS chain_sync_meta (
             entity_type TEXT NOT NULL,
             entity_uuid TEXT NOT NULL,
@@ -322,6 +353,15 @@ function initTenantDb(db, slug) {
     addColumn('order_items', 'parts_profit', "REAL DEFAULT 0");
     addColumn('vehicles', 'version', "TEXT");
     addColumn('service_price_history', 'changed_by_id', "INTEGER");
+
+    addColumn('orders', 'budget_approval_status', "TEXT DEFAULT NULL");
+    addColumn('orders', 'budget_approval_notes', 'TEXT');
+    addColumn('orders', 'budget_approved_at', 'DATETIME');
+
+    addColumn('orders', 'transferred_to_slug', 'TEXT');
+    addColumn('orders', 'transferred_to_order_id', 'INTEGER');
+    addColumn('orders', 'transferred_from_slug', 'TEXT');
+    addColumn('orders', 'transferred_from_order_id', 'INTEGER');
 
     addColumn('orders', 'uuid', 'TEXT');
     addColumn('clients', 'uuid', 'TEXT');
@@ -393,6 +433,10 @@ function initTenantDb(db, slug) {
 
     // service_intervals
     createIndex('idx_service_intervals_vehicle', 'ON service_intervals(vehicle_id)');
+
+    // stock
+    createIndex('idx_stock_items_sku', 'ON stock_items(sku) WHERE sku IS NOT NULL');
+    createIndex('idx_stock_movements_item', 'ON stock_movements(item_id, created_at DESC)');
 
     // Roles Seeding
     const roles = [

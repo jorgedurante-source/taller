@@ -32,15 +32,24 @@ router.get('/', auth, hasPermission('orders'), (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(100, parseInt(req.query.limit) || 50);
     const offset = (page - 1) * limit;
-    const { status, search, payment_status } = req.query;
+    const { status, search, payment_status, client_id, vehicle_id } = req.query;
 
     let where = [];
     let params = [];
 
+    if (client_id) {
+        where.push('o.client_id = ?');
+        params.push(client_id);
+    }
+    if (vehicle_id) {
+        where.push('o.vehicle_id = ?');
+        params.push(vehicle_id);
+    }
+
     if (status === 'active') {
-        where.push('o.status NOT IN ("delivered", "cancelled")');
+        where.push("o.status NOT IN ('delivered', 'cancelled')");
     } else if (status === 'history') {
-        where.push('o.status IN ("delivered", "cancelled")');
+        where.push("o.status IN ('delivered', 'cancelled')");
     } else if (status && status !== 'all') {
         where.push('o.status = ?');
         params.push(status);
@@ -107,9 +116,9 @@ router.get('/', auth, hasPermission('orders'), (req, res) => {
 router.post('/', auth, hasPermission('orders'), async (req, res) => {
     const { client_id, vehicle_id, description, items } = req.body;
 
-    const { randomUUID } = require('crypto');
+    const { randomUUID, randomBytes } = require('crypto');
     const orderUuid = randomUUID();
-    const share_token = crypto.randomBytes(6).toString('hex');
+    const share_token = randomBytes(6).toString('hex');
     const insertOrder = req.db.prepare('INSERT INTO orders (client_id, vehicle_id, description, created_by_id, share_token, uuid) VALUES (?, ?, ?, ?, ?, ?)');
     const insertItem = req.db.prepare('INSERT INTO order_items (order_id, service_id, description, labor_price, parts_price, parts_profit, subtotal) VALUES (?, ?, ?, ?, ?, ?, ?)');
 
@@ -179,6 +188,7 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
                     'datos_contacto_taller': `Email: ${config.email || '---'} | Tel: ${config.whatsapp || config.phone || '---'} | Dir: ${config.address || '---'}`,
                     'turno_fecha': '---',
                     'link': trackingLink,
+                    'link_aprobacion': trackingLink,
                     'orden_id': orderId
                 };
 
@@ -201,6 +211,30 @@ router.post('/', auth, hasPermission('orders'), async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Error creating order' });
+    }
+});
+
+// @route   GET api/orders/chain-workshops
+router.get('/chain-workshops', auth, (req, res) => {
+    try {
+        const superDb = require('../superDb');
+        const workshop = superDb.prepare('SELECT chain_id FROM workshops WHERE slug = ?').get(req.slug);
+
+        if (!workshop?.chain_id) {
+            return res.json([]);
+        }
+
+        const workshops = superDb.prepare(`
+            SELECT slug, name 
+            FROM workshops 
+            WHERE chain_id = ? AND slug != ? AND status = 'active'
+            ORDER BY name ASC
+        `).all(workshop.chain_id, req.slug);
+
+        res.json(workshops);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching workshops' });
     }
 });
 
@@ -358,6 +392,7 @@ router.put('/:id/status', auth, hasPermission('orders'), async (req, res) => {
                     'datos_contacto_taller': `Email: ${config.email || '---'} | Tel: ${config.whatsapp || config.phone || '---'} | Dir: ${config.address || '---'}`,
                     'turno_fecha': appointmentDateFormatted,
                     'link': trackingLink,
+                    'link_aprobacion': trackingLink,
                     'orden_id': order.id
                 };
 
@@ -485,6 +520,7 @@ router.post('/:id/budget', auth, hasPermission('orders'), (req, res) => {
                         'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim(),
                         'datos_contacto_taller': `Email: ${config.email || '---'} | Tel: ${config.whatsapp || config.phone || '---'} | Dir: ${config.address || '---'}`,
                         'link': trackingLink,
+                        'link_aprobacion': trackingLink,
                         'total': total,
                         'orden_id': req.params.id
                     });
@@ -685,6 +721,7 @@ router.post('/:id/send-email', auth, hasPermission('orders'), async (req, res) =
             'km': order.km || '---',
             'orden_id': order.id,
             'link': trackingLink,
+            'link_aprobacion': trackingLink,
             'usuario': `${order.user_first_name || 'Taller'} ${order.user_last_name || ''}`.trim()
         };
 
@@ -763,7 +800,8 @@ router.post('/send-manual-template', auth, hasPermission('orders'), async (req, 
             'taller': config.workshop_name || 'Nuestro Taller',
             'usuario': `${userFirstName} ${userLastName}`.trim(),
             'orden_id': orderId || '',
-            'link': trackingLink
+            'link': trackingLink,
+            'link_aprobacion': trackingLink
         };
 
         let message = template.content;
@@ -860,6 +898,114 @@ router.put('/:id/reminder-status', auth, hasPermission('reminders'), (req, res) 
         res.json({ message: 'Estado de recordatorio actualizado' });
     } catch (err) {
         res.status(500).json({ message: 'Error al actualizar estado de recordatorio' });
+    }
+});
+
+// @route   POST api/orders/:id/transfer
+router.post('/:id/transfer', auth, isAdmin, async (req, res) => {
+    const { target_slug } = req.body;
+    const orderId = req.params.id;
+
+    if (!target_slug || target_slug === req.slug) {
+        return res.status(400).json({ message: 'Taller de destino inválido' });
+    }
+
+    try {
+        const superDb = require('../superDb');
+        const { getDb } = require('../tenantManager');
+        const crypto = require('crypto');
+
+        // 1. Validar que ambos talleres estén en la misma cadena
+        const sourceChain = superDb.prepare('SELECT chain_id FROM workshops WHERE slug = ?').get(req.slug);
+        const targetChain = superDb.prepare('SELECT chain_id FROM workshops WHERE slug = ?').get(target_slug);
+
+        if (!sourceChain?.chain_id || sourceChain.chain_id !== targetChain?.chain_id) {
+            return res.status(403).json({ message: 'Los talleres no pertenecen a la misma cadena' });
+        }
+
+        // 2. Obtener datos de la orden origen
+        const order = req.db.prepare(`
+            SELECT o.*, c.uuid as client_uuid, v.uuid as vehicle_uuid
+            FROM orders o
+            JOIN clients c ON o.client_id = c.id
+            JOIN vehicles v ON o.vehicle_id = v.id
+            WHERE o.id = ?
+        `).get(orderId);
+
+        if (!order) return res.status(404).json({ message: 'Orden no encontrada' });
+        if (['transferred', 'delivered', 'cancelled'].includes(order.status)) {
+            return res.status(400).json({ message: 'La orden no se puede transferir en su estado actual' });
+        }
+
+        const items = req.db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId);
+
+        // 3. Preparar DB destino
+        const targetDb = getDb(target_slug);
+
+        // Verificar cliente y vehículo en destino (por UUID)
+        let targetClient = targetDb.prepare('SELECT id FROM clients WHERE uuid = ?').get(order.client_uuid);
+        if (!targetClient) {
+            const sourceClient = req.db.prepare('SELECT * FROM clients WHERE id = ?').get(order.client_id);
+            const { lastInsertRowid } = targetDb.prepare(`
+                INSERT INTO clients (uuid, first_name, last_name, nickname, phone, email, address, notes, source_tenant)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(sourceClient.uuid, sourceClient.first_name, sourceClient.last_name, sourceClient.nickname, sourceClient.phone, sourceClient.email, sourceClient.address, sourceClient.notes, req.slug);
+            targetClient = { id: lastInsertRowid };
+        }
+
+        let targetVehicle = targetDb.prepare('SELECT id FROM vehicles WHERE uuid = ?').get(order.vehicle_uuid);
+        if (!targetVehicle) {
+            const sourceVehicle = req.db.prepare('SELECT * FROM vehicles WHERE id = ?').get(order.vehicle_id);
+            const { lastInsertRowid } = targetDb.prepare(`
+                INSERT INTO vehicles (uuid, client_id, plate, brand, model, version, year, color, vin, engine, km, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(sourceVehicle.uuid, targetClient.id, sourceVehicle.plate, sourceVehicle.brand, sourceVehicle.model, sourceVehicle.version, sourceVehicle.year, sourceVehicle.color, sourceVehicle.vin, sourceVehicle.engine, sourceVehicle.km, sourceVehicle.notes);
+            targetVehicle = { id: lastInsertRowid };
+        }
+
+        // 4. Crear nueva orden en destino
+        const newShareToken = crypto.randomBytes(6).toString('hex');
+        const newUuid = crypto.randomUUID();
+        const { lastInsertRowid: newOrderId } = targetDb.prepare(`
+            INSERT INTO orders (client_id, vehicle_id, description, status, share_token, uuid, transferred_from_slug, transferred_from_order_id)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)
+        `).run(targetClient.id, targetVehicle.id, `(Transferido) ${order.description}`, newShareToken, newUuid, req.slug, orderId);
+
+        // Copiar items
+        items.forEach(item => {
+            targetDb.prepare(`
+                INSERT INTO order_items (order_id, description, labor_price, parts_price, parts_profit, subtotal)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(newOrderId, item.description, item.labor_price, item.parts_price, item.parts_profit, item.subtotal);
+        });
+
+        // Historial en destino
+        targetDb.prepare(`
+            INSERT INTO order_history (order_id, status, notes)
+            VALUES (?, 'pending', ?)
+        `).run(newOrderId, `Orden recibida por transferencia desde ${req.slug} (Orden original #${orderId})`);
+
+        // 5. Actualizar orden origen
+        req.db.prepare(`
+            UPDATE orders SET 
+                status = 'transferred',
+                transferred_to_slug = ?,
+                transferred_to_order_id = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `).run(target_slug, newOrderId, orderId);
+
+        req.db.prepare(`
+            INSERT INTO order_history (order_id, status, notes)
+            VALUES (?, 'transferred', ?)
+        `).run(orderId, `Orden transferida a ${target_slug}. Nueva orden: #${newOrderId}`);
+
+        res.json({ message: 'Orden transferida con éxito', new_order_id: newOrderId });
+        logActivity(req.slug, req.user, 'TRANSFER_ORDER', 'order', orderId, { target_slug, new_order_id: newOrderId }, req);
+
+    } catch (err) {
+        console.error('Transfer error:', err);
+        res.status(500).json({ message: 'Error durante la transferencia: ' + err.message });
     }
 });
 

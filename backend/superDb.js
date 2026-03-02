@@ -112,6 +112,38 @@ db.exec(`
         processed_at DATETIME,
         FOREIGN KEY (chain_id) REFERENCES tenant_chains(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS stock_requests (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chain_id INTEGER NOT NULL,
+        requesting_slug TEXT NOT NULL,
+        requesting_user_name TEXT NOT NULL,
+        target_slug TEXT NOT NULL,
+        item_name TEXT NOT NULL,
+        sku TEXT,
+        quantity REAL NOT NULL,
+        notes TEXT,
+        status TEXT DEFAULT 'pending',  -- 'pending' | 'approved' | 'rejected' | 'delivered'
+        response_notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        responded_at DATETIME,
+        delivered_at DATETIME,
+        FOREIGN KEY (chain_id) REFERENCES tenant_chains(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS chain_messages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chain_id INTEGER NOT NULL,
+        from_slug TEXT NOT NULL,
+        from_user_name TEXT NOT NULL,
+        to_slug TEXT,          -- NULL = broadcast a toda la cadena
+        message TEXT NOT NULL,
+        linked_request_id INTEGER,   -- FK a stock_requests si el mensaje es parte de un pedido
+        is_read INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (chain_id) REFERENCES tenant_chains(id) ON DELETE CASCADE,
+        FOREIGN KEY (linked_request_id) REFERENCES stock_requests(id) ON DELETE SET NULL
+    );
 `);
 
 // 2. Incremental Migrations

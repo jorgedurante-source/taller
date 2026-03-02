@@ -30,7 +30,9 @@ import {
     Info,
     CheckCircle,
     LifeBuoy,
-    BarChart3
+    BarChart3,
+    Box,
+    MessageSquare
 } from 'lucide-react';
 
 interface Workshop {
@@ -53,6 +55,7 @@ export default function DashboardLayout({
     const [workshops, setWorkshops] = useState<Workshop[]>([]);
     const [showWorkshopSwitcher, setShowWorkshopSwitcher] = useState(false);
     const [tenantConfig, setTenantConfig] = useState<any>(null);
+    const [unreadChatCount, setUnreadChatCount] = useState(0);
 
     useEffect(() => {
         if (!loading && !user) {
@@ -77,6 +80,23 @@ export default function DashboardLayout({
                 .catch(() => { });
         }
     }, [slug]);
+
+    useEffect(() => {
+        if (!slug || !user) return;
+
+        const checkUnread = () => {
+            axios.get(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/${slug}/chain-internal/unread-counts`, {
+                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            }).then(res => {
+                const total = (res.data.global || 0) + (res.data.direct || []).reduce((acc: number, curr: any) => acc + curr.count, 0);
+                setUnreadChatCount(total);
+            }).catch(() => { });
+        };
+
+        checkUnread();
+        const interval = setInterval(checkUnread, 30000);
+        return () => clearInterval(interval);
+    }, [slug, user]);
 
     if (loading || !user || configLoading) {
         return <div className="flex items-center justify-center min-h-screen">{t('loading_app')} {config.product_name || '...'}</div>;
@@ -164,6 +184,13 @@ export default function DashboardLayout({
                     {hasPermission('income') && <NavItem href={`/${slug}/dashboard/income`} icon={<TrendingUp size={18} />} label={t('income')} />}
                     {hasPermission('reminders') && <NavItem href={`/${slug}/dashboard/reminders`} icon={<Bell size={18} />} label={t('reminders')} />}
                     {hasPermission('suppliers') && <NavItem href={`/${slug}/dashboard/suppliers`} icon={<Truck size={18} />} label={t('suppliers')} />}
+                    {hasPermission('stock') && <NavItem href={`/${slug}/dashboard/stock`} icon={<Box size={18} />} label="Stock" />}
+                    <NavItem
+                        href={`/${slug}/dashboard/chain`}
+                        icon={<Building2 size={18} />}
+                        label="Red"
+                        badge={unreadChatCount > 0 ? unreadChatCount : undefined}
+                    />
                     {hasPermission('reports') && <NavItem href={`/${slug}/dashboard/reports`} icon={<BarChart3 size={18} />} label={t('reports')} />}
                     {hasPermission('settings') && <NavItem href={`/${slug}/dashboard/settings`} icon={<Settings size={18} />} label={t('settings')} />}
                 </nav>
@@ -213,7 +240,27 @@ export default function DashboardLayout({
             )}
 
             {/* Main Content */}
-            <main className={`flex-grow md:ml-64 p-8 ${tenantConfig?.environment === 'dev' ? 'pt-12' : ''}`}>
+            <main className={`flex-grow md:ml-64 p-8 ${(tenantConfig?.environment === 'dev' || unreadChatCount > 0) ? 'pt-12' : ''}`}>
+                {/* Unread Chain Messages Notification */}
+                {unreadChatCount > 0 && pathname !== `/${slug}/dashboard/chain` && (
+                    <Link href={`/${slug}/dashboard/chain`}>
+                        <div className="mb-8 p-4 bg-indigo-600 rounded-3xl flex items-center justify-between gap-4 shadow-xl shadow-indigo-100 border border-indigo-500 cursor-pointer hover:scale-[1.01] active:scale-[0.99] transition-all group animate-in slide-in-from-top-4 duration-500">
+                            <div className="flex items-center gap-4">
+                                <div className="bg-white/20 p-2 rounded-xl text-white group-hover:rotate-12 transition-transform">
+                                    <MessageSquare size={20} />
+                                </div>
+                                <div>
+                                    <h5 className="text-white font-black uppercase text-xs tracking-widest italic leading-none mb-1">MechuHub Red / Mensajería</h5>
+                                    <p className="text-indigo-100 text-[10px] font-bold uppercase tracking-widest">Tienes {unreadChatCount} {unreadChatCount === 1 ? 'mensaje nuevo' : 'mensajes nuevos'} en la red de talleres</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2 bg-white/10 px-4 py-1.5 rounded-full text-[10px] font-black text-white uppercase tracking-tighter">
+                                Ver mensajes <Plus size={14} className="rotate-45" />
+                            </div>
+                        </div>
+                    </Link>
+                )}
+
                 {/* Global Announcements from Superadmin */}
                 {config.announcements && config.announcements.length > 0 && (
                     <div className="mb-8 space-y-4 animate-in slide-in-from-top-4 duration-500">
@@ -249,18 +296,25 @@ export default function DashboardLayout({
     );
 }
 
-function NavItem({ icon, label, href }: { icon: React.ReactNode, label: string, href: string }) {
+function NavItem({ icon, label, href, badge }: { icon: React.ReactNode, label: string, href: string, badge?: number }) {
     const pathname = usePathname();
     const active = pathname === href;
 
     return (
         <Link href={href}>
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-all border ${active
+            <div className={`flex items-center justify-between px-4 py-3 rounded-lg cursor-pointer transition-all border ${active
                 ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20'
                 : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'
                 }`}>
-                {icon}
-                <span className="font-bold text-sm tracking-tight">{label}</span>
+                <div className="flex items-center gap-3">
+                    {icon}
+                    <span className="font-bold text-sm tracking-tight">{label}</span>
+                </div>
+                {badge !== undefined && (
+                    <span className="inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-black text-white bg-red-500 rounded-full leading-none shadow-sm animate-pulse">
+                        {badge}
+                    </span>
+                )}
             </div>
         </Link>
     );

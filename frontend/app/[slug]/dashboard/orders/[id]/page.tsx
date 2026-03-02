@@ -81,6 +81,10 @@ export default function OrderDetailsPage() {
     const [savingPayment, setSavingPayment] = useState(false);
     const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
     const [showEditSearch, setShowEditSearch] = useState(false);
+    const [showTransferModal, setShowTransferModal] = useState(false);
+    const [workshops, setWorkshops] = useState<any[]>([]);
+    const [transferTarget, setTransferTarget] = useState('');
+    const [transferring, setTransferring] = useState(false);
 
     const fetchOrder = useCallback(async () => {
         try {
@@ -143,6 +147,15 @@ export default function OrderDetailsPage() {
         }
     };
 
+    const fetchWorkshops = async () => {
+        try {
+            const res = await api.get('/orders/chain-workshops');
+            setWorkshops(res.data);
+        } catch (err) {
+            console.error('Error fetching workshops', err);
+        }
+    };
+
     const getTimeSlots = (dateStr: string) => {
         if (!dateStr || !config?.business_hours) return [];
         let hoursObj: any = {};
@@ -193,6 +206,7 @@ export default function OrderDetailsPage() {
         fetchOrder();
         fetchCatalog();
         fetchInquiries();
+        fetchWorkshops();
         if (hasPermission('suppliers')) {
             fetchSuppliers();
         }
@@ -355,6 +369,21 @@ export default function OrderDetailsPage() {
             notify('error', t('error_sending_response'));
         } finally {
             setSendingReply(false);
+        }
+    };
+
+    const handleTransfer = async () => {
+        if (!transferTarget) return;
+        setTransferring(true);
+        try {
+            await api.post(`/orders/${order.id}/transfer`, { target_slug: transferTarget });
+            notify('success', 'Orden transferida con éxito');
+            setShowTransferModal(false);
+            fetchOrder();
+        } catch (err: any) {
+            notify('error', 'Error al transferir: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setTransferring(false);
         }
     };
 
@@ -522,6 +551,14 @@ export default function OrderDetailsPage() {
                     >
                         <Download size={16} /> PDF
                     </button>
+                    {order.status !== 'delivered' && workshops.length > 0 && (
+                        <button
+                            onClick={() => setShowTransferModal(true)}
+                            className="flex-1 md:flex-none bg-indigo-600 text-white px-5 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-indigo-200 hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                        >
+                            <ArrowRight size={16} /> Transferir
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -543,8 +580,7 @@ export default function OrderDetailsPage() {
                                 </span>
                                 <button
                                     onClick={() => setShowItemsModal(true)}
-                                    disabled={order.status === 'delivered'}
-                                    className={`p-2 rounded-xl transition-all shadow-lg ${order.status === 'delivered' ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-slate-900 shadow-blue-100'}`}
+                                    className={`p-2 rounded-xl transition-all shadow-lg ${order.status === 'delivered' || !hasPermission('orders.edit') ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-slate-900 shadow-blue-100'}`}
                                 >
                                     <Plus size={18} />
                                 </button>
@@ -668,27 +704,31 @@ export default function OrderDetailsPage() {
                                                         <td className="px-3 py-2.5 text-right">
                                                             {order.status !== 'delivered' && (
                                                                 <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
-                                                                    <button
-                                                                        onClick={() => {
-                                                                            setEditingItemId(item.id);
-                                                                            setEditItemData({ ...item });
-                                                                        }}
-                                                                        className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
-                                                                    >
-                                                                        <Pencil size={18} />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={async () => {
-                                                                            if (confirm(t('confirm_delete_item'))) {
-                                                                                await api.delete(`/orders/items/${item.id}`);
-                                                                                fetchOrder();
-                                                                                notify('success', t('item_deleted'));
-                                                                            }
-                                                                        }}
-                                                                        className="p-2 text-slate-400 hover:text-red-600 transition-colors"
-                                                                    >
-                                                                        <Trash2 size={18} />
-                                                                    </button>
+                                                                    {hasPermission('orders.edit') && (
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setEditingItemId(item.id);
+                                                                                setEditItemData({ ...item });
+                                                                            }}
+                                                                            className="p-2 text-slate-400 hover:text-blue-600 transition-colors"
+                                                                        >
+                                                                            <Pencil size={18} />
+                                                                        </button>
+                                                                    )}
+                                                                    {hasPermission('orders.delete') && (
+                                                                        <button
+                                                                            onClick={async () => {
+                                                                                if (confirm(t('confirm_delete_item'))) {
+                                                                                    await api.delete(`/orders/items/${item.id}`);
+                                                                                    fetchOrder();
+                                                                                    notify('success', t('item_deleted'));
+                                                                                }
+                                                                            }}
+                                                                            className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                                                                        >
+                                                                            <Trash2 size={18} />
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             )}
                                                         </td>
@@ -1340,127 +1380,171 @@ export default function OrderDetailsPage() {
             </div>
 
             {/* Modal Add Items */}
-            {
-                showItemsModal && (
-                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setActiveSearchIndex(null)}>
-                        <div className="bg-white rounded-[40px] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-10" onClick={(e) => e.stopPropagation()}>
-                            <div className="flex justify-between items-center mb-10">
-                                <div>
-                                    <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">{t('add_items')}</h3>
-                                    <p className="text-slate-400 text-xs font-black uppercase tracking-widest">{t('order_extension')} #{order.id}</p>
+            {showItemsModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setActiveSearchIndex(null)}>
+                    <div className="bg-white rounded-[40px] w-full max-w-2xl max-h-[90vh] overflow-y-auto p-10" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-10">
+                            <div>
+                                <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">{t('add_items')}</h3>
+                                <p className="text-slate-400 text-xs font-black uppercase tracking-widest">{t('order_extension')} #{order.id}</p>
+                            </div>
+                            <button onClick={() => setShowItemsModal(false)} className="text-slate-400 hover:text-slate-900">
+                                <X size={24} />
+                            </button>
+                        </div>
+
+                        <div className="space-y-8">
+                            {newItems.map((item, index) => (
+                                <div key={index} className="bg-slate-50 p-6 rounded-3xl space-y-4 relative">
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <div className="space-y-2 relative" onClick={(e) => e.stopPropagation()}>
+                                            <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('description')} / {t('catalog_service')}</label>
+                                            <div className="relative">
+                                                <input
+                                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
+                                                    placeholder={t('type_to_search_catalog')}
+                                                    value={item.description}
+                                                    onChange={(e) => {
+                                                        updateItem(index, 'description', e.target.value);
+                                                        setActiveSearchIndex(index);
+                                                        const updated = [...newItems];
+                                                        updated[index].service_id = null;
+                                                        setNewItems(updated);
+                                                    }}
+                                                    onFocus={() => setActiveSearchIndex(index)}
+                                                />
+                                                {activeSearchIndex === index && item.description.length > 0 && (
+                                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-slate-100 shadow-2xl z-50 max-h-48 overflow-y-auto">
+                                                        {catalog.filter(s => s.name.toLowerCase().includes(item.description.toLowerCase())).map(s => (
+                                                            <div
+                                                                key={s.id}
+                                                                className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
+                                                                onClick={() => {
+                                                                    const updated = [...newItems];
+                                                                    updated[index] = {
+                                                                        ...updated[index],
+                                                                        service_id: s.id,
+                                                                        description: s.name,
+                                                                        labor_price: s.base_price?.toString() || '0'
+                                                                    };
+                                                                    setNewItems(updated);
+                                                                    setActiveSearchIndex(null);
+                                                                }}
+                                                            >
+                                                                <p className="font-bold text-sm text-slate-900">{s.name}</p>
+                                                                <p className="text-[10px] text-emerald-600 font-black tracking-widest uppercase">$ {s.base_price}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('labor')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
+                                                value={item.labor_price}
+                                                onChange={(e) => updateItem(index, 'labor_price', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('parts')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
+                                                value={item.parts_price}
+                                                onChange={(e) => updateItem(index, 'parts_price', e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 italic">{t('internal_profit')}</label>
+                                            <input
+                                                type="number"
+                                                className="w-full px-4 py-3 rounded-xl border border-dashed border-slate-200 bg-slate-100 font-bold text-sm text-slate-500"
+                                                value={item.parts_profit}
+                                                onChange={(e) => updateItem(index, 'parts_profit', e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    {newItems.length > 1 && (
+                                        <button
+                                            onClick={() => setNewItems(newItems.filter((_, i) => i !== index))}
+                                            className="absolute -top-3 -right-3 bg-red-100 text-red-500 p-2 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    )}
                                 </div>
-                                <button onClick={() => setShowItemsModal(false)} className="text-slate-400 hover:text-slate-900">
-                                    <X size={24} />
-                                </button>
+                            ))}
+
+                            <button
+                                onClick={() => setNewItems([...newItems, { description: '', labor_price: '0', parts_price: '0', parts_profit: '0', service_id: null }])}
+                                className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-[10px] uppercase tracking-widest hover:border-blue-400 hover:text-blue-600 transition-all"
+                            >
+                                {t('add_another_item')}
+                            </button>
+
+                            <button
+                                onClick={handleAddItems}
+                                className="w-full bg-slate-900 text-white font-black py-5 rounded-[24px] shadow-2xl transition-all uppercase tracking-[0.2em] text-xs hover:bg-blue-600"
+                            >
+                                {t('confirm_and_extend')}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Transfer Modal */}
+            {showTransferModal && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[40px] w-full max-w-md p-10 animate-in zoom-in-95 duration-200">
+                        <div className="text-center mb-8">
+                            <div className="bg-indigo-50 w-20 h-20 rounded-[30px] flex items-center justify-center text-indigo-600 mx-auto mb-6">
+                                <RefreshCw className={transferring ? 'animate-spin' : ''} size={32} />
+                            </div>
+                            <h3 className="text-2xl font-black text-slate-900 uppercase italic tracking-tighter">Transferir Orden</h3>
+                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mt-2 px-8">La orden se cerrará aquí y se creará una nueva en el taller destino</p>
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Seleccionar Taller Destino</label>
+                                <select
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4 text-sm font-bold text-slate-900 outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                    value={transferTarget}
+                                    onChange={(e) => setTransferTarget(e.target.value)}
+                                >
+                                    <option value="">Elegir taller...</option>
+                                    {workshops.map(w => (
+                                        <option key={w.slug} value={w.slug}>{w.name}</option>
+                                    ))}
+                                </select>
                             </div>
 
-                            <div className="space-y-8">
-                                {newItems.map((item, index) => (
-                                    <div key={index} className="bg-slate-50 p-6 rounded-3xl space-y-4 relative">
-                                        <div className="grid grid-cols-1 gap-4">
-                                            <div className="space-y-2 relative" onClick={(e) => e.stopPropagation()}>
-                                                <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('description')} / {t('catalog_service')}</label>
-                                                <div className="relative">
-                                                    <input
-                                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
-                                                        placeholder={t('type_to_search_catalog')}
-                                                        value={item.description}
-                                                        onChange={(e) => {
-                                                            updateItem(index, 'description', e.target.value);
-                                                            setActiveSearchIndex(index);
-                                                            // Clear service_id if typing
-                                                            const updated = [...newItems];
-                                                            updated[index].service_id = null;
-                                                            setNewItems(updated);
-                                                        }}
-                                                        onFocus={() => setActiveSearchIndex(index)}
-                                                    />
-                                                    {activeSearchIndex === index && item.description.length > 0 && (
-                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border border-slate-100 shadow-2xl z-50 max-h-48 overflow-y-auto">
-                                                            {catalog.filter(s => s.name.toLowerCase().includes(item.description.toLowerCase())).map(s => (
-                                                                <div
-                                                                    key={s.id}
-                                                                    className="p-3 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0"
-                                                                    onClick={() => {
-                                                                        const updated = [...newItems];
-                                                                        updated[index] = {
-                                                                            ...updated[index],
-                                                                            service_id: s.id,
-                                                                            description: s.name,
-                                                                            labor_price: s.base_price?.toString() || '0'
-                                                                        };
-                                                                        setNewItems(updated);
-                                                                        setActiveSearchIndex(null);
-                                                                    }}
-                                                                >
-                                                                    <p className="font-bold text-sm text-slate-900">{s.name}</p>
-                                                                    <p className="text-[10px] text-emerald-600 font-black tracking-widest uppercase">$ {s.base_price}</p>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('labor')}</label>
-                                                <input
-                                                    type="number"
-                                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
-                                                    value={item.labor_price}
-                                                    onChange={(e) => updateItem(index, 'labor_price', e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-900 uppercase tracking-widest ml-1">{t('parts')}</label>
-                                                <input
-                                                    type="number"
-                                                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white font-bold text-sm"
-                                                    value={item.parts_price}
-                                                    onChange={(e) => updateItem(index, 'parts_price', e.target.value)}
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 italic">{t('internal_profit')}</label>
-                                                <input
-                                                    type="number"
-                                                    className="w-full px-4 py-3 rounded-xl border border-dashed border-slate-200 bg-slate-100 font-bold text-sm text-slate-500"
-                                                    value={item.parts_profit}
-                                                    onChange={(e) => updateItem(index, 'parts_profit', e.target.value)}
-                                                />
-                                            </div>
-                                        </div>
-                                        {newItems.length > 1 && (
-                                            <button
-                                                onClick={() => setNewItems(newItems.filter((_, i) => i !== index))}
-                                                className="absolute -top-3 -right-3 bg-red-100 text-red-500 p-2 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                                            >
-                                                <X size={14} />
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
-
+                            <div className="flex gap-4 pt-4">
                                 <button
-                                    onClick={() => setNewItems([...newItems, { description: '', labor_price: '0', parts_price: '0', parts_profit: '0', service_id: null }])}
-                                    className="w-full py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-[10px] uppercase tracking-widest hover:border-blue-400 hover:text-blue-600 transition-all"
+                                    onClick={() => setShowTransferModal(false)}
+                                    className="flex-1 py-4 text-slate-400 font-black uppercase text-[10px] tracking-widest"
                                 >
-                                    {t('add_another_item')}
+                                    Cancelar
                                 </button>
-
                                 <button
-                                    onClick={handleAddItems}
-                                    className="w-full bg-slate-900 text-white font-black py-5 rounded-[24px] shadow-2xl transition-all uppercase tracking-[0.2em] text-xs hover:bg-blue-600"
+                                    disabled={!transferTarget || transferring}
+                                    onClick={handleTransfer}
+                                    className="flex-[2] bg-indigo-600 text-white font-black py-4 rounded-2xl text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-indigo-100 hover:bg-slate-900 transition-all disabled:opacity-50"
                                 >
-                                    {t('confirm_and_extend')}
+                                    {transferring ? 'Transferiendo...' : 'Confirmar Transferencia'}
                                 </button>
                             </div>
                         </div>
                     </div>
-                )
-            }
-        </div >
+                </div>
+            )}
+        </div>
     );
 }
 

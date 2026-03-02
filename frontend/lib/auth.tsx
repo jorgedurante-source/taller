@@ -92,15 +92,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     const hasPermission = (permission: string) => {
         if (!user) return false;
-        // Superuser always has access to audit logs
-        if (user.isSuperuser && permission === 'audit') return true;
-
-        // If superuser is impersonating, permissions array contains enabled modules
-        if (user.isSuperuser && user.permissions && user.permissions.length > 0) {
-            return user.permissions.includes(permission);
-        }
+        // Superuser bypasses all individual permissions
         if (user.isSuperuser) return true;
-        return Array.isArray(user.permissions) && user.permissions.includes(permission);
+
+        const perms = Array.isArray(user.permissions) ? user.permissions : [];
+
+        // Implication: If I have 'orders.edit', I have 'orders'
+        return perms.some(p => p === permission || p.startsWith(permission + '.'));
     };
 
     return (

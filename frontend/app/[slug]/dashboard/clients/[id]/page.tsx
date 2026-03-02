@@ -4,6 +4,7 @@ import { useSlug } from '@/lib/slug';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
+import { useTranslation } from '@/lib/i18n';
 import {
     ChevronLeft,
     User,
@@ -21,12 +22,17 @@ import {
     Send,
     X,
     Camera,
-    Image as ImageIcon
+    Image as ImageIcon,
+    Building2,
+    Clock,
+    Wrench
 } from 'lucide-react';
 import Link from 'next/link';
 import { useNotification } from '@/lib/notification';
 import { useAuth } from '@/lib/auth';
 import VehicleAutocomplete from '@/components/VehicleAutocomplete';
+import CrossChainOrderDetailModal from '@/components/CrossChainOrderDetailModal';
+import CrossChainHistoryItem from '@/components/CrossChainHistoryItem';
 
 export default function ClientDetailsPage() {
     const { slug } = useSlug();
@@ -34,6 +40,7 @@ export default function ClientDetailsPage() {
     const router = useRouter();
     const { notify } = useNotification();
     const { hasPermission } = useAuth();
+    const { t } = useTranslation();
 
     if (!hasPermission('clients')) {
         return (
@@ -55,6 +62,11 @@ export default function ClientDetailsPage() {
     const [showNewVehicleModal, setShowNewVehicleModal] = useState(false);
     const [showManualSendModal, setShowManualSendModal] = useState(false);
     const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
+    const [chainOrders, setChainOrders] = useState<any[]>([]);
+    const [chainLoading, setChainLoading] = useState(false);
+    const [selectedChainOrderDetail, setSelectedChainOrderDetail] = useState<any>(null);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [activeChainVehicleId, setActiveChainVehicleId] = useState<number | null>(null);
     const [manualTemplates, setManualTemplates] = useState<any[]>([]);
     const [newVehicleData, setNewVehicleData] = useState({
         brand: '',
@@ -71,22 +83,68 @@ export default function ClientDetailsPage() {
     const fetchData = useCallback(async () => {
         try {
             const [clientRes, vehiclesRes, ordersRes] = await Promise.all([
-                api.get(`/clients`),
+                api.get(`/clients/${params.id}`),
                 api.get(`/clients/${params.id}/vehicles`),
-                api.get(`/orders`)
+                api.get(`/orders?client_id=${params.id}&limit=100`)
             ]);
 
-            const currentClient = clientRes.data.find((c: any) => c.id === parseInt(params.id as string));
+            const currentClient = clientRes.data;
             setClient(currentClient);
             setEditData(currentClient);
             setVehicles(vehiclesRes.data);
-            setOrders(ordersRes.data.filter((o: any) => o.client_id === parseInt(params.id as string)));
+            const ordersData = ordersRes.data?.data ?? ordersRes.data;
+            setOrders(Array.isArray(ordersData) ? ordersData : []);
+
+            // Proactively fetch cross-chain history for all vehicles
+            if (vehiclesRes.data?.length > 0) {
+                fetchFullChainHistory(vehiclesRes.data);
+            }
         } catch (err) {
             console.error('Error fetching client details', err);
         } finally {
             setLoading(false);
         }
     }, [params.id]);
+
+    // Fetch chain history for all vehicles of the client
+    const fetchFullChainHistory = async (vehiclesList: any[]) => {
+        setChainLoading(true);
+        try {
+            const chainPromises = vehiclesList.map(v =>
+                api.get(`/clients/vehicles/${v.id}/chain-history`).catch(() => ({ data: { chain_orders: [] } }))
+            );
+            const results = await Promise.all(chainPromises);
+            const allOrders = results.flatMap(res => res.data.chain_orders || []);
+            // Sort by date descending
+            allOrders.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            setChainOrders(allOrders);
+        } catch (err) {
+            console.error('Error fetching full chain history', err);
+        } finally {
+            setChainLoading(false);
+        }
+    };
+
+    const fetchChainOrderDetail = async (peer_slug: string, order_id: number, vehicle_id: number) => {
+        setDetailLoading(true);
+        setSelectedChainOrderDetail(null);
+        setActiveChainVehicleId(vehicle_id);
+        setShowChainModal(true); // Now used for detail view only
+        try {
+            const res = await api.get(`/clients/vehicles/${vehicle_id}/chain-history/${peer_slug}/${order_id}`);
+            setSelectedChainOrderDetail(res.data);
+        } catch (err) {
+            notify('error', 'No se pudo obtener el detalle de la orden remota');
+            setShowChainModal(false);
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
+    // New state for cross-chain details modal (now handled by shared component)
+    const [showChainModal, setShowChainModal] = useState(false);
+
+
 
     useEffect(() => {
         fetchData();
@@ -341,8 +399,7 @@ export default function ClientDetailsPage() {
                                         </Link>
                                         <button
                                             onClick={() => { setSelectedVehicle(v); setShowManualSendModal(true); }}
-                                            className="flex items-center gap-2 bg-white border border-slate-100 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm"
-                                        >
+                                            className="flex items-center gap-2 bg-white border border-slate-100 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
                                             <MessageSquare size={12} />
                                             Mensaje
                                         </button>
@@ -395,6 +452,36 @@ export default function ClientDetailsPage() {
                             {orders.length === 0 && <p className="text-center py-10 text-slate-400 font-bold italic">No hay órdenes registradas</p>}
                         </div>
                     </section>
+
+                    {/* Integrated Cross-Chain History */}
+                    {(chainLoading || chainOrders.length > 0) && (
+                        <section className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-8 opacity-90">
+                            <div className="flex items-center justify-between mb-8">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-slate-100 p-2 rounded-xl text-slate-500">
+                                        <Building2 size={24} />
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Historial en otros talleres</h3>
+                                </div>
+                                {chainLoading ? (
+                                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                                ) : (
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1 rounded-full">{chainOrders.length} REGISTROS</span>
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                {chainOrders.map((o: any) => (
+                                    <CrossChainHistoryItem
+                                        key={`${o.tenant_slug}-${o.id}`}
+                                        order={o}
+                                        onClick={() => fetchChainOrderDetail(o.tenant_slug, o.id, o.local_vehicle_id)}
+                                        vehicleModel={vehicles.find(veh => veh.plate === o.plate)?.model || o.model || 'Desconocido'}
+                                    />
+                                ))}
+                            </div>
+                        </section>
+                    )}
                 </div>
             </div>
 
@@ -473,6 +560,13 @@ export default function ClientDetailsPage() {
                     </div>
                 </div>
             )}
+            {/* Shared Chain Order Detail Modal */}
+            <CrossChainOrderDetailModal
+                isOpen={showChainModal}
+                onClose={() => { setShowChainModal(false); setSelectedChainOrderDetail(null); }}
+                detail={selectedChainOrderDetail}
+                loading={detailLoading}
+            />
             {/* New Vehicle Modal */}
             {showNewVehicleModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">

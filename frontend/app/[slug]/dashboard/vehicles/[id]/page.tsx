@@ -4,6 +4,7 @@ import { useSlug } from '@/lib/slug';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import api from '@/lib/api';
+import { useTranslation } from '@/lib/i18n';
 import {
     ChevronLeft,
     Car,
@@ -19,18 +20,23 @@ import {
     Pencil,
     Gauge,
     TrendingUp,
-    CheckCircle2
+    CheckCircle2,
+    Building2
 } from 'lucide-react';
 import Link from 'next/link';
 import { useNotification } from '@/lib/notification';
 import { useAuth } from '@/lib/auth';
 import { Shield, ShieldAlert, ShieldCheck, ShieldOff, AlertTriangle } from 'lucide-react';
+import CrossChainOrderDetailModal from '@/components/CrossChainOrderDetailModal';
+import CrossChainHistoryItem from '@/components/CrossChainHistoryItem';
 
 export default function VehicleDetailsPage() {
+    console.log('[VehicleDetails] COMPONENT RENDER');
     const { slug } = useSlug();
     const params = useParams();
     const { notify } = useNotification();
     const { hasPermission } = useAuth();
+    const { t } = useTranslation();
 
     if (!hasPermission('vehicles')) {
         return (
@@ -46,6 +52,11 @@ export default function VehicleDetailsPage() {
     const [kmHistory, setKmHistory] = useState<any[]>([]);
     const [healthData, setHealthData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [chainOrders, setChainOrders] = useState<any[]>([]);
+    const [chainOrdersLoading, setChainOrdersLoading] = useState(false);
+    const [selectedChainOrderDetail, setSelectedChainOrderDetail] = useState<any>(null);
+    const [detailLoading, setDetailLoading] = useState(false);
+    const [showChainDetailModal, setShowChainDetailModal] = useState(false);
 
     // KM edit state
     const [editingKm, setEditingKm] = useState(false);
@@ -53,27 +64,68 @@ export default function VehicleDetailsPage() {
     const [kmNotes, setKmNotes] = useState('');
     const [savingKm, setSavingKm] = useState(false);
 
+    const fetchChainHistory = useCallback(async (vehicleId: number) => {
+        console.log('[ChainHistory] Fetching for vehicle ID:', vehicleId);
+        setChainOrdersLoading(true);
+        try {
+            const res = await api.get(`/clients/vehicles/${vehicleId}/chain-history`);
+            console.log('[ChainHistory] Response:', res.data);
+            setChainOrders(res.data.chain_orders || []);
+        } catch (err) {
+            console.error('[ChainHistory] Error:', err);
+            setChainOrders([]);
+        } finally {
+            setChainOrdersLoading(false);
+        }
+    }, []);
+
+    const fetchChainOrderDetail = async (peer_slug: string, order_id: number) => {
+        if (!vehicle) return;
+        setDetailLoading(true);
+        setShowChainDetailModal(true);
+        try {
+            const res = await api.get(`/clients/vehicles/${vehicle.id}/chain-history/${peer_slug}/${order_id}`);
+            setSelectedChainOrderDetail(res.data);
+        } catch (err) {
+            notify('error', 'No se pudo obtener el detalle de la orden remota');
+            setShowChainDetailModal(false);
+        } finally {
+            setDetailLoading(false);
+        }
+    };
+
     const fetchData = useCallback(async () => {
+        console.log('[VehicleDetails] fetchData STARTED for ID:', params.id);
         try {
             const [vehiclesRes, ordersRes, kmRes, healthRes] = await Promise.all([
                 api.get('/clients/all-vehicles'),
-                api.get('/orders'),
+                api.get(`/orders?vehicle_id=${params.id}&limit=100`),
                 api.get(`/clients/vehicles/${params.id}/km-history`),
                 api.get(`/clients/vehicles/${params.id}/health`).catch(() => ({ data: null }))
             ]);
 
-            const currentVehicle = vehiclesRes.data.find((v: any) => v.id === parseInt(params.id as string));
+            console.log('[VehicleDetails] Vehicles count:', vehiclesRes.data?.length);
+            console.log('[VehicleDetails] Searching for ID:', params.id, 'in vehicles array');
+
+            const currentVehicle = vehiclesRes.data.find((v: any) => {
+                // IDs in our DB are numbers, params.id is a string
+                return Number(v.id) === Number(params.id);
+            });
+            console.log('[VehicleDetails] Found vehicle:', currentVehicle?.plate, 'UUID:', currentVehicle?.uuid);
             setVehicle(currentVehicle);
-            setOrders(ordersRes.data.filter((o: any) => o.vehicle_id === parseInt(params.id as string)));
+            setOrders(ordersRes.data.data);
             setKmHistory(kmRes.data);
             setHealthData(healthRes.data);
-            if (currentVehicle) setNewKm(String(currentVehicle.km || ''));
+            if (currentVehicle) {
+                setNewKm(String(currentVehicle.km || ''));
+                fetchChainHistory(currentVehicle.id);
+            }
         } catch (err) {
             console.error('Error fetching vehicle details', err);
         } finally {
             setLoading(false);
         }
-    }, [params.id]);
+    }, [params.id, fetchChainHistory]);
 
     useEffect(() => {
         fetchData();
@@ -311,7 +363,7 @@ export default function VehicleDetailsPage() {
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Salud del Vehículo</p>
                                     {healthData.healthScore !== null ? (
                                         <p className={`text-2xl font-black tracking-tighter ${healthData.healthScore >= 80 ? 'text-emerald-600' :
-                                                healthData.healthScore >= 50 ? 'text-amber-500' : 'text-red-500'
+                                            healthData.healthScore >= 50 ? 'text-amber-500' : 'text-red-500'
                                             }`}>{healthData.healthScore}%</p>
                                     ) : (
                                         <p className="text-xs font-bold text-slate-400 italic">Acumulando datos...</p>
@@ -324,7 +376,7 @@ export default function VehicleDetailsPage() {
                                 <div className="w-full h-2 bg-slate-100 rounded-full mb-6 overflow-hidden">
                                     <div
                                         className={`h-full rounded-full transition-all duration-700 ${healthData.healthScore >= 80 ? 'bg-emerald-500' :
-                                                healthData.healthScore >= 50 ? 'bg-amber-400' : 'bg-red-500'
+                                            healthData.healthScore >= 50 ? 'bg-amber-400' : 'bg-red-500'
                                             }`}
                                         style={{ width: `${healthData.healthScore}%` }}
                                     />
@@ -340,12 +392,12 @@ export default function VehicleDetailsPage() {
                                 )}
                                 {healthData.intervals?.map((interval: any, i: number) => (
                                     <div key={i} className={`flex items-start justify-between p-3 rounded-2xl border transition-all ${interval.status === 'overdue' ? 'bg-red-50 border-red-100' :
-                                            interval.status === 'ok' ? 'bg-emerald-50/50 border-emerald-100' :
-                                                'bg-slate-50 border-slate-100'
+                                        interval.status === 'ok' ? 'bg-emerald-50/50 border-emerald-100' :
+                                            'bg-slate-50 border-slate-100'
                                         }`}>
                                         <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${interval.status === 'overdue' ? 'bg-red-500' :
-                                                    interval.status === 'ok' ? 'bg-emerald-500' : 'bg-slate-300'
+                                                interval.status === 'ok' ? 'bg-emerald-500' : 'bg-slate-300'
                                                 }`} />
                                             <p className="text-[11px] font-black text-slate-800 uppercase italic tracking-tight truncate">
                                                 {interval.service_description}
@@ -449,8 +501,49 @@ export default function VehicleDetailsPage() {
                             )}
                         </div>
                     </div>
+
+                    {/* Chain History Card */}
+                    {(chainOrdersLoading || chainOrders.length > 0) && (
+                        <div className="bg-white rounded-[40px] border border-slate-100 shadow-sm p-8 mt-8 opacity-90">
+                            <div className="flex items-center justify-between mb-10">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-slate-100 p-2 rounded-xl text-slate-500">
+                                        <Building2 size={24} />
+                                    </div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Historial en otros talleres</h3>
+                                </div>
+                                {chainOrdersLoading && (
+                                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                                )}
+                            </div>
+
+                            <div className="space-y-4">
+                                {chainOrders.map((o: any) => (
+                                    <CrossChainHistoryItem
+                                        key={o.uuid || o.id}
+                                        order={o}
+                                        onClick={() => fetchChainOrderDetail(o.tenant_slug, o.id)}
+                                        // On the vehicle page, we might not need to show the model again since it's the current vehicle,
+                                        // but for consistency with the design "use the client one", we can pass it if available.
+                                        vehicleModel={vehicle.model}
+                                    />
+                                ))}
+
+                                {chainOrders.length === 0 && !chainOrdersLoading && (
+                                    <p className="text-center text-slate-400 text-xs font-bold italic">No hay órdenes en otros talleres de la cadena</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
+            {/* Shared Chain Order Detail Modal */}
+            <CrossChainOrderDetailModal
+                isOpen={showChainDetailModal}
+                onClose={() => { setShowChainDetailModal(false); setSelectedChainOrderDetail(null); }}
+                detail={selectedChainOrderDetail}
+                loading={detailLoading}
+            />
         </div>
     );
 }

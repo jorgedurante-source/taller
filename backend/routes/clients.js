@@ -22,8 +22,181 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// @route   GET api/clients/all-vehicles
+router.get('/all-vehicles', auth, hasPermission('vehicles'), (req, res) => {
+    const vehicles = req.db.prepare(`
+        SELECT v.*, c.first_name, c.last_name, c.phone as client_phone 
+        FROM vehicles v
+        JOIN clients c ON v.client_id = c.id
+    `).all();
+    res.json(vehicles);
+});
+
+// @route   GET api/clients/vehicle-reference
+router.get('/vehicle-reference', auth, (req, res) => {
+    try {
+        const refs = req.db.prepare('SELECT * FROM vehicle_reference ORDER BY brand ASC, model ASC, version ASC').all();
+        res.json(refs);
+    } catch (err) {
+        res.status(500).send('Server error');
+    }
+});
+
 // db is injected per-request via req.db (tenant middleware)
 // Each route reads db from req.db
+
+// @route   GET api/clients/vehicles/:vid/chain-history
+router.get('/vehicles/:vid/chain-history', auth, (req, res) => {
+    console.log(`[chain-history] Request for vehicle ${req.params.vid} in tenant ${req.slug}`);
+    try {
+        // 2. Get vehicle
+        const vehicle = req.db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.vid);
+        if (!vehicle) {
+            console.log(`[chain-history] Vehicle ${req.params.vid} not found in ${req.slug}`);
+            return res.status(404).json({ message: 'Vehículo no encontrado' });
+        }
+
+        console.log(`[chain-history] Vehicle Plate: ${vehicle.plate}, UUID: ${vehicle.uuid}`);
+
+        // 3. Check uuid
+        if (!vehicle.uuid) {
+            console.log(`[chain-history] Vehicle ${req.params.vid} has no UUID`);
+            return res.json({ chain_orders: [], reason: 'vehicle_has_no_uuid' });
+        }
+
+        // 4. Find chain
+        const superDb = require('../superDb');
+        const member = superDb.prepare(
+            'SELECT chain_id FROM chain_members WHERE tenant_slug = ?'
+        ).get(req.slug);
+
+        if (!member) {
+            console.log(`[chain-history] Tenant ${req.slug} is NOT in a chain`);
+            return res.json({ chain_orders: [], reason: 'not_in_chain' });
+        }
+
+        // 5. Get peers
+        const peers = superDb.prepare(
+            'SELECT tenant_slug FROM chain_members WHERE chain_id = ? AND tenant_slug != ?'
+        ).all(member.chain_id, req.slug);
+
+        // 6. Get visibility level
+        const chain = superDb.prepare(
+            'SELECT visibility_level FROM tenant_chains WHERE id = ?'
+        ).get(member.chain_id);
+
+        const visibility = chain?.visibility_level || 'summary';
+
+        // 7. Fetch from peers
+        const { getDb } = require('../tenantManager');
+        const allChainOrders = [];
+
+        console.log(`[chain-history] Found ${peers.length} peers for tenant ${req.slug}`);
+
+        for (const peer of peers) {
+            try {
+                const peerDb = getDb(peer.tenant_slug);
+                const peerVehicle = peerDb.prepare('SELECT id FROM vehicles WHERE uuid = ?').get(vehicle.uuid);
+
+                if (peerVehicle) {
+                    console.log(`[chain-history] Matched vehicle in peer ${peer.tenant_slug} (Peer VID: ${peerVehicle.id})`);
+                    const columns = ['o.id', 'o.uuid', 'o.status', 'o.description', 'o.created_at', 'o.delivered_at', 'o.appointment_date'];
+                    if (visibility === 'full') {
+                        columns.push('o.payment_status');
+                    }
+
+                    const orders = peerDb.prepare(`
+                        SELECT ${columns.join(', ')}
+                        FROM orders o
+                        WHERE o.vehicle_id = ?
+                        ORDER BY o.created_at DESC
+                        LIMIT 50
+                    `).all(peerVehicle.id);
+
+                    console.log(`[chain-history] Found ${orders.length} orders in peer ${peer.tenant_slug}`);
+
+                    // Get workshop name
+                    const workshop = superDb.prepare('SELECT name FROM workshops WHERE slug = ?').get(peer.tenant_slug);
+
+                    orders.forEach(o => {
+                        o.tenant_slug = peer.tenant_slug;
+                        o.workshop_name = workshop?.name || peer.tenant_slug;
+                        o.local_vehicle_id = vehicle.id;
+                        o.plate = vehicle.plate;
+                        allChainOrders.push(o);
+                    });
+                } else {
+                    console.log(`[chain-history] Vehicle UUID ${vehicle.uuid} NOT found in peer ${peer.tenant_slug}`);
+                }
+            } catch (peerErr) {
+                console.warn(`[chain-history] Failed to fetch from peer ${peer.tenant_slug}:`, peerErr.message);
+                // Continue to next peer
+            }
+        }
+
+        // 8. Return
+        console.log(`[chain-history] Returning ${allChainOrders.length} cross-chain orders`);
+        res.json({
+            chain_orders: allChainOrders,
+            vehicle_uuid: vehicle.uuid
+        });
+
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching chain history' });
+    }
+});
+
+// @route   GET api/clients/vehicles/:vid/chain-history/:peer_slug/:oid
+router.get('/vehicles/:vid/chain-history/:peer_slug/:oid', auth, (req, res) => {
+    const { vid, peer_slug, oid } = req.params;
+    try {
+        const vehicle = req.db.prepare('SELECT uuid FROM vehicles WHERE id = ?').get(vid);
+        if (!vehicle) return res.status(404).json({ message: 'Vehículo no encontrado' });
+
+        const superDb = require('../superDb');
+        const member = superDb.prepare('SELECT chain_id FROM chain_members WHERE tenant_slug = ?').get(req.slug);
+        if (!member) return res.status(403).json({ message: 'Access denied: not in chain' });
+
+        const peerMember = superDb.prepare('SELECT tenant_slug FROM chain_members WHERE chain_id = ? AND tenant_slug = ?').get(member.chain_id, peer_slug);
+        if (!peerMember) return res.status(403).json({ message: 'Access denied: peer not in same chain' });
+
+        const { getDb } = require('../tenantManager');
+        const peerDb = getDb(peer_slug);
+
+        const order = peerDb.prepare(`
+            SELECT o.*, v.plate, v.brand, v.model, v.version, v.year, v.km, v.uuid as vehicle_uuid
+            FROM orders o
+            JOIN vehicles v ON o.vehicle_id = v.id
+            WHERE o.id = ?
+        `).get(oid);
+
+        if (!order) return res.status(404).json({ message: 'Orden no encontrada en taller remoto' });
+        if (order.vehicle_uuid !== vehicle.uuid) return res.status(403).json({ message: 'Access denied: order vehicle mismatch' });
+
+        const chain = superDb.prepare('SELECT visibility_level FROM tenant_chains WHERE id = ?').get(member.chain_id);
+        const visibility = chain?.visibility_level || 'summary';
+
+        const items = peerDb.prepare('SELECT description, subtotal FROM order_items WHERE order_id = ?').all(oid);
+        const history = peerDb.prepare('SELECT status, notes, created_at FROM order_history WHERE order_id = ? ORDER BY created_at DESC').all(oid);
+        const workshop = superDb.prepare('SELECT name FROM workshops WHERE slug = ?').get(peer_slug);
+
+        // Strip price data for cross-chain as requested
+        order.payment_status = undefined;
+        order.payment_amount = undefined;
+        order.subtotal = undefined;
+        order.total = undefined;
+        items.forEach(i => {
+            i.subtotal = undefined;
+            i.price = undefined;
+        });
+
+        res.json({ order, items, history, workshop_name: workshop?.name || peer_slug });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ message: 'Error fetching cross-chain order details' });
+    }
+});
 router.get('/', auth, hasPermission('clients'), (req, res) => {
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(200, parseInt(req.query.limit) || 100);
@@ -86,6 +259,17 @@ router.get('/', auth, hasPermission('clients'), (req, res) => {
             has_prev: page > 1
         }
     });
+});
+
+// @route   GET api/clients/:id
+router.get('/:id', auth, hasPermission('clients'), (req, res) => {
+    try {
+        const client = req.db.prepare('SELECT *, (first_name || \' \' || last_name) as full_name FROM clients WHERE id = ?').get(req.params.id);
+        if (!client) return res.status(404).json({ message: 'Cliente no encontrado' });
+        res.json(client);
+    } catch (err) {
+        res.status(500).send('Server error');
+    }
 });
 
 // @route   POST api/clients
@@ -199,15 +383,7 @@ router.post('/:id/password', auth, hasPermission('clients'), async (req, res) =>
 
 // --- Vehicles ---
 
-// @route   GET api/clients/all-vehicles
-router.get('/all-vehicles', auth, hasPermission('vehicles'), (req, res) => {
-    const vehicles = req.db.prepare(`
-        SELECT v.*, c.first_name, c.last_name, c.phone as client_phone 
-        FROM vehicles v
-        JOIN clients c ON v.client_id = c.id
-    `).all();
-    res.json(vehicles);
-});
+
 
 // @route   GET api/clients/:id/vehicles
 router.get('/:id/vehicles', auth, hasPermission('vehicles'), (req, res) => {
@@ -464,15 +640,7 @@ router.post('/vehicles/:vid/photo', auth, hasPermission('vehicles'), upload.sing
 
 // --- Vehicle Reference Management ---
 
-// @route   GET api/clients/vehicle-reference
-router.get('/vehicle-reference', auth, (req, res) => {
-    try {
-        const refs = req.db.prepare('SELECT * FROM vehicle_reference ORDER BY brand ASC, model ASC, version ASC').all();
-        res.json(refs);
-    } catch (err) {
-        res.status(500).send('Server error');
-    }
-});
+
 
 // @route   POST api/clients/vehicle-reference
 router.post('/vehicle-reference', auth, hasPermission('settings'), (req, res) => {
@@ -494,5 +662,8 @@ router.delete('/vehicle-reference/:id', auth, hasPermission('settings'), (req, r
         res.status(500).send('Server error');
     }
 });
+
+
+
 
 module.exports = router;

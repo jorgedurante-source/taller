@@ -126,7 +126,7 @@ export default function SettingsPage() {
     const [roles, setRoles] = useState<any[]>([]);
     const [newUser, setNewUser] = useState({ username: '', password: '', role_id: '', first_name: '', last_name: '' });
     const [permissionsBase] = useState([
-        'dashboard', 'clients', 'vehicles', 'orders', 'income', 'settings', 'users', 'roles', 'reminders', 'appointments', 'suppliers', 'audit'
+        'dashboard', 'clients', 'vehicles', 'orders', 'income', 'stock', 'settings', 'users', 'roles', 'reminders', 'appointments', 'suppliers', 'audit'
     ]);
 
     // Vehicle Reference State
@@ -149,6 +149,7 @@ export default function SettingsPage() {
         'reminders': t('perm_reminders'),
         'appointments': t('perm_appointments'),
         'suppliers': t('perm_suppliers'),
+        'stock': 'Stock / Inventario',
         'audit': t('perm_audit')
     };
 
@@ -1877,20 +1878,52 @@ function RoleCard({ role, permissionsList, permissionLabels, onUpdate, onDelete 
 
             <div className="p-6 flex-grow space-y-4">
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-2">Permisos del Rol</p>
-                <div className="space-y-3">
-                    {permissionsList.map(perm => (
-                        <div key={perm} className="flex items-center justify-between group">
-                            <span className={`text-xs font-bold uppercase tracking-wider ${role.permissions.includes(perm) ? 'text-slate-800' : 'text-slate-400'}`}>
-                                {permissionLabels[perm] || perm.replace('_', ' ')}
-                            </span>
-                            <div
-                                onClick={() => togglePermission(perm)}
-                                className={`w-10 h-5 rounded-full relative cursor-pointer transition-all duration-300 ${role.permissions.includes(perm) ? (isSystemAdmin ? 'bg-blue-100 cursor-not-allowed' : 'bg-blue-600 shadow-lg shadow-blue-500/20') : 'bg-slate-200'}`}
-                            >
-                                <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all duration-300 ${role.permissions.includes(perm) ? 'left-6' : 'left-1'}`} />
+                <div className="space-y-4">
+                    {permissionsList.map(perm => {
+                        const subs = {
+                            'orders': ['prices', 'edit', 'delete'],
+                            'income': ['delete'],
+                            'stock': ['edit', 'delete']
+                        }[perm] || [];
+
+                        return (
+                            <div key={perm} className="space-y-2">
+                                <div className="flex items-center justify-between group">
+                                    <span className={`text-xs font-black uppercase tracking-wider ${role.permissions.includes(perm) ? 'text-slate-800' : 'text-slate-400'}`}>
+                                        {permissionLabels[perm] || perm.replace('_', ' ')}
+                                    </span>
+                                    <div
+                                        onClick={() => togglePermission(perm)}
+                                        className={`w-10 h-5 rounded-full relative cursor-pointer transition-all duration-300 ${role.permissions.includes(perm) ? (isSystemAdmin ? 'bg-blue-100 cursor-not-allowed' : 'bg-blue-600 shadow-lg shadow-blue-500/20') : 'bg-slate-200'}`}
+                                    >
+                                        <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all duration-300 ${role.permissions.includes(perm) ? 'left-6' : 'left-1'}`} />
+                                    </div>
+                                </div>
+
+                                {subs.length > 0 && role.permissions.includes(perm) && (
+                                    <div className="ml-4 pl-4 border-l-2 border-slate-100 space-y-2">
+                                        {subs.map(sub => {
+                                            const subPerm = `${perm}.${sub}`;
+                                            const isActive = role.permissions.includes(subPerm);
+                                            return (
+                                                <div key={subPerm} className="flex items-center justify-between">
+                                                    <span className={`text-[10px] font-bold uppercase tracking-widest ${isActive ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                        {sub}
+                                                    </span>
+                                                    <div
+                                                        onClick={() => togglePermission(subPerm)}
+                                                        className={`w-8 h-4 rounded-full relative cursor-pointer transition-all duration-300 ${isActive ? 'bg-blue-400' : 'bg-slate-100'}`}
+                                                    >
+                                                        <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all duration-300 ${isActive ? 'left-4.5' : 'left-0.5'}`} />
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         </div>

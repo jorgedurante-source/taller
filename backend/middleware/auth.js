@@ -78,18 +78,30 @@ const isAdmin = (req, res, next) => {
     }
 };
 
-const hasPermission = (permission) => {
+const hasPermission = (requiredPermission) => {
     return (req, res, next) => {
         // Superuser bypasses all individual permissions
-        if (req.user && (req.user.isSuperuser || (req.user.permissions && req.user.permissions.includes(permission)))) {
+        if (req.user && req.user.isSuperuser) return next();
+
+        const userPermissions = req.user.permissions || [];
+
+        // Check if user has the specific permission or a child permission that implies it
+        // e.g. 'orders.edit' implies 'orders'
+        const hasIt = userPermissions.some(up =>
+            up === requiredPermission || up.startsWith(requiredPermission + '.')
+        );
+
+        if (hasIt) {
             // Even if the user has the permission, check if the module is enabled globally for this tenant
-            if (req.user.isSuperuser || (req.enabledModules && req.enabledModules.includes(permission))) {
+            // Extract the base module name (e.g. 'orders' from 'orders.edit')
+            const baseModule = requiredPermission.split('.')[0];
+            if (req.enabledModules && req.enabledModules.includes(baseModule)) {
                 next();
             } else {
                 res.status(403).json({ message: 'Módulo no habilitado' });
             }
         } else {
-            res.status(403).json({ message: `Acceso denegado: Se requiere permiso de ${permission}` });
+            res.status(403).json({ message: `Acceso denegado: Se requiere permiso de ${requiredPermission}` });
         }
     };
 };
