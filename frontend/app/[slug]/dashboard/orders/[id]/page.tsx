@@ -32,7 +32,8 @@ import {
     ExternalLink,
     Truck,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    RefreshCw
 } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
